@@ -40,3 +40,23 @@ class DeleteNote {
     return repository.deleteNote(id);
   }
 }
+
+class GetNotesByStatus {
+  final NoteRepository repository;
+
+  GetNotesByStatus(this.repository);
+
+  Future<List<Note>> call(NoteStatus status) async {
+    return repository.getNotesByStatus(status);
+  }
+}
+
+class SetNoteStatus {
+  final NoteRepository repository;
+
+  SetNoteStatus(this.repository);
+
+  Future<int> call(int id, NoteStatus status) async {
+    return repository.setNoteStatus(id, status);
+  }
+}

@@ -5,4 +5,6 @@ abstract class NoteRepository {
   Future<int> addNote(Note note);
   Future<int> updateNote(Note note);
   Future<int> deleteNote(int id);
+  Future<List<Note>> getNotesByStatus(NoteStatus status);
+  Future<int> setNoteStatus(int id, NoteStatus status);
 }

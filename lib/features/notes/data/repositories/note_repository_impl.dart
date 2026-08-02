@@ -30,4 +30,15 @@ class NoteRepositoryImpl implements NoteRepository {
   Future<int> deleteNote(int id) async {
     return await localDataSource.deleteNote(id);
   }
+
+  @override
+  Future<List<Note>> getNotesByStatus(NoteStatus status) async {
+    final noteModels = await localDataSource.getNotesByStatus(status.index);
+    return noteModels;
+  }
+
+  @override
+  Future<int> setNoteStatus(int id, NoteStatus status) async {
+    return await localDataSource.setNoteStatus(id, status.index);
+  }
 }
