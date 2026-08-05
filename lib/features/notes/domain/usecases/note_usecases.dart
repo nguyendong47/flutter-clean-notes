@@ -60,3 +60,13 @@ class SetNoteStatus {
     return repository.setNoteStatus(id, status);
   }
 }
+
+class CleanupTrash {
+  final NoteRepository repository;
+
+  CleanupTrash(this.repository);
+
+  Future<int> call() async {
+    return repository.cleanupTrash();
+  }
+}

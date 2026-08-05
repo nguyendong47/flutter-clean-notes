@@ -41,4 +41,9 @@ class NoteRepositoryImpl implements NoteRepository {
   Future<int> setNoteStatus(int id, NoteStatus status) async {
     return await localDataSource.setNoteStatus(id, status.index);
   }
+
+  @override
+  Future<int> cleanupTrash() async {
+    return await localDataSource.cleanupTrash();
+  }
 }

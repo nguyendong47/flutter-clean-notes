@@ -351,6 +351,48 @@ final class SetNoteStatusUsecaseProvider
 String _$setNoteStatusUsecaseHash() =>
     r'708bc1f73ce3fd7d100cb0947bf787e7cef33237';
 
+@ProviderFor(cleanupTrashUsecase)
+final cleanupTrashUsecaseProvider = CleanupTrashUsecaseProvider._();
+
+final class CleanupTrashUsecaseProvider
+    extends $FunctionalProvider<CleanupTrash, CleanupTrash, CleanupTrash>
+    with $Provider<CleanupTrash> {
+  CleanupTrashUsecaseProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'cleanupTrashUsecaseProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$cleanupTrashUsecaseHash();
+
+  @$internal
+  @override
+  $ProviderElement<CleanupTrash> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  CleanupTrash create(Ref ref) {
+    return cleanupTrashUsecase(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(CleanupTrash value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<CleanupTrash>(value),
+    );
+  }
+}
+
+String _$cleanupTrashUsecaseHash() =>
+    r'80e7b0ee28c7ff72da3d5b9373f5a65704a13cad';
+
 @ProviderFor(NoteModeNotifier)
 final noteModeProvider = NoteModeNotifierProvider._();
 
@@ -506,6 +548,57 @@ abstract class _$SelectedTag extends $Notifier<String?> {
   }
 }
 
+@ProviderFor(SortOrder)
+final sortOrderProvider = SortOrderProvider._();
+
+final class SortOrderProvider extends $NotifierProvider<SortOrder, NoteSort> {
+  SortOrderProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'sortOrderProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$sortOrderHash();
+
+  @$internal
+  @override
+  SortOrder create() => SortOrder();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(NoteSort value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<NoteSort>(value),
+    );
+  }
+}
+
+String _$sortOrderHash() => r'e2cfd92f90916e4549d4baf58abf3948946ca0e1';
+
+abstract class _$SortOrder extends $Notifier<NoteSort> {
+  NoteSort build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<NoteSort, NoteSort>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<NoteSort, NoteSort>,
+              NoteSort,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}
+
 @ProviderFor(allTags)
 final allTagsProvider = AllTagsProvider._();
 
@@ -586,7 +679,7 @@ final class FilteredNotesProvider
   }
 }
 
-String _$filteredNotesHash() => r'75845837ff590b226e06fb341fe4fbf2b2588028';
+String _$filteredNotesHash() => r'c3f081d8a631dde3740586e3d7f57b63b5d6b827';
 
 @ProviderFor(NotesNotifier)
 final notesProvider = NotesNotifierProvider._();
@@ -612,7 +705,7 @@ final class NotesNotifierProvider
   NotesNotifier create() => NotesNotifier();
 }
 
-String _$notesNotifierHash() => r'72d67ee44cd5099fc9927267cb676c256893b1f0';
+String _$notesNotifierHash() => r'843cff2ff183c96b909582788a56da8f230d04c8';
 
 abstract class _$NotesNotifier extends $AsyncNotifier<List<Note>> {
   FutureOr<List<Note>> build();

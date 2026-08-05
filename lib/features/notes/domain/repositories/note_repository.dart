@@ -7,4 +7,5 @@ abstract class NoteRepository {
   Future<int> deleteNote(int id);
   Future<List<Note>> getNotesByStatus(NoteStatus status);
   Future<int> setNoteStatus(int id, NoteStatus status);
+  Future<int> cleanupTrash();
 }

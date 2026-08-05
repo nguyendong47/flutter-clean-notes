@@ -1,6 +1,8 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/features/notes/data/datasources/local_note_datasource.dart';
+import 'package:flutter_clean_notes/features/notes/data/models/note_model.dart';
 import 'package:flutter_clean_notes/features/notes/data/repositories/note_repository_impl.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/domain/repositories/note_repository.dart';
@@ -55,6 +57,12 @@ SetNoteStatus setNoteStatusUsecase(Ref ref) {
   return SetNoteStatus(repository);
 }
 
+@riverpod
+CleanupTrash cleanupTrashUsecase(Ref ref) {
+  final repository = ref.watch(noteRepositoryProvider);
+  return CleanupTrash(repository);
+}
+
 enum NoteMode { active, archived, trashed }
 
 @riverpod
@@ -81,6 +89,16 @@ class SelectedTag extends _$SelectedTag {
   void select(String? tag) => state = tag;
 }
 
+enum NoteSort { newest, oldest, titleAZ, titleZA }
+
+@riverpod
+class SortOrder extends _$SortOrder {
+  @override
+  NoteSort build() => NoteSort.newest;
+
+  void set(NoteSort order) => state = order;
+}
+
 @riverpod
 List<String> allTags(Ref ref) {
   final notes = ref.watch(notesProvider).value ?? const <Note>[];
@@ -97,6 +115,7 @@ List<Note> filteredNotes(Ref ref) {
   final notes = ref.watch(notesProvider).value ?? const <Note>[];
   final query = ref.watch(searchQueryProvider).trim().toLowerCase();
   final tag = ref.watch(selectedTagProvider);
+  final sort = ref.watch(sortOrderProvider);
 
   var result = notes;
   if (query.isNotEmpty) {
@@ -104,12 +123,27 @@ List<Note> filteredNotes(Ref ref) {
         .where(
           (note) =>
               note.title.toLowerCase().contains(query) ||
-              note.content.toLowerCase().contains(query),
+              note.content.toLowerCase().contains(query) ||
+              note.tags.any((t) => t.toLowerCase().contains(query)),
         )
         .toList();
   }
   if (tag != null) {
     result = result.where((note) => note.tags.contains(tag)).toList();
+  }
+  switch (sort) {
+    case NoteSort.newest:
+      result.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      break;
+    case NoteSort.oldest:
+      result.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      break;
+    case NoteSort.titleAZ:
+      result.sort((a, b) => a.title.compareTo(b.title));
+      break;
+    case NoteSort.titleZA:
+      result.sort((a, b) => b.title.compareTo(a.title));
+      break;
   }
   return result;
 }
@@ -138,7 +172,10 @@ class NotesNotifier extends _$NotesNotifier {
   Future<void> addNote(Note note) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
-      await ref.read(addNoteUsecaseProvider)(note);
+      final id = await ref.read(addNoteUsecaseProvider)(note);
+      if (note.reminder != null) {
+        await NotificationService().scheduleReminder(note.copyWith(id: id));
+      }
       return _fetchNotes(ref.read(noteModeProvider));
     });
   }
@@ -147,6 +184,27 @@ class NotesNotifier extends _$NotesNotifier {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       await ref.read(updateNoteUsecaseProvider)(note);
+      if (note.id != null) {
+        await NotificationService().cancelReminder(note.id!);
+        if (note.reminder != null) {
+          await NotificationService().scheduleReminder(note);
+        }
+      }
+      return _fetchNotes(ref.read(noteModeProvider));
+    });
+  }
+
+  Future<void> importBackup(List<Map<String, dynamic>> data) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      // Note: Consider merging with existing notes rather than replacing
+      for (final json in data) {
+        final note = NoteModel.fromJson(json).copyWith(
+          status: NoteStatus.active, // Imported notes start as active
+          reminder: null, // Reset reminder on import
+        );
+        await ref.read(addNoteUsecaseProvider)(note);
+      }
       return _fetchNotes(ref.read(noteModeProvider));
     });
   }
@@ -195,6 +253,15 @@ class NotesNotifier extends _$NotesNotifier {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       await ref.read(deleteNoteUsecaseProvider)(id);
+      await NotificationService().cancelReminder(id);
+      return _fetchNotes(ref.read(noteModeProvider));
+    });
+  }
+
+  Future<void> cleanupTrash() async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(cleanupTrashUsecaseProvider)();
       return _fetchNotes(ref.read(noteModeProvider));
     });
   }

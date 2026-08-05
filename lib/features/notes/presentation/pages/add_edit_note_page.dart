@@ -205,6 +205,26 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
     });
   }
 
+  Future<void> _openLinkedNote(String title) async {
+    final notes = ref.read(notesProvider).value ?? const [];
+    final match = notes.where((n) =>
+        n.title.trim().toLowerCase() == title.toLowerCase() && n.id != null);
+    if (match.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Linked note not found. Create it first.')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddEditNotePage(note: match.first),
+      ),
+    );
+  }
+
   void _saveNote() {
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
@@ -294,6 +314,12 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
                     data: _contentController.text.isEmpty
                         ? '_Nothing to preview._'
                         : _contentController.text,
+                    onTapLink: (text, href, title) {
+                      if (href != null && href.startsWith('note://')) {
+                        final title = href.substring('note://'.length);
+                        _openLinkedNote(title);
+                      }
+                    },
                   ),
                 ),
               ),

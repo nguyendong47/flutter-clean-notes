@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_clean_notes/app/app_providers.dart';
@@ -46,6 +47,84 @@ class _NotesPageState extends ConsumerState<NotesPage> {
     );
   }
 
+  Future<void> _showSortDialog(BuildContext context, WidgetRef ref) async {
+    final sort = await showDialog<NoteSort>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sort Notes'),
+        content: SimpleDialog(
+          children: NoteSort.values
+              .map(
+                (option) => SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, option),
+                  child: Text(_sortLabel(option)),
+                ),
+              )
+              .toList(),
+        ),
+      ),
+    );
+    if (sort != null) {
+      ref.read(sortOrderProvider.notifier).set(sort);
+    }
+  }
+
+  String _sortLabel(NoteSort sort) {
+    switch (sort) {
+      case NoteSort.newest:
+        return 'Newest first';
+      case NoteSort.oldest:
+        return 'Oldest first';
+      case NoteSort.titleAZ:
+        return 'Title A-Z';
+      case NoteSort.titleZA:
+        return 'Title Z-A';
+    }
+  }
+
+  Future<void> _showTagManager(BuildContext context, WidgetRef ref) async {
+    final allTags = ref.watch(allTagsProvider);
+    await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Manage Tags'),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final tag in allTags)
+                ListTile(
+                  title: Text('#$tag'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () => _deleteTag(tag, ref),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteTag(String tag, WidgetRef ref) async {
+    final notes = ref.read(notesProvider).value ?? const [];
+    for (final note in notes) {
+      if (note.tags.contains(tag)) {
+        final updatedTags = note.tags.where((t) => t != tag).toList();
+        final updatedNote = note.copyWith(tags: updatedTags);
+        await ref.read(notesProvider.notifier).updateNote(updatedNote);
+      }
+    }
+  }
+
   Future<void> _exportAsJson() async {
     final notes = ref.read(notesProvider).value ?? const [];
     final payload = notes
@@ -58,6 +137,7 @@ class _NotesPageState extends ConsumerState<NotesPage> {
             'isPinned': note.isPinned,
             'tags': note.tags,
             'status': note.status.name,
+            'reminder': note.reminder?.toIso8601String(),
           },
         )
         .toList();
@@ -68,6 +148,43 @@ class _NotesPageState extends ConsumerState<NotesPage> {
     await SharePlus.instance.share(
       ShareParams(files: [file], fileNameOverrides: ['notes_backup.json']),
     );
+  }
+
+  Future<void> _exportAsMarkdown() async {
+    final notes = ref.read(notesProvider).value ?? const [];
+    final buffer = StringBuffer();
+    for (final note in notes) {
+      buffer.writeln('# ${note.title}');
+      buffer.writeln('');
+      buffer.writeln(note.content);
+      if (note.tags.isNotEmpty) {
+        buffer.writeln('');
+        buffer.writeln('Tags: ${note.tags.map((t) => '#$t').join(', ')}');
+      }
+      buffer.writeln('');
+      buffer.writeln('---');
+      buffer.writeln('');
+    }
+    final file = XFile.fromData(
+      utf8.encode(buffer.toString()),
+      mimeType: 'text/markdown',
+    );
+    await SharePlus.instance.share(
+      ShareParams(files: [file], fileNameOverrides: ['notes.md']),
+    );
+  }
+
+  Future<void> _importBackup() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final content = await file.xFile.readAsString();
+    final jsonList = json.decode(content) as List<dynamic>;
+    final data = jsonList.cast<Map<String, dynamic>>();
+    await ref.read(notesProvider.notifier).importBackup(data);
   }
 
   @override
@@ -93,19 +210,38 @@ class _NotesPageState extends ConsumerState<NotesPage> {
               ref.read(appThemeProvider.notifier).setMode(next);
             },
           ),
+          IconButton(
+            tooltip: 'Sort notes',
+            icon: const Icon(Icons.sort),
+            onPressed: () => _showSortDialog(context, ref),
+          ),
+          IconButton(
+            tooltip: 'Tag manager',
+            icon: const Icon(Icons.label),
+            onPressed: () => _showTagManager(context, ref),
+          ),
           PopupMenuButton<String>(
             tooltip: 'Export',
             icon: const Icon(Icons.ios_share),
             onSelected: (value) {
               if (value == 'text') {
                 _exportAsText();
-              } else {
+              } else if (value == 'json') {
                 _exportAsJson();
+              } else if (value == 'markdown') {
+                _exportAsMarkdown();
+              } else if (value == 'import') {
+                _importBackup();
               }
             },
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'text', child: Text('Export as text')),
               PopupMenuItem(value: 'json', child: Text('Backup as JSON')),
+              PopupMenuItem(
+                value: 'markdown',
+                child: Text('Export as Markdown'),
+              ),
+              PopupMenuItem(value: 'import', child: Text('Import backup')),
             ],
           ),
         ],

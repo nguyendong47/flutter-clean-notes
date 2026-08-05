@@ -13,11 +13,23 @@ abstract class LocalNoteDataSource {
   Future<int> deleteNote(int id);
   Future<List<NoteModel>> getNotesByStatus(int status);
   Future<int> setNoteStatus(int id, int status);
+  Future<int> cleanupTrash();
 }
 
 class LocalNoteDataSourceImpl implements LocalNoteDataSource {
   static Database? _database;
   static const String _tableName = 'notes';
+
+  @override
+  Future<int> cleanupTrash() async {
+    final db = await database;
+    final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+    return await db.delete(
+      _tableName,
+      where: 'status = ? AND createdAt < ?',
+      whereArgs: [NoteStatus.trashed.index, thirtyDaysAgo.toIso8601String()],
+    );
+  }
 
   Future<Database> get database async {
     if (_database != null) return _database!;
