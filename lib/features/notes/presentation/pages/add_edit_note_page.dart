@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
 
 class AddEditNotePage extends ConsumerStatefulWidget {
   final Note? note;
@@ -217,12 +218,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       return;
     }
     if (!mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AddEditNotePage(note: match.first),
-      ),
-    );
+    context.push('/note/${match.first.id}');
   }
 
   void _saveNote() {
@@ -253,7 +249,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       ref.read(notesProvider.notifier).updateNote(note);
     }
 
-    Navigator.pop(context);
+    context.pop();
   }
 
   @override

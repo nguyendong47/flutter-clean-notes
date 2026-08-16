@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
+import 'package:flutter_clean_notes/app/router.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_page.dart';
 
 void main() async {
@@ -53,13 +54,13 @@ class MyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(appThemeProvider).value ?? ThemeMode.system;
 
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Flutter Clean Notes',
       debugShowCheckedModeBanner: false,
+      routerConfig: ref.watch(routerProvider),
       theme: _buildTheme(Brightness.light),
       darkTheme: _buildTheme(Brightness.dark),
       themeMode: themeMode,
-      home: const NotesPage(),
     );
   }
 }

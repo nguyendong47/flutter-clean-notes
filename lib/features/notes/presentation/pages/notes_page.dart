@@ -383,13 +383,7 @@ class _NotesPageState extends ConsumerState<NotesPage> {
                               return NoteCard(
                                 note: note,
                                 onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          AddEditNotePage(note: note),
-                                    ),
-                                  );
+                                  context.push('/note/${note.id}');
                                 },
                                 onTogglePin: () {
                                   ref
@@ -422,12 +416,12 @@ class _NotesPageState extends ConsumerState<NotesPage> {
                                       actions: [
                                         TextButton(
                                           onPressed: () =>
-                                              Navigator.pop(context, false),
+                                              context.pop(false),
                                           child: const Text('Cancel'),
                                         ),
                                         TextButton(
                                           onPressed: () =>
-                                              Navigator.pop(context, true),
+                                              context.pop(true),
                                           child: const Text(
                                             'Delete',
                                             style: TextStyle(color: Colors.red),
@@ -465,12 +459,7 @@ class _NotesPageState extends ConsumerState<NotesPage> {
       floatingActionButton: ref.watch(noteModeProvider) == NoteMode.active
           ? FloatingActionButton(
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AddEditNotePage(),
-                  ),
-                );
+                context.push('/note/new');
               },
               tooltip: 'New note',
               elevation: 2,
