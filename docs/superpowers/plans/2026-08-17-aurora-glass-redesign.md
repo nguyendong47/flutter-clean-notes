@@ -73,6 +73,115 @@
 
 ---
 
+### Task 0: Restore a Clean Flutter Baseline
+
+**Files:**
+- Modify: 'lib/app/app_providers.dart'
+- Regenerate: 'lib/app/app_providers.g.dart'
+- Modify: 'lib/app/router.dart'
+- Modify: 'lib/features/notes/presentation/pages/notes_page.dart'
+- Modify: 'lib/main.dart'
+- Create: 'test/app/app_theme_provider_test.dart'
+
+**Interfaces:**
+- Preserves: 'appThemeProvider' as an AsyncNotifierProvider<AppTheme, ThemeMode>.
+- Preserves: 'AppTheme.setMode(ThemeMode)' and the SharedPreferences key 'theme_mode'.
+- Produces: a baseline where 'flutter analyze' and the existing test suite exit 0 before visual changes begin.
+
+- [ ] **Step 1: Run impact analysis**
+
+Run upstream GitNexus impact on 'AppTheme', 'AppTheme.build', 'AppTheme.setMode', 'NotesPage', 'routerProvider', and 'MyApp'. Report direct callers, affected processes, and risk. Stop before HIGH or CRITICAL edits.
+
+- [ ] **Step 2: Write failing AppTheme tests**
+
+~~~dart
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  test('defaults to system and persists an explicit mode', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    expect(await container.read(appThemeProvider.future), ThemeMode.system);
+
+    await container.read(appThemeProvider.notifier).setMode(ThemeMode.dark);
+
+    expect(container.read(appThemeProvider).value, ThemeMode.dark);
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('theme_mode'), 'dark');
+  });
+
+  test('restores a persisted theme mode', () async {
+    SharedPreferences.setMockInitialValues({'theme_mode': 'light'});
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    expect(await container.read(appThemeProvider.future), ThemeMode.light);
+  });
+}
+~~~
+
+- [ ] **Step 3: Confirm the baseline failure**
+
+Run:
+
+~~~text
+flutter test test/app/app_theme_provider_test.dart
+flutter analyze
+~~~
+
+Expected before the fix: the new provider test cannot compile and analysis reports the Future<ThemeMode>, Ref.state, deprecated window, missing go_router extension, and unused-import issues recorded in the baseline.
+
+- [ ] **Step 4: Implement the minimal async provider fix**
+
+Replace AppTheme.build with:
+
+~~~dart
+@override
+Future<ThemeMode> build() async {
+  final preferences = await SharedPreferences.getInstance();
+  final savedName = preferences.getString(_kThemePrefKey);
+  if (savedName == null) return ThemeMode.system;
+  return ThemeMode.values.firstWhere(
+    (mode) => mode.name == savedName,
+    orElse: () => ThemeMode.system,
+  );
+}
+~~~
+
+Keep setMode's AsyncValue update and SharedPreferences write. Remove the global window brightness callback and 'dart:ui' import: ThemeMode.system already delegates brightness changes to MaterialApp and does not need a process-global callback.
+
+- [ ] **Step 5: Correct only the recorded import diagnostics**
+
+Add 'package:go_router/go_router.dart' to notes_page.dart so BuildContext.push/pop resolve. Remove only imports that 'flutter analyze' identifies as unused from router.dart, notes_page.dart, and main.dart. Do not restructure these files in Task 0.
+
+- [ ] **Step 6: Regenerate and verify the clean baseline**
+
+Run:
+
+~~~text
+dart run build_runner build --delete-conflicting-outputs
+dart format lib/app/app_providers.dart lib/app/router.dart lib/features/notes/presentation/pages/notes_page.dart lib/main.dart test/app/app_theme_provider_test.dart
+flutter analyze
+flutter test
+~~~
+
+Expected: analysis exits 0 and all tests pass.
+
+- [ ] **Step 7: Detect changes and commit**
+
+Stage only Task 0 files, including regenerated app_providers.g.dart. Run GitNexus detect_changes(scope: 'staged') and verify the affected surface matches the baseline repair. Commit:
+
+~~~text
+git commit -m "fix: restore clean flutter baseline"
+~~~
+
+---
+
 ### Task 1: Aurora Theme and Glass Primitives
 
 **Files:**
