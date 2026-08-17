@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/note_card.dart';
-import 'package:flutter_clean_notes/features/notes/presentation/pages/add_edit_note_page.dart';
 import 'package:share_plus/share_plus.dart';
 
 class NotesPage extends ConsumerStatefulWidget {
@@ -415,13 +415,11 @@ class _NotesPageState extends ConsumerState<NotesPage> {
                                       ),
                                       actions: [
                                         TextButton(
-                                          onPressed: () =>
-                                              context.pop(false),
+                                          onPressed: () => context.pop(false),
                                           child: const Text('Cancel'),
                                         ),
                                         TextButton(
-                                          onPressed: () =>
-                                              context.pop(true),
+                                          onPressed: () => context.pop(true),
                                           child: const Text(
                                             'Delete',
                                             style: TextStyle(color: Colors.red),

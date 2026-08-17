@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
@@ -10,10 +9,7 @@ import 'package:flutter_clean_notes/features/notes/presentation/providers/note_p
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     routes: <RouteBase>[
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const NotesPage(),
-      ),
+      GoRoute(path: '/', builder: (context, state) => const NotesPage()),
       GoRoute(
         path: '/note/new',
         builder: (context, state) => const AddEditNotePage(),

@@ -6,7 +6,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/app/router.dart';
-import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
