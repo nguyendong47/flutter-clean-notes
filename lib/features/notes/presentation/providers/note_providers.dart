@@ -7,6 +7,10 @@ import 'package:flutter_clean_notes/features/notes/data/repositories/note_reposi
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/domain/repositories/note_repository.dart';
 import 'package:flutter_clean_notes/features/notes/domain/usecases/note_usecases.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_filters.dart';
+
+export 'package:flutter_clean_notes/features/notes/presentation/providers/note_filters.dart'
+    show NoteSort;
 
 part 'note_providers.g.dart';
 
@@ -89,8 +93,6 @@ class SelectedTag extends _$SelectedTag {
   void select(String? tag) => state = tag;
 }
 
-enum NoteSort { newest, oldest, titleAZ, titleZA }
-
 @riverpod
 class SortOrder extends _$SortOrder {
   @override
@@ -100,8 +102,46 @@ class SortOrder extends _$SortOrder {
 }
 
 @riverpod
-List<String> allTags(Ref ref) {
+List<Note> notesByStatus(Ref ref, NoteStatus status) {
   final notes = ref.watch(notesProvider).value ?? const <Note>[];
+  return notes.where((note) => note.status == status).toList();
+}
+
+@riverpod
+List<Note> homeNotes(Ref ref) {
+  final notes = ref.watch(notesProvider).value ?? const <Note>[];
+  return filterNotes(
+    notes: notes,
+    status: NoteStatus.active,
+    tag: ref.watch(selectedTagProvider),
+    sort: ref.watch(sortOrderProvider),
+  );
+}
+
+@riverpod
+List<String> homeTags(Ref ref) {
+  return _sortedTags(ref.watch(notesByStatusProvider(NoteStatus.active)));
+}
+
+@riverpod
+List<Note> searchResults(Ref ref) {
+  final notes = ref.watch(notesProvider).value ?? const <Note>[];
+  return filterNotes(
+    notes: notes,
+    status: NoteStatus.active,
+    query: ref.watch(searchQueryProvider),
+    tag: ref.watch(selectedTagProvider),
+    sort: ref.watch(sortOrderProvider),
+  );
+}
+
+@riverpod
+List<String> allTags(Ref ref) {
+  final status = _statusForMode(ref.watch(noteModeProvider));
+  return _sortedTags(ref.watch(notesByStatusProvider(status)));
+}
+
+List<String> _sortedTags(List<Note> notes) {
   final tags = <String>{};
   for (final note in notes) {
     tags.addAll(note.tags);
@@ -113,76 +153,60 @@ List<String> allTags(Ref ref) {
 @riverpod
 List<Note> filteredNotes(Ref ref) {
   final notes = ref.watch(notesProvider).value ?? const <Note>[];
-  final query = ref.watch(searchQueryProvider).trim().toLowerCase();
-  final tag = ref.watch(selectedTagProvider);
-  final sort = ref.watch(sortOrderProvider);
+  return filterNotes(
+    notes: notes,
+    status: _statusForMode(ref.watch(noteModeProvider)),
+    query: ref.watch(searchQueryProvider),
+    tag: ref.watch(selectedTagProvider),
+    sort: ref.watch(sortOrderProvider),
+  );
+}
 
-  var result = notes;
-  if (query.isNotEmpty) {
-    result = result
-        .where(
-          (note) =>
-              note.title.toLowerCase().contains(query) ||
-              note.content.toLowerCase().contains(query) ||
-              note.tags.any((t) => t.toLowerCase().contains(query)),
-        )
-        .toList();
-  }
-  if (tag != null) {
-    result = result.where((note) => note.tags.contains(tag)).toList();
-  }
-  switch (sort) {
-    case NoteSort.newest:
-      result.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      break;
-    case NoteSort.oldest:
-      result.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      break;
-    case NoteSort.titleAZ:
-      result.sort((a, b) => a.title.compareTo(b.title));
-      break;
-    case NoteSort.titleZA:
-      result.sort((a, b) => b.title.compareTo(a.title));
-      break;
-  }
-  return result;
+NoteStatus _statusForMode(NoteMode mode) {
+  return switch (mode) {
+    NoteMode.active => NoteStatus.active,
+    NoteMode.archived => NoteStatus.archived,
+    NoteMode.trashed => NoteStatus.trashed,
+  };
 }
 
 @riverpod
 class NotesNotifier extends _$NotesNotifier {
   @override
   FutureOr<List<Note>> build() async {
-    final mode = ref.watch(noteModeProvider);
-    return _fetchNotes(mode);
+    return _fetchAllNotes();
   }
 
-  NoteStatus _statusFor(NoteMode mode) {
-    return switch (mode) {
-      NoteMode.active => NoteStatus.active,
-      NoteMode.archived => NoteStatus.archived,
-      NoteMode.trashed => NoteStatus.trashed,
-    };
-  }
-
-  Future<List<Note>> _fetchNotes(NoteMode mode) async {
+  Future<List<Note>> _fetchAllNotes() async {
     final getNotes = ref.read(getNotesByStatusUsecaseProvider);
-    return await getNotes(_statusFor(mode));
+    final notes = <Note>[];
+    for (final status in NoteStatus.values) {
+      notes.addAll(await getNotes(status));
+    }
+    return notes;
   }
 
-  Future<void> addNote(Note note) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+  Future<void> _mutate(Future<void> Function() operation) async {
+    try {
+      await operation();
+      state = AsyncData(await _fetchAllNotes());
+    } catch (error, stackTrace) {
+      state = AsyncError<List<Note>>(error, stackTrace);
+      rethrow;
+    }
+  }
+
+  Future<void> addNote(Note note) {
+    return _mutate(() async {
       final id = await ref.read(addNoteUsecaseProvider)(note);
       if (note.reminder != null) {
         await NotificationService().scheduleReminder(note.copyWith(id: id));
       }
-      return _fetchNotes(ref.read(noteModeProvider));
     });
   }
 
-  Future<void> updateNote(Note note) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+  Future<void> updateNote(Note note) {
+    return _mutate(() async {
       await ref.read(updateNoteUsecaseProvider)(note);
       if (note.id != null) {
         await NotificationService().cancelReminder(note.id!);
@@ -190,79 +214,65 @@ class NotesNotifier extends _$NotesNotifier {
           await NotificationService().scheduleReminder(note);
         }
       }
-      return _fetchNotes(ref.read(noteModeProvider));
     });
   }
 
-  Future<void> importBackup(List<Map<String, dynamic>> data) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+  Future<void> importBackup(List<Map<String, dynamic>> data) {
+    return _mutate(() async {
       // Note: Consider merging with existing notes rather than replacing
       for (final json in data) {
         final note = NoteModel.fromJson(json).copyWith(
+          id: null, // Let the destination database allocate a fresh ID
           status: NoteStatus.active, // Imported notes start as active
           reminder: null, // Reset reminder on import
         );
         await ref.read(addNoteUsecaseProvider)(note);
       }
-      return _fetchNotes(ref.read(noteModeProvider));
     });
   }
 
-  Future<void> togglePin(Note note) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+  Future<void> togglePin(Note note) {
+    return _mutate(() async {
       await ref.read(updateNoteUsecaseProvider)(
         note.copyWith(isPinned: !note.isPinned),
       );
-      return _fetchNotes(ref.read(noteModeProvider));
     });
   }
 
-  Future<void> archiveNote(Note note) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+  Future<void> archiveNote(Note note) {
+    return _mutate(() async {
       await ref.read(setNoteStatusUsecaseProvider)(
         note.id!,
         NoteStatus.archived,
       );
-      return _fetchNotes(ref.read(noteModeProvider));
     });
   }
 
-  Future<void> trashNote(Note note) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+  Future<void> trashNote(Note note) {
+    return _mutate(() async {
       await ref.read(setNoteStatusUsecaseProvider)(
         note.id!,
         NoteStatus.trashed,
       );
-      return _fetchNotes(ref.read(noteModeProvider));
     });
   }
 
-  Future<void> restoreNote(Note note) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+  Future<void> restoreNote(Note note) {
+    return _mutate(() async {
       await ref.read(setNoteStatusUsecaseProvider)(note.id!, NoteStatus.active);
-      return _fetchNotes(ref.read(noteModeProvider));
     });
   }
 
-  Future<void> deleteNote(int id) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+  Future<void> deleteNote(int id) {
+    return _mutate(() async {
       await ref.read(deleteNoteUsecaseProvider)(id);
       await NotificationService().cancelReminder(id);
-      return _fetchNotes(ref.read(noteModeProvider));
     });
   }
 
-  Future<void> cleanupTrash() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+  Future<void> cleanupTrash() {
+    return _mutate(() async {
       await ref.read(cleanupTrashUsecaseProvider)();
-      return _fetchNotes(ref.read(noteModeProvider));
     });
   }
 }

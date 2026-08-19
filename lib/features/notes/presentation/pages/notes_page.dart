@@ -307,6 +307,7 @@ class _NotesPageState extends ConsumerState<NotesPage> {
           ),
           Expanded(
             child: notesState.when(
+              skipError: true,
               data: (notes) {
                 final mode = ref.watch(noteModeProvider);
                 final filteredNotes = ref.watch(filteredNotesProvider);

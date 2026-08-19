@@ -1,6 +1,8 @@
 enum NoteStatus { active, archived, trashed }
 
 class Note {
+  static const _unset = Object();
+
   final int? id;
   final String title;
   final String content;
@@ -24,7 +26,7 @@ class Note {
   });
 
   Note copyWith({
-    int? id,
+    Object? id = _unset,
     String? title,
     String? content,
     int? color,
@@ -32,10 +34,10 @@ class Note {
     bool? isPinned,
     List<String>? tags,
     NoteStatus? status,
-    DateTime? reminder,
+    Object? reminder = _unset,
   }) {
     return Note(
-      id: id ?? this.id,
+      id: identical(id, _unset) ? this.id : id as int?,
       title: title ?? this.title,
       content: content ?? this.content,
       color: color ?? this.color,
@@ -43,7 +45,9 @@ class Note {
       isPinned: isPinned ?? this.isPinned,
       tags: tags ?? this.tags,
       status: status ?? this.status,
-      reminder: reminder ?? this.reminder,
+      reminder: identical(reminder, _unset)
+          ? this.reminder
+          : reminder as DateTime?,
     );
   }
 }

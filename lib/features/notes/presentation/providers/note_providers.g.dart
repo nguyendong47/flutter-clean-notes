@@ -599,6 +599,206 @@ abstract class _$SortOrder extends $Notifier<NoteSort> {
   }
 }
 
+@ProviderFor(notesByStatus)
+final notesByStatusProvider = NotesByStatusFamily._();
+
+final class NotesByStatusProvider
+    extends $FunctionalProvider<List<Note>, List<Note>, List<Note>>
+    with $Provider<List<Note>> {
+  NotesByStatusProvider._({
+    required NotesByStatusFamily super.from,
+    required NoteStatus super.argument,
+  }) : super(
+         retry: null,
+         name: r'notesByStatusProvider',
+         isAutoDispose: true,
+         dependencies: null,
+         $allTransitiveDependencies: null,
+       );
+
+  @override
+  String debugGetCreateSourceHash() => _$notesByStatusHash();
+
+  @override
+  String toString() {
+    return r'notesByStatusProvider'
+        ''
+        '($argument)';
+  }
+
+  @$internal
+  @override
+  $ProviderElement<List<Note>> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  List<Note> create(Ref ref) {
+    final argument = this.argument as NoteStatus;
+    return notesByStatus(ref, argument);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(List<Note> value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<List<Note>>(value),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is NotesByStatusProvider && other.argument == argument;
+  }
+
+  @override
+  int get hashCode {
+    return argument.hashCode;
+  }
+}
+
+String _$notesByStatusHash() => r'6acccb8a1319d79ea23fdb99e03655c87e93a942';
+
+final class NotesByStatusFamily extends $Family
+    with $FunctionalFamilyOverride<List<Note>, NoteStatus> {
+  NotesByStatusFamily._()
+    : super(
+        retry: null,
+        name: r'notesByStatusProvider',
+        dependencies: null,
+        $allTransitiveDependencies: null,
+        isAutoDispose: true,
+      );
+
+  NotesByStatusProvider call(NoteStatus status) =>
+      NotesByStatusProvider._(argument: status, from: this);
+
+  @override
+  String toString() => r'notesByStatusProvider';
+}
+
+@ProviderFor(homeNotes)
+final homeNotesProvider = HomeNotesProvider._();
+
+final class HomeNotesProvider
+    extends $FunctionalProvider<List<Note>, List<Note>, List<Note>>
+    with $Provider<List<Note>> {
+  HomeNotesProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'homeNotesProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$homeNotesHash();
+
+  @$internal
+  @override
+  $ProviderElement<List<Note>> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  List<Note> create(Ref ref) {
+    return homeNotes(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(List<Note> value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<List<Note>>(value),
+    );
+  }
+}
+
+String _$homeNotesHash() => r'b17d00da2322015234396219710b4b341ef01966';
+
+@ProviderFor(homeTags)
+final homeTagsProvider = HomeTagsProvider._();
+
+final class HomeTagsProvider
+    extends $FunctionalProvider<List<String>, List<String>, List<String>>
+    with $Provider<List<String>> {
+  HomeTagsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'homeTagsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$homeTagsHash();
+
+  @$internal
+  @override
+  $ProviderElement<List<String>> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  List<String> create(Ref ref) {
+    return homeTags(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(List<String> value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<List<String>>(value),
+    );
+  }
+}
+
+String _$homeTagsHash() => r'e0024467f6327037018dd072f2a2b51128cf922a';
+
+@ProviderFor(searchResults)
+final searchResultsProvider = SearchResultsProvider._();
+
+final class SearchResultsProvider
+    extends $FunctionalProvider<List<Note>, List<Note>, List<Note>>
+    with $Provider<List<Note>> {
+  SearchResultsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'searchResultsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$searchResultsHash();
+
+  @$internal
+  @override
+  $ProviderElement<List<Note>> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  List<Note> create(Ref ref) {
+    return searchResults(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(List<Note> value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<List<Note>>(value),
+    );
+  }
+}
+
+String _$searchResultsHash() => r'47f5593d4e2920b44194f0b8744a05b28e3ef1bb';
+
 @ProviderFor(allTags)
 final allTagsProvider = AllTagsProvider._();
 
@@ -638,7 +838,7 @@ final class AllTagsProvider
   }
 }
 
-String _$allTagsHash() => r'8dc3e8e6a165b2821a560c4825c34f64cc1bc318';
+String _$allTagsHash() => r'fe8dc80b1989ad0ac825fd516f2ac7ad9aaa9832';
 
 @ProviderFor(filteredNotes)
 final filteredNotesProvider = FilteredNotesProvider._();
@@ -679,7 +879,7 @@ final class FilteredNotesProvider
   }
 }
 
-String _$filteredNotesHash() => r'c3f081d8a631dde3740586e3d7f57b63b5d6b827';
+String _$filteredNotesHash() => r'd2d72b399b41c2e22fd816082f5f5d18e878212c';
 
 @ProviderFor(NotesNotifier)
 final notesProvider = NotesNotifierProvider._();
@@ -705,7 +905,7 @@ final class NotesNotifierProvider
   NotesNotifier create() => NotesNotifier();
 }
 
-String _$notesNotifierHash() => r'843cff2ff183c96b909582788a56da8f230d04c8';
+String _$notesNotifierHash() => r'ea45e98fc29804597d9775e7ccb1c7c3167351bc';
 
 abstract class _$NotesNotifier extends $AsyncNotifier<List<Note>> {
   FutureOr<List<Note>> build();

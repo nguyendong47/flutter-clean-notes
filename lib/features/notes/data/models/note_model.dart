@@ -39,7 +39,7 @@ class NoteModel extends Note {
       'isPinned': isPinned ? 1 : 0,
       'tags': tags.join(','),
       'status': status.index,
-      if (reminder != null) 'reminder': reminder!.toIso8601String(),
+      'reminder': reminder?.toIso8601String(),
     };
   }
 
