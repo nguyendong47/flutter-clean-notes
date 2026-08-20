@@ -4,7 +4,7 @@ Flutter Clean Notes is a local-first note-taking app built with Flutter, Riverpo
 
 ## Project status
 
-The Aurora Glass mobile redesign is in progress on `feat/aurora-glass-redesign`. The clean baseline, visual foundation, reliable note collections, and Aurora home components are complete through Task 3; focused search, Library, More and transfer flows, the navigation shell, the editor redesign, and final regression work remain. See the [Project Sync / Handoff](docs/superpowers/handoff.md) for the current checkpoint and continuation path.
+The Aurora Glass redesign is governed by the [design specification](docs/superpowers/specs/2026-08-17-notes-ui-ux-redesign-design.md) and [implementation plan](docs/superpowers/plans/2026-08-17-aurora-glass-redesign.md). See the [Project Sync / Handoff](docs/superpowers/handoff.md) for the active branch, current task, latest evidence, checkpoint deviations, and continuation path.
 
 ## Prerequisites
 

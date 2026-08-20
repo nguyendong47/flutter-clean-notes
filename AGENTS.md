@@ -32,16 +32,15 @@ Flutter note-taking app using feature-first Clean Architecture, Riverpod code ge
 ## Aurora Glass work
 
 - The canonical product and UX contract is the [Aurora Glass specification](docs/superpowers/specs/2026-08-17-notes-ui-ux-redesign-design.md); the ordered implementation contract is the [Aurora plan](docs/superpowers/plans/2026-08-17-aurora-glass-redesign.md).
-- Tasks 0-3 are complete and Tasks 4-9 remain. Read the [Project Sync / Handoff](docs/superpowers/handoff.md) before continuing; it owns the current checkpoint and exact next step.
-- The Aurora home components exist, but the routed app still uses the legacy `NotesPage` until the planned shell work. Preserve compatibility at intermediate commits.
+- Read the [Project Sync / Handoff](docs/superpowers/handoff.md) before continuing. It is the sole owner of the active branch, task state, task commits, checkpoint-specific deviations, verification evidence, and exact next step.
 - Keep light and dark themes equal, mobile widths primary, controls accessible, motion optional, and glass subordinate to readable content. Detailed tokens and acceptance criteria stay in the specification.
 
 ## Documentation ownership
 
 - `README.md` is the discoverable project entry point and documentation index.
 - This file owns contributor and agent workflow, architecture boundaries, code generation, and platform constraints.
-- `docs/superpowers/handoff.md` owns the current operational snapshot. Update it after each Aurora task commit or session handoff.
-- The Aurora specification owns approved design requirements and its implementation mapping. The plan owns task instructions and order.
+- `docs/superpowers/handoff.md` is the only tracked source for current task state, commits, checkpoint deviations, and operational evidence. Update it after each Aurora task commit or session handoff.
+- The Aurora specification owns approved design requirements and the stable task-to-design-surface mapping. The plan owns task instructions and order; neither records current completion state.
 - `.superpowers/sdd/2026-08-17-aurora-glass-redesign/` is ignored local execution evidence. When present, update its ledger and task reports, but do not treat it as tracked documentation available in every clone.
 
 ## Style

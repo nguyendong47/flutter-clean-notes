@@ -21,14 +21,12 @@ The Task 3 completion gate recorded:
 
 These exact counts are checkpoint evidence, not a permanent inventory. Use the current test tree and fresh command output for later task gates. Detailed evidence is local and ignored; when present, see the [Task 3 report](../../.superpowers/sdd/2026-08-17-aurora-glass-redesign/task-3-report.md).
 
-## Current architecture and runtime
+## Checkpoint-specific deviations
 
-- `lib/main.dart` initializes Flutter, desktop sqflite FFI, notifications, `ProviderScope`, persisted theme selection, Aurora light/dark themes, and `MaterialApp.router`.
-- Notes remain feature-first under `lib/features/notes/`. Presentation consumes domain use cases and repository abstractions; data implements the domain-owned `NoteRepository`.
-- `NotesNotifier` loads active, archived, and trashed notes into one collection. Derived providers apply status, query, tag, and sort transformations while preserving visible data on mutation failures.
-- The local SQLite schema is version 5, with additive migrations for pinning, tags, status, and reminders. Desktop opens through `databaseFactoryFfi`; the non-desktop path uses regular sqflite.
-- Aurora theme, background, and glass primitives are active. Aurora home, note-card, masonry, loading, empty, and error components are implemented and tested.
-- Routing still points at the legacy `NotesPage`. The new Aurora home becomes part of the app shell in Task 7, so intermediate compatibility remains intentional.
+Stable architecture, bootstrap, code-generation, and platform constraints live in [AGENTS.md](../../AGENTS.md#architecture-boundaries) and its [database section](../../AGENTS.md#database-and-platform-constraints). This checkpoint records only transitional runtime differences from the target design:
+
+- Routing still points at the legacy `NotesPage`; the implemented Aurora home is not yet the routed shell.
+- Compatibility providers and legacy routing remain intentionally available until the planned shell integration.
 
 ## Completed Aurora work
 
@@ -61,7 +59,6 @@ These exact counts are checkpoint evidence, not a permanent inventory. Use the c
 ## Exact continuation path
 
 1. Start from the documentation commit above product baseline `fca345e`; confirm the worktree is otherwise clean and preserve the protected untracked `.claude/skills/` directory.
-2. Read [AGENTS.md](../../AGENTS.md), this sync, the [Aurora specification](specs/2026-08-17-notes-ui-ux-redesign-design.md), and the [implementation plan](plans/2026-08-17-aurora-glass-redesign.md). When local SDD evidence exists, also read the [progress ledger](../../.superpowers/sdd/2026-08-17-aurora-glass-redesign/progress.md) and [Task 4 brief](../../.superpowers/sdd/2026-08-17-aurora-glass-redesign/task-4-brief.md).
-3. Implement Task 4 only. Preserve the ruled one-shot, code-generated search-focus request so an indexed shell focuses search only after the explicit home action.
-4. Run required pre-edit GitNexus impact checks, Task 4 focused tests, `flutter analyze`, relevant full verification, and staged GitNexus change detection before committing.
-5. After the Task 4 commit or a session handoff, update this file and the local ledger/report with the new evidence and next task.
+2. Follow the [Task 4 plan section](plans/2026-08-17-aurora-glass-redesign.md#task-4-focused-search-experience) and, when local SDD evidence exists, the [Task 4 brief](../../.superpowers/sdd/2026-08-17-aurora-glass-redesign/task-4-brief.md). Consult the specification's [Search design](specs/2026-08-17-notes-ui-ux-redesign-design.md#search) only if those task instructions leave a UX choice unresolved.
+3. Preserve the ruled one-shot, code-generated search-focus request so an indexed shell focuses search only after the explicit home action. Run the required GitNexus checks and Task 4 verification before committing.
+4. After the Task 4 commit or a session handoff, update this file and the local ledger/report with the new evidence and next task.

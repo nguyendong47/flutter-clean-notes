@@ -3,30 +3,28 @@
 | Metadata | Value |
 | --- | --- |
 | Approved | 2026-08-17 |
-| Current through | 2026-08-20 |
-| Status | Approved design direction; implementation in progress |
+| Status | Approved design contract |
 | Canonical role | Product, interaction, visual, accessibility, and acceptance contract for the Aurora redesign |
-| Implementation state | Tasks 0-3 complete; Tasks 4-9 pending |
-| Update rule | Update currentness and implementation mapping after an Aurora task changes state; change approved requirements only through an explicit design decision |
+| Update rule | Change approved requirements or the task-to-design-surface mapping only through an explicit design decision; record operational status in the Project Sync |
 
 Operational status and evidence live in the [Project Sync / Handoff](../handoff.md). Ordered implementation details live in the [Aurora implementation plan](../plans/2026-08-17-aurora-glass-redesign.md).
 
 ## Implementation mapping
 
-| Task | Design surface | State |
-| --- | --- | --- |
-| 0 | Clean Flutter baseline | Complete |
-| 1 | Aurora theme, background, and glass primitives | Complete |
-| 2 | Reliable all-status note collections and mutation state | Complete |
-| 3 | Notes home, glass note cards, masonry, and stable states | Complete |
-| 4 | Focused Search experience | Pending |
-| 5 | Archive and Trash Library | Pending |
-| 6 | More sheet, tag management, and safe transfer | Pending |
-| 7 | Mobile navigation shell and deep links | Pending |
-| 8 | Distraction-free editor | Pending |
-| 9 | Cross-screen accessibility, responsive, visual, and regression pass | Pending |
+| Task | Design surface |
+| --- | --- |
+| 0 | Clean Flutter baseline |
+| 1 | Aurora theme, background, and glass primitives |
+| 2 | Reliable all-status note collections and mutation state |
+| 3 | Notes home, glass note cards, masonry, and stable states |
+| 4 | Focused Search experience |
+| 5 | Archive and Trash Library |
+| 6 | More sheet, tag management, and safe transfer |
+| 7 | Mobile navigation shell and deep links |
+| 8 | Distraction-free editor |
+| 9 | Cross-screen accessibility, responsive, visual, and regression pass |
 
-This table is a compact implementation map, not a replacement for task instructions or verification evidence. Follow the linked plan for implementation and the Project Sync for the latest checkpoint.
+This stable table maps planned tasks to design surfaces; it does not record completion state. Follow the linked plan for implementation instructions and the Project Sync for the latest checkpoint.
 
 ## Objective
 
@@ -193,7 +191,7 @@ Widget interaction
   → stable UI update
 ```
 
-Presentation state must not leak into domain entities. Generated Riverpod files are regenerated after any annotated provider changes.
+Presentation state must not leak into domain entities.
 
 ## Loading, feedback, and errors
 
@@ -239,15 +237,15 @@ Widget tests should cover public behavior rather than implementation details:
 9. Compact widths and large text scales do not overflow.
 10. Important icon buttons and navigation elements expose semantic labels.
 
-Existing notification-service tests remain intact. Static analysis and the full Flutter test suite must pass after implementation. High-value visual states should receive golden tests if the repository accepts the required stable-font and rendering setup; otherwise widget assertions and rendered browser/device inspection are sufficient for this iteration.
+### Implementation verification gate
 
-### Verification invariants
+At every task boundary, completion requires all of the following:
 
-- `flutter analyze` and the full Flutter test suite pass at each completed task boundary.
-- Annotated Riverpod changes include regenerated, reviewed `.g.dart` output.
-- Presentation, domain, repository, SQLite, notification, and routing boundaries remain intact unless the plan records a narrowly scoped correction.
-- Every code-symbol edit receives the repository-required GitNexus impact check, and every task commit receives staged change detection.
-- Light/dark parity, compact-width behavior, semantics, touch targets, reduced motion, stable asynchronous states, and data preservation remain release gates.
+- Task-focused tests, the existing notification-service tests, and the full `flutter test` suite pass.
+- `flutter analyze` passes, and annotated Riverpod changes include regenerated and reviewed `.g.dart` output.
+- Presentation, domain, repository, SQLite, notification, and routing boundaries remain intact unless the plan records a narrowly scoped correction with regression coverage.
+- Every code-symbol edit has the repository-required GitNexus impact check, and the task commit has staged change detection.
+- High-value light/dark and responsive states are inspected through stable golden tests when practical, or through widget assertions plus rendered browser/device inspection.
 
 ## Scope boundaries
 
@@ -262,6 +260,3 @@ This redesign does not introduce accounts, cloud synchronization, collaboration,
 - Navigation and system back behavior are predictable.
 - Async actions provide loading, success, failure, and retry/undo feedback where applicable.
 - Accessibility targets, semantics, contrast, reduced motion, and text scaling are addressed.
-- Existing architecture boundaries remain intact.
-- Riverpod code generation is current.
-- `flutter analyze` and `flutter test` pass.
