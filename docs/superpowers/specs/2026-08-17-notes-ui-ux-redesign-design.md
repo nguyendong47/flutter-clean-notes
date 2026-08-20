@@ -1,7 +1,32 @@
 # Flutter Clean Notes — Aurora Glass Redesign
 
-Date: 2026-08-17
-Status: Approved design direction
+| Metadata | Value |
+| --- | --- |
+| Approved | 2026-08-17 |
+| Current through | 2026-08-20 |
+| Status | Approved design direction; implementation in progress |
+| Canonical role | Product, interaction, visual, accessibility, and acceptance contract for the Aurora redesign |
+| Implementation state | Tasks 0-3 complete; Tasks 4-9 pending |
+| Update rule | Update currentness and implementation mapping after an Aurora task changes state; change approved requirements only through an explicit design decision |
+
+Operational status and evidence live in the [Project Sync / Handoff](../handoff.md). Ordered implementation details live in the [Aurora implementation plan](../plans/2026-08-17-aurora-glass-redesign.md).
+
+## Implementation mapping
+
+| Task | Design surface | State |
+| --- | --- | --- |
+| 0 | Clean Flutter baseline | Complete |
+| 1 | Aurora theme, background, and glass primitives | Complete |
+| 2 | Reliable all-status note collections and mutation state | Complete |
+| 3 | Notes home, glass note cards, masonry, and stable states | Complete |
+| 4 | Focused Search experience | Pending |
+| 5 | Archive and Trash Library | Pending |
+| 6 | More sheet, tag management, and safe transfer | Pending |
+| 7 | Mobile navigation shell and deep links | Pending |
+| 8 | Distraction-free editor | Pending |
+| 9 | Cross-screen accessibility, responsive, visual, and regression pass | Pending |
+
+This table is a compact implementation map, not a replacement for task instructions or verification evidence. Follow the linked plan for implementation and the Project Sync for the latest checkpoint.
 
 ## Objective
 
@@ -65,13 +90,14 @@ Use Flutter's native platform typography for speed, offline reliability, and a f
 
 ## Information architecture
 
-The mobile shell uses a floating bottom navigation bar with four destinations and a raised central creation action:
+The mobile shell uses a floating bottom navigation bar with four destinations:
 
 1. **Notes** — the daily home view.
 2. **Search** — focused discovery and filtering.
-3. **New note** — a central, raised action that opens the editor.
-4. **Library** — archived and trashed notes.
-5. **More** — secondary management and application settings.
+3. **Library** — archived and trashed notes.
+4. **More** — secondary management and application settings.
+
+A raised central **New note** control sits between Search and Library. It opens the editor as a primary action and is not a fifth navigation destination.
 
 The bottom navigation stays within safe areas and never obscures scrollable content. `go_router` remains responsible for navigation and deep links. Back behavior follows platform expectations: the editor returns to its source view, nested sheets dismiss before routes, and the system back gesture remains predictable.
 
@@ -214,6 +240,14 @@ Widget tests should cover public behavior rather than implementation details:
 10. Important icon buttons and navigation elements expose semantic labels.
 
 Existing notification-service tests remain intact. Static analysis and the full Flutter test suite must pass after implementation. High-value visual states should receive golden tests if the repository accepts the required stable-font and rendering setup; otherwise widget assertions and rendered browser/device inspection are sufficient for this iteration.
+
+### Verification invariants
+
+- `flutter analyze` and the full Flutter test suite pass at each completed task boundary.
+- Annotated Riverpod changes include regenerated, reviewed `.g.dart` output.
+- Presentation, domain, repository, SQLite, notification, and routing boundaries remain intact unless the plan records a narrowly scoped correction.
+- Every code-symbol edit receives the repository-required GitNexus impact check, and every task commit receives staged change detection.
+- Light/dark parity, compact-width behavior, semantics, touch targets, reduced motion, stable asynchronous states, and data preservation remain release gates.
 
 ## Scope boundaries
 
