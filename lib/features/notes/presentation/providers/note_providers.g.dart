@@ -840,6 +840,47 @@ final class AllTagsProvider
 
 String _$allTagsHash() => r'fe8dc80b1989ad0ac825fd516f2ac7ad9aaa9832';
 
+@ProviderFor(tagUsage)
+final tagUsageProvider = TagUsageProvider._();
+
+final class TagUsageProvider
+    extends $FunctionalProvider<List<TagUsage>, List<TagUsage>, List<TagUsage>>
+    with $Provider<List<TagUsage>> {
+  TagUsageProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'tagUsageProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$tagUsageHash();
+
+  @$internal
+  @override
+  $ProviderElement<List<TagUsage>> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  List<TagUsage> create(Ref ref) {
+    return tagUsage(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(List<TagUsage> value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<List<TagUsage>>(value),
+    );
+  }
+}
+
+String _$tagUsageHash() => r'0a761d5b2e1ccc2444f0b9d37c6804235d55d19d';
+
 @ProviderFor(filteredNotes)
 final filteredNotesProvider = FilteredNotesProvider._();
 
@@ -905,7 +946,7 @@ final class NotesNotifierProvider
   NotesNotifier create() => NotesNotifier();
 }
 
-String _$notesNotifierHash() => r'ea45e98fc29804597d9775e7ccb1c7c3167351bc';
+String _$notesNotifierHash() => r'a3b2664b85382ba9bd22b2229aad362630869136';
 
 abstract class _$NotesNotifier extends $AsyncNotifier<List<Note>> {
   FutureOr<List<Note>> build();

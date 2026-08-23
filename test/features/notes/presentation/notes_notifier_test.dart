@@ -1,5 +1,4 @@
 import 'package:flutter/services.dart';
-import 'package:flutter_clean_notes/features/notes/data/models/note_model.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -163,7 +162,7 @@ void main() {
     );
     addTearDown(container.dispose);
     await container.read(notesProvider.future);
-    final imported = NoteModel(
+    final imported = Note(
       id: 99,
       title: 'Imported note',
       content: 'From backup',
@@ -173,9 +172,7 @@ void main() {
       reminder: DateTime.utc(2026, 8, 21),
     );
 
-    await container.read(notesProvider.notifier).importBackup([
-      imported.toJson(),
-    ]);
+    await container.read(notesProvider.notifier).importBackup([imported]);
 
     final stored = repository.notes.singleWhere(
       (note) => note.title == 'Imported note',

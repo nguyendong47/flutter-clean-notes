@@ -2,7 +2,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/features/notes/data/datasources/local_note_datasource.dart';
-import 'package:flutter_clean_notes/features/notes/data/models/note_model.dart';
 import 'package:flutter_clean_notes/features/notes/data/repositories/note_repository_impl.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/domain/repositories/note_repository.dart';
@@ -141,6 +140,27 @@ List<String> allTags(Ref ref) {
   return _sortedTags(ref.watch(notesByStatusProvider(status)));
 }
 
+class TagUsage {
+  const TagUsage({required this.tag, required this.count});
+
+  final String tag;
+  final int count;
+}
+
+@riverpod
+List<TagUsage> tagUsage(Ref ref) {
+  final notes = ref.watch(notesProvider).value ?? const <Note>[];
+  final counts = <String, int>{};
+  for (final note in notes) {
+    for (final tag in note.tags.toSet()) {
+      if (tag.trim().isEmpty) continue;
+      counts.update(tag, (count) => count + 1, ifAbsent: () => 1);
+    }
+  }
+  final tags = counts.keys.toList()..sort();
+  return [for (final tag in tags) TagUsage(tag: tag, count: counts[tag]!)];
+}
+
 List<String> _sortedTags(List<Note> notes) {
   final tags = <String>{};
   for (final note in notes) {
@@ -217,18 +237,33 @@ class NotesNotifier extends _$NotesNotifier {
     });
   }
 
-  Future<void> importBackup(List<Map<String, dynamic>> data) {
+  Future<void> importBackup(List<Note> notes) {
     return _mutate(() async {
-      // Note: Consider merging with existing notes rather than replacing
-      for (final json in data) {
-        final note = NoteModel.fromJson(json).copyWith(
+      for (final note in notes) {
+        final sanitized = note.copyWith(
           id: null, // Let the destination database allocate a fresh ID
           status: NoteStatus.active, // Imported notes start as active
           reminder: null, // Reset reminder on import
         );
-        await ref.read(addNoteUsecaseProvider)(note);
+        await ref.read(addNoteUsecaseProvider)(sanitized);
       }
     });
+  }
+
+  Future<void> removeTag(String tag) async {
+    final notes = state.value ?? await _fetchAllNotes();
+    await _mutate(() async {
+      final update = ref.read(updateNoteUsecaseProvider);
+      for (final note in notes) {
+        if (!note.tags.contains(tag)) continue;
+        await update(
+          note.copyWith(tags: note.tags.where((item) => item != tag).toList()),
+        );
+      }
+    });
+    if (ref.read(selectedTagProvider) == tag) {
+      ref.read(selectedTagProvider.notifier).select(null);
+    }
   }
 
   Future<void> togglePin(Note note) {

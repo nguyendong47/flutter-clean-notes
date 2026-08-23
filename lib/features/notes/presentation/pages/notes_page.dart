@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/note_export_formatter.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/note_card.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -182,9 +183,8 @@ class _NotesPageState extends ConsumerState<NotesPage> {
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
     final content = await file.xFile.readAsString();
-    final jsonList = json.decode(content) as List<dynamic>;
-    final data = jsonList.cast<Map<String, dynamic>>();
-    await ref.read(notesProvider.notifier).importBackup(data);
+    final notes = NoteExportFormatter.fromJson(content);
+    await ref.read(notesProvider.notifier).importBackup(notes);
   }
 
   @override
