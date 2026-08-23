@@ -28,6 +28,7 @@ class NotesLibraryPage extends ConsumerStatefulWidget {
 
 class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
   final ScrollController _scrollController = ScrollController();
+  final Set<int> _committedDeletedNoteIds = <int>{};
 
   LibrarySection _section = LibrarySection.archived;
   bool _deleteDialogOpen = false;
@@ -44,6 +45,9 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
     final selectedNotes = ref.watch(
       notesByStatusProvider(_statusFor(_section)),
     );
+    final visibleNotes = selectedNotes
+        .where((note) => !_committedDeletedNoteIds.contains(note.id))
+        .toList(growable: false);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -80,12 +84,12 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
                   const _ContentSliver(child: _CachedErrorNotice()),
                   const SliverToBoxAdapter(child: SizedBox(height: 12)),
                 ],
-                if (selectedNotes.isEmpty)
+                if (visibleNotes.isEmpty)
                   _LibraryEmptyState(section: _section, onShowNotes: _showNotes)
                 else
                   NotesCollection(
                     key: ValueKey('notes-library-${_section.name}'),
-                    notes: selectedNotes,
+                    notes: visibleNotes,
                     onOpen: _openNote,
                     onTogglePin: _unusedAction,
                     onArchive: _unusedAction,
@@ -224,13 +228,16 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
   Future<void> _showDeleteDialog(Note note) async {
     final originFocus = FocusManager.instance.primaryFocus;
     try {
-      await showDialog<void>(
+      final deleted = await showDialog<bool>(
         context: context,
         builder: (context) => _DeleteForeverDialog(
           note: note,
           onDelete: () => ref.read(notesProvider.notifier).deleteNote(note.id!),
         ),
       );
+      if (deleted == true && mounted) {
+        setState(() => _committedDeletedNoteIds.add(note.id!));
+      }
     } finally {
       _deleteDialogOpen = false;
       if (mounted && originFocus?.canRequestFocus == true) {
@@ -277,7 +284,7 @@ class _DeleteForeverDialogState extends State<_DeleteForeverDialog> {
       }
       return;
     }
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) Navigator.of(context).pop(true);
   }
 
   @override

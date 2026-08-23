@@ -395,6 +395,14 @@ void main() {
     expect(find.text('Discarded draft'), findsOneWidget);
     expect(repository.deleteCalls, 1);
     expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Delete forever'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(
       find.text('Could not update library. Showing saved notes.'),
       findsNothing,
     );
@@ -411,10 +419,10 @@ void main() {
   });
 
   testWidgets(
-    'committed permanent delete closes after refresh failure without retry',
+    'committed permanent delete hides stale card and cannot be invoked again',
     (tester) async {
       final repository = _ControlledNoteRepository.seeded(sampleNotes);
-      await _pumpLibrary(tester, repository: repository);
+      final container = await _pumpLibrary(tester, repository: repository);
       await _selectTrash(tester);
       await _openDeleteDialog(tester, 'Discarded draft');
       repository.getErrorAtCall = repository.getCalls + 1;
@@ -422,9 +430,12 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Delete forever'));
       await tester.pumpAndSettle();
 
-      expect(repository.deleteCalls, 1);
-      expect(repository.notes.any((note) => note.id == 5), isFalse);
       expect(find.byType(AlertDialog), findsNothing);
+      _expectPermanentlyDeletedNoteUnavailable(
+        repository,
+        id: 5,
+        title: 'Discarded draft',
+      );
       expect(
         find.text('Could not delete “Discarded draft”. Try again.'),
         findsNothing,
@@ -432,6 +443,21 @@ void main() {
       expect(find.widgetWithText(FilledButton, 'Delete forever'), findsNothing);
       _expectSingleCachedRefreshNotice(tester);
       _expectNoCommittedMutationFailureUi();
+
+      repository.getErrorAtCall = null;
+      container.invalidate(notesProvider);
+      await container.read(notesProvider.future);
+      await tester.pumpAndSettle();
+
+      _expectPermanentlyDeletedNoteUnavailable(
+        repository,
+        id: 5,
+        title: 'Discarded draft',
+      );
+      expect(
+        find.text('Could not update library. Showing saved notes.'),
+        findsNothing,
+      );
     },
   );
 
@@ -691,6 +717,18 @@ void _expectNoCommittedMutationFailureUi() {
   expect(find.textContaining('PersistedNoteMutationException'), findsNothing);
   expect(find.textContaining('note refresh'), findsNothing);
   expect(find.textContaining('StateError'), findsNothing);
+}
+
+void _expectPermanentlyDeletedNoteUnavailable(
+  _ControlledNoteRepository repository, {
+  required int id,
+  required String title,
+}) {
+  expect(repository.deleteCalls, 1);
+  expect(repository.notes.any((note) => note.id == id), isFalse);
+  expect(find.text(title), findsNothing);
+  expect(find.byTooltip('More actions for $title'), findsNothing);
+  expect(find.text('Delete forever'), findsNothing);
 }
 
 Future<void> _selectTrash(WidgetTester tester) async {
