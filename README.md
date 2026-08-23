@@ -5,11 +5,11 @@ Glass interface. Notes use a local SQLite database as their primary app store;
 user-initiated sharing, backup import, and reminder notifications cross the app
 boundary as described in the [technical privacy draft](docs/privacy.md).
 
-`Clean Notes` is the user-facing product name. The repository, Dart package,
-and current template platform identifiers intentionally retain
-`flutter_clean_notes` until release owners approve production identifiers. See
-the [branding guide](docs/branding.md) for the identity contract and launcher
-asset provenance.
+`Clean Notes` is the user-facing product name. The repository and Dart package
+retain `flutter-clean-notes` and `flutter_clean_notes`; platform identifiers and
+binary names remain separate release decisions. See the
+[branding guide](docs/branding.md) for the identity contract and launcher asset
+provenance.
 
 ## Features
 

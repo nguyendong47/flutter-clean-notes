@@ -84,7 +84,8 @@ git diff --check
 
 Review every generated binary and catalog diff at small sizes before committing.
 Version `0.14.4` can incorrectly rewrite two iOS project settings to
-`ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon`.
-Restore both settings to `YES`, then run the generator a second time and verify
-that the intended launcher outputs are byte-stable. Keep the source PNGs and all
-shipping generated icons in the same commit.
+`ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon`. Run the
+generator a second time first and verify that the intended launcher outputs are
+byte-stable. After that final generator run, restore the affected settings to
+`YES` and verify the project contains no `AppIcon` assignment for this setting.
+Keep the source PNGs and all shipping generated icons in the same commit.
