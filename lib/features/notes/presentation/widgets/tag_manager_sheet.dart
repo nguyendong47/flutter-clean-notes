@@ -3,21 +3,23 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:flutter_clean_notes/app/widgets/busy_aware_modal_bottom_sheet.dart';
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 
 class TagManagerSheet extends ConsumerStatefulWidget {
-  const TagManagerSheet({super.key});
+  const TagManagerSheet({super.key, this.modalController});
+
+  final BusyAwareModalController? modalController;
 
   static Future<void> show(BuildContext context) {
-    return showModalBottomSheet<void>(
+    return showBusyAwareModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      isDismissible: false,
       enableDrag: false,
       backgroundColor: Colors.transparent,
       barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.54),
-      builder: (_) => const TagManagerSheet(),
+      builder: (_, controller) => TagManagerSheet(modalController: controller),
     );
   }
 
@@ -26,6 +28,9 @@ class TagManagerSheet extends ConsumerStatefulWidget {
 }
 
 class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
+  static final _confirmationBusySource = Object();
+  static final _retryBusySource = Object();
+
   bool _confirmationOpen = false;
   bool _retrying = false;
 
@@ -34,88 +39,96 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
     final media = MediaQuery.of(context);
     final notesState = ref.watch(notesProvider);
     final usage = ref.watch(tagUsageProvider);
+    final busy = _confirmationOpen || _retrying;
 
-    return Padding(
-      key: const Key('tag-sheet-insets'),
-      padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
-      child: SafeArea(
-        top: false,
-        minimum: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 600,
-              maxHeight: media.size.height * 0.9,
-            ),
-            child: GlassSurface(
-              borderRadius: const BorderRadius.all(Radius.circular(28)),
-              blur: 18,
-              opacity: 0.82,
-              padding: const EdgeInsets.all(16),
-              child: SingleChildScrollView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                child: Column(
-                  key: const Key('tag-manager-sheet'),
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Manage tags',
-                            style: Theme.of(context).textTheme.headlineSmall
-                                ?.copyWith(fontWeight: FontWeight.w800),
+    return PopScope(
+      canPop: !busy,
+      child: Padding(
+        key: const Key('tag-sheet-insets'),
+        padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+        child: SafeArea(
+          top: false,
+          minimum: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 600,
+                maxHeight: media.size.height * 0.9,
+              ),
+              child: GlassSurface(
+                borderRadius: const BorderRadius.all(Radius.circular(28)),
+                blur: 18,
+                opacity: 0.82,
+                padding: const EdgeInsets.all(16),
+                child: SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  child: Column(
+                    key: const Key('tag-manager-sheet'),
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Manage tags',
+                              style: Theme.of(context).textTheme.headlineSmall
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          constraints: const BoxConstraints(
-                            minWidth: 48,
-                            minHeight: 48,
+                          IconButton(
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
+                            tooltip: 'Close Manage tags',
+                            onPressed: busy
+                                ? null
+                                : () => Navigator.of(context).maybePop(),
+                            icon: const Icon(Icons.close),
                           ),
-                          tooltip: 'Close Manage tags',
-                          onPressed: _confirmationOpen
-                              ? null
-                              : () => Navigator.of(context).maybePop(),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Counts include active, archived, and trashed notes.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (!notesState.hasValue && notesState.isLoading)
-                      const _TagLoading()
-                    else if (!notesState.hasValue && notesState.hasError)
-                      _TagLoadError(onRetry: _retry)
-                    else ...[
-                      if (_retrying || notesState.hasError) ...[
-                        _TagRefreshError(
-                          onRetry: _retry,
-                          refreshing: _retrying,
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      if (usage.isEmpty)
-                        const _EmptyTags()
-                      else
-                        for (var index = 0; index < usage.length; index++) ...[
-                          _TagRow(
-                            usage: usage[index],
-                            enabled: !_confirmationOpen,
-                            onRemove: () => _requestRemoval(usage[index]),
-                          ),
-                          if (index != usage.length - 1)
-                            const SizedBox(height: 8),
                         ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Counts include active, archived, and trashed notes.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      if (!notesState.hasValue && notesState.isLoading)
+                        const _TagLoading()
+                      else if (!notesState.hasValue && notesState.hasError)
+                        _TagLoadError(onRetry: _retry)
+                      else ...[
+                        if (_retrying || notesState.hasError) ...[
+                          _TagRefreshError(
+                            onRetry: _retry,
+                            refreshing: _retrying,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (usage.isEmpty)
+                          const _EmptyTags()
+                        else
+                          for (
+                            var index = 0;
+                            index < usage.length;
+                            index++
+                          ) ...[
+                            _TagRow(
+                              usage: usage[index],
+                              enabled: !busy,
+                              onRemove: () => _requestRemoval(usage[index]),
+                            ),
+                            if (index != usage.length - 1)
+                              const SizedBox(height: 8),
+                          ],
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -127,6 +140,7 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
 
   Future<void> _retry() async {
     if (_retrying) return;
+    widget.modalController?.setBusy(_retryBusySource, busy: true);
     setState(() => _retrying = true);
     ref.invalidate(notesProvider);
     try {
@@ -134,13 +148,15 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
     } catch (_) {
       // The provider retains cached data and exposes the refreshed error state.
     } finally {
+      widget.modalController?.setBusy(_retryBusySource, busy: false);
       if (mounted) setState(() => _retrying = false);
     }
   }
 
   Future<void> _requestRemoval(TagUsage usage) async {
-    if (_confirmationOpen) return;
+    if (_confirmationOpen || _retrying) return;
     final originFocus = FocusManager.instance.primaryFocus;
+    widget.modalController?.setBusy(_confirmationBusySource, busy: true);
     setState(() => _confirmationOpen = true);
     try {
       await showDialog<void>(
@@ -152,6 +168,7 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
         ),
       );
     } finally {
+      widget.modalController?.setBusy(_confirmationBusySource, busy: false);
       if (mounted) setState(() => _confirmationOpen = false);
       if (mounted && originFocus?.canRequestFocus == true) {
         WidgetsBinding.instance.addPostFrameCallback((_) {

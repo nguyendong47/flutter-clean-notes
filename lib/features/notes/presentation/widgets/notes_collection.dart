@@ -3,6 +3,7 @@ import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/glass_note_card.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_grid_layout.dart';
 
 class NotesCollection extends StatelessWidget {
   const NotesCollection({
@@ -29,8 +30,8 @@ class NotesCollection extends StatelessWidget {
     return SliverLayoutBuilder(
       builder: (context, constraints) {
         final viewportWidth = constraints.crossAxisExtent;
-        final horizontalInset = _horizontalInset(viewportWidth);
-        final columnCount = viewportWidth < 360 ? 1 : 2;
+        final horizontalInset = notesGridHorizontalInset(viewportWidth);
+        final columnCount = notesGridColumnCount(viewportWidth);
 
         return SliverPadding(
           padding: EdgeInsets.symmetric(horizontal: horizontalInset),
@@ -57,9 +58,4 @@ class NotesCollection extends StatelessWidget {
       },
     );
   }
-}
-
-double _horizontalInset(double viewportWidth) {
-  final gutter = viewportWidth >= 600 ? 24.0 : 16.0;
-  return ((viewportWidth - 840) / 2).clamp(gutter, double.infinity).toDouble();
 }

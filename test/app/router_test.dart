@@ -632,7 +632,7 @@ void main() {
       expect(_path(harness.router), '/');
       expect(sheet, findsOneWidget);
 
-      await tester.binding.handlePopRoute();
+      await tester.tapAt(const Offset(4, 4));
       await tester.pumpAndSettle();
       expect(sheet, findsNothing);
       expect(_path(harness.router), '/');

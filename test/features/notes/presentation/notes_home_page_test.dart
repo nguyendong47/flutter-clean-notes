@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_home_page.dart';
@@ -175,6 +176,12 @@ void main() {
 
     _expectStableChrome();
     expect(find.byType(NotesErrorState), findsOneWidget);
+    expect(find.text('Could not load notes'), findsOneWidget);
+    expect(
+      find.text('Try again. Your saved notes are unchanged.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('connection'), findsNothing);
     final retry = find.widgetWithText(FilledButton, 'Try again');
     expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
 
@@ -208,6 +215,109 @@ void main() {
     expect(find.byType(NotesErrorState), findsNothing);
     expect(find.textContaining('write failed'), findsNothing);
     expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets(
+    'archive and trash pre-write failures show one neutral failure without Undo',
+    (tester) async {
+      for (final action in ['Archive', 'Move to trash']) {
+        final repository = InMemoryNoteRepository.seeded(sampleNotes)
+          ..statusError = StateError(r'C:\private\notes.db write failed');
+        await _pumpHome(
+          tester,
+          repository: repository,
+          size: const Size(800, 1100),
+        );
+
+        await tester.tap(find.byTooltip('More actions for Design follow-up'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(action).last);
+        await tester.pumpAndSettle();
+
+        expect(_statusOf(repository, 2), NoteStatus.active, reason: action);
+        expect(find.text('Design follow-up'), findsOneWidget, reason: action);
+        expect(
+          find.text(
+            'Could not update this note. Your saved note is unchanged. '
+            'Try again.',
+          ),
+          findsOneWidget,
+          reason: action,
+        );
+        expect(find.byType(SnackBar), findsOneWidget, reason: action);
+        expect(find.textContaining('notes.db'), findsNothing, reason: action);
+        expect(find.text('Undo'), findsNothing, reason: action);
+      }
+    },
+  );
+
+  testWidgets(
+    'archive and trash committed refresh failures keep Undo and restore the note',
+    (tester) async {
+      for (final scenario in <({String action, NoteStatus status})>[
+        (action: 'Archive', status: NoteStatus.archived),
+        (action: 'Move to trash', status: NoteStatus.trashed),
+      ]) {
+        final repository = InMemoryNoteRepository.seeded(sampleNotes);
+        await _pumpHome(
+          tester,
+          repository: repository,
+          size: const Size(800, 1100),
+        );
+        repository.getErrorAtCall = repository.getCalls + 1;
+
+        await tester.tap(find.byTooltip('More actions for Design follow-up'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(scenario.action).last);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+
+        expect(_statusOf(repository, 2), scenario.status);
+        expect(find.text('Undo'), findsOneWidget, reason: scenario.action);
+        expect(
+          find.textContaining('Could not update this note'),
+          findsNothing,
+          reason: scenario.action,
+        );
+        final successMessage = scenario.status == NoteStatus.archived
+            ? 'Design follow-up archived'
+            : 'Design follow-up moved to trash';
+        expect(
+          find.text(
+            '$successMessage. Could not refresh notes; showing saved notes.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.byType(SnackBar), findsOneWidget);
+
+        await tester.tap(find.text('Undo'));
+        await tester.pumpAndSettle();
+
+        expect(_statusOf(repository, 2), NoteStatus.active);
+        expect(find.text('Design follow-up'), findsOneWidget);
+      }
+    },
+  );
+
+  testWidgets('cached refresh failure has one neutral feedback surface', (
+    tester,
+  ) async {
+    final repository = InMemoryNoteRepository.seeded(sampleNotes);
+    await _pumpHome(tester, repository: repository);
+    repository.getError = StateError(r'C:\private\notes.db unavailable');
+
+    await tester
+        .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+        .onRefresh();
+    await tester.pump();
+
+    expect(find.text(sampleNote.title), findsOneWidget);
+    expect(
+      find.text('Could not refresh notes. Showing saved notes. Try again.'),
+      findsOneWidget,
+    );
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.textContaining('notes.db'), findsNothing);
   });
 
   testWidgets('archive and trash actions each offer working Undo restoration', (
@@ -268,9 +378,82 @@ void main() {
     expect(state.hasError, isFalse);
     _expectStableChrome();
     expect(find.text(sampleNote.title), findsOneWidget);
-    expect(find.textContaining('restore failed'), findsOneWidget);
+    expect(
+      find.text(
+        'Could not update this note. Your saved note is unchanged. Try again.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('restore failed'), findsNothing);
     expect(find.byType(SnackBar), findsOneWidget);
   });
+
+  testWidgets(
+    'theme toggle is a 48 pixel labeled control with neutral failure feedback',
+    (tester) async {
+      final store = _FakeThemeModeStore(ThemeMode.light)
+        ..writeError = StateError('C:\\private\\theme.db');
+      await _pumpHome(
+        tester,
+        repository: InMemoryNoteRepository.seeded(sampleNotes),
+        themeStore: store,
+      );
+
+      final toggle = find.byKey(const Key('notes-home-theme-toggle'));
+      expect(toggle, findsOneWidget);
+      expect(tester.getSize(toggle).width, greaterThanOrEqualTo(48));
+      expect(tester.getSize(toggle).height, greaterThanOrEqualTo(48));
+      expect(find.byTooltip('Use dark theme'), findsOneWidget);
+      expect(find.bySemanticsLabel('Use dark theme'), findsOneWidget);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(store.writeCalls, 1);
+      expect(store.mode, ThemeMode.light);
+      expect(find.textContaining('theme.db'), findsNothing);
+      expect(find.text('Theme stays unchanged. Try again.'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'theme toggle announces pending persistence and prevents repeat writes',
+    (tester) async {
+      final gate = Completer<void>();
+      final store = _FakeThemeModeStore(ThemeMode.light)..writeGate = gate;
+      await _pumpHome(
+        tester,
+        repository: InMemoryNoteRepository.seeded(sampleNotes),
+        themeStore: store,
+      );
+
+      final toggle = find.byKey(const Key('notes-home-theme-toggle'));
+      await tester.tap(toggle);
+      await tester.pump();
+
+      expect(store.writeCalls, 1);
+      expect(
+        find.descendant(
+          of: toggle,
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+      final loadingSemantics = tester.getSemantics(toggle).getSemanticsData();
+      expect(loadingSemantics.value, 'Saving theme preference…');
+      expect(loadingSemantics.flagsCollection.isLiveRegion, isTrue);
+      expect(loadingSemantics.hasAction(SemanticsAction.tap), isFalse);
+
+      await tester.tap(toggle, warnIfMissed: false);
+      await tester.pump();
+      expect(store.writeCalls, 1);
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(store.writeCalls, 1);
+      expect(store.mode, ThemeMode.dark);
+    },
+  );
 
   testWidgets('adapts at 320, 375, and tablet widths with scaled text', (
     tester,
@@ -315,14 +498,32 @@ void main() {
             mode: ThemeMode.light,
           ),
           (
+            size: const Size(390, 1000),
+            columns: 2,
+            contentWidth: 358,
+            mode: ThemeMode.light,
+          ),
+          (
             size: const Size(600, 1100),
             columns: 2,
             contentWidth: 552,
             mode: ThemeMode.dark,
           ),
           (
+            size: const Size(700, 1100),
+            columns: 3,
+            contentWidth: 652,
+            mode: ThemeMode.dark,
+          ),
+          (
+            size: const Size(768, 1100),
+            columns: 3,
+            contentWidth: 720,
+            mode: ThemeMode.dark,
+          ),
+          (
             size: const Size(900, 1200),
-            columns: 2,
+            columns: 3,
             contentWidth: 840,
             mode: ThemeMode.dark,
           ),
@@ -358,6 +559,12 @@ void main() {
           masonry.gridDelegate
               as SliverSimpleGridDelegateWithFixedCrossAxisCount;
       expect(delegate.crossAxisCount, surface.columns);
+      final expectedCardWidth =
+          (surface.contentWidth - (surface.columns - 1) * 12) / surface.columns;
+      expect(
+        tester.getSize(find.byKey(const ValueKey('note-card-2'))).width,
+        moreOrLessEquals(expectedCardWidth),
+      );
       expect(searchWidth, moreOrLessEquals(surface.contentWidth));
       expect(searchHeight, greaterThanOrEqualTo(52));
       expect(allChipHeight, greaterThanOrEqualTo(44));
@@ -376,6 +583,56 @@ void main() {
       expect(tester.takeException(), isNull, reason: '${surface.size}');
     }
   });
+
+  testWidgets('loading grid matches populated columns at every breakpoint', (
+    tester,
+  ) async {
+    final surfaces = <({Size size, int columns, double contentWidth})>[
+      (size: const Size(359, 1000), columns: 1, contentWidth: 327),
+      (size: const Size(360, 1000), columns: 2, contentWidth: 328),
+      (size: const Size(390, 1000), columns: 2, contentWidth: 358),
+      (size: const Size(600, 1100), columns: 2, contentWidth: 552),
+      (size: const Size(700, 1100), columns: 3, contentWidth: 652),
+      (size: const Size(768, 1100), columns: 3, contentWidth: 720),
+      (size: const Size(900, 1200), columns: 3, contentWidth: 840),
+    ];
+
+    for (final surface in surfaces) {
+      final repository = _DeferredNoteRepository(sampleNotes);
+      await _pumpHome(
+        tester,
+        repository: repository,
+        size: surface.size,
+        settle: false,
+      );
+      await tester.pump();
+
+      final masonry = tester.widget<SliverMasonryGrid>(
+        find.descendant(
+          of: find.byType(NotesSkeleton),
+          matching: find.byType(SliverMasonryGrid),
+        ),
+      );
+      final delegate =
+          masonry.gridDelegate
+              as SliverSimpleGridDelegateWithFixedCrossAxisCount;
+      expect(
+        delegate.crossAxisCount,
+        surface.columns,
+        reason: '${surface.size.width} loading columns',
+      );
+      final expectedCardWidth =
+          (surface.contentWidth - (surface.columns - 1) * 12) / surface.columns;
+      expect(
+        tester.getSize(find.byKey(const Key('notes-skeleton-card-0'))).width,
+        moreOrLessEquals(expectedCardWidth),
+        reason: '${surface.size.width} loading card width',
+      );
+
+      repository.release();
+      await tester.pumpAndSettle();
+    }
+  });
 }
 
 Future<ProviderContainer> _pumpHome(
@@ -384,6 +641,7 @@ Future<ProviderContainer> _pumpHome(
   Size size = const Size(375, 1000),
   TextScaler textScaler = TextScaler.noScaling,
   ThemeMode themeMode = ThemeMode.light,
+  ThemeModeStore? themeStore,
   VoidCallback? onOpenSearch,
   VoidCallback? onCreateNote,
   bool settle = true,
@@ -396,7 +654,11 @@ Future<ProviderContainer> _pumpHome(
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        noteRepositoryProvider.overrideWithValue(repository),
+        if (themeStore != null)
+          themeModeStoreProvider.overrideWithValue(themeStore),
+      ],
       child: MaterialApp(
         theme: AuroraTheme.light(),
         darkTheme: AuroraTheme.dark(),
@@ -440,5 +702,25 @@ class _DeferredNoteRepository extends InMemoryNoteRepository {
   Future<List<Note>> getNotesByStatus(NoteStatus status) async {
     await _gate.future;
     return super.getNotesByStatus(status);
+  }
+}
+
+class _FakeThemeModeStore implements ThemeModeStore {
+  _FakeThemeModeStore(this.mode);
+
+  ThemeMode mode;
+  Object? writeError;
+  Completer<void>? writeGate;
+  int writeCalls = 0;
+
+  @override
+  Future<ThemeMode> readMode() async => mode;
+
+  @override
+  Future<void> writeMode(ThemeMode mode) async {
+    writeCalls += 1;
+    await writeGate?.future;
+    if (writeError case final error?) throw error;
+    this.mode = mode;
   }
 }

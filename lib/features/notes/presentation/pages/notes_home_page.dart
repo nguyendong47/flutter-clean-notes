@@ -5,12 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/widgets/aurora_background.dart';
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/glass_note_card.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_collection.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_grid_layout.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_state_view.dart';
 
 class NotesHomePage extends ConsumerStatefulWidget {
@@ -164,28 +167,38 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
     }
   }
 
-  Future<void> _togglePin(Note note) {
-    return _runMutation(() => ref.read(notesProvider.notifier).togglePin(note));
+  Future<void> _togglePin(Note note) async {
+    await _runMutation(() => ref.read(notesProvider.notifier).togglePin(note));
   }
 
   Future<void> _archive(Note note) async {
-    final succeeded = await _runMutation(
+    final result = await _runMutation(
       () => ref.read(notesProvider.notifier).archiveNote(note),
     );
-    if (succeeded) _showUndo(note, '${_displayTitle(note)} archived');
-  }
-
-  Future<void> _trash(Note note) async {
-    final succeeded = await _runMutation(
-      () => ref.read(notesProvider.notifier).trashNote(note),
-    );
-    if (succeeded) {
-      _showUndo(note, '${_displayTitle(note)} moved to trash');
+    if (result != _MutationResult.failed) {
+      _showUndo(
+        note,
+        '${_displayTitle(note)} archived',
+        refreshFailed: result == _MutationResult.persistedRefreshFailure,
+      );
     }
   }
 
-  Future<void> _restore(Note note) {
-    return _runMutation(
+  Future<void> _trash(Note note) async {
+    final result = await _runMutation(
+      () => ref.read(notesProvider.notifier).trashNote(note),
+    );
+    if (result != _MutationResult.failed) {
+      _showUndo(
+        note,
+        '${_displayTitle(note)} moved to trash',
+        refreshFailed: result == _MutationResult.persistedRefreshFailure,
+      );
+    }
+  }
+
+  Future<void> _restore(Note note) async {
+    await _runMutation(
       () => ref.read(notesProvider.notifier).restoreNote(note),
     );
   }
@@ -196,17 +209,19 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
     await _runMutation(() => ref.read(notesProvider.notifier).deleteNote(id));
   }
 
-  Future<bool> _runMutation(Future<void> Function() mutation) async {
+  Future<_MutationResult> _runMutation(Future<void> Function() mutation) async {
     try {
       await mutation();
-      return true;
-    } catch (error) {
-      _announceError(error);
-      return false;
+      return _MutationResult.succeeded;
+    } on PersistedNoteMutationException {
+      return _MutationResult.persistedRefreshFailure;
+    } catch (_) {
+      _announceMutationFailure();
+      return _MutationResult.failed;
     }
   }
 
-  void _showUndo(Note note, String message) {
+  void _showUndo(Note note, String message, {required bool refreshFailed}) {
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger
@@ -214,7 +229,11 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
       ..showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text(message),
+          content: Text(
+            refreshFailed
+                ? '$message. Could not refresh notes; showing saved notes.'
+                : message,
+          ),
           action: SnackBarAction(
             label: 'Undo',
             onPressed: () => unawaited(_restore(note)),
@@ -233,20 +252,47 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
       ..showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text('Could not update notes: $error'),
+          content: const Text(
+            'Could not refresh notes. Showing saved notes. Try again.',
+          ),
+        ),
+      );
+  }
+
+  void _announceMutationFailure() {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..removeCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            'Could not update this note. Your saved note is unchanged. '
+            'Try again.',
+          ),
         ),
       );
   }
 }
 
-class _HomeHeader extends StatelessWidget {
+class _HomeHeader extends ConsumerStatefulWidget {
   const _HomeHeader({required this.date, super.key});
 
   final String date;
 
   @override
+  ConsumerState<_HomeHeader> createState() => _HomeHeaderState();
+}
+
+class _HomeHeaderState extends ConsumerState<_HomeHeader> {
+  bool _themeBusy = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final toggleLabel = dark ? 'Use light theme' : 'Use dark theme';
     final hour = DateTime.now().hour;
     final greeting = hour < 12
         ? 'Good morning'
@@ -254,24 +300,83 @@ class _HomeHeader extends StatelessWidget {
         ? 'Good afternoon'
         : 'Good evening';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          greeting,
-          style: theme.textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w700,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                greeting,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                widget.date,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          date,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+        const SizedBox(width: 12),
+        Semantics(
+          button: true,
+          enabled: !_themeBusy,
+          label: toggleLabel,
+          value: _themeBusy ? 'Saving theme preference…' : null,
+          liveRegion: _themeBusy,
+          excludeSemantics: !_themeBusy,
+          child: SizedBox.square(
+            key: const Key('notes-home-theme-toggle'),
+            dimension: 48,
+            child: IconButton(
+              tooltip: toggleLabel,
+              onPressed: _themeBusy ? null : () => unawaited(_toggleTheme()),
+              icon: _themeBusy
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      dark
+                          ? Icons.light_mode_outlined
+                          : Icons.dark_mode_outlined,
+                    ),
+            ),
           ),
         ),
       ],
     );
+  }
+
+  Future<void> _toggleTheme() async {
+    if (_themeBusy) return;
+    final mode = Theme.of(context).brightness == Brightness.dark
+        ? ThemeMode.light
+        : ThemeMode.dark;
+    setState(() => _themeBusy = true);
+    try {
+      await ref.read(appThemeProvider.notifier).setMode(mode);
+    } catch (_) {
+      if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              behavior: SnackBarBehavior.floating,
+              content: Text('Theme stays unchanged. Try again.'),
+            ),
+          );
+      }
+    } finally {
+      if (mounted) setState(() => _themeBusy = false);
+    }
   }
 }
 
@@ -440,7 +545,7 @@ class _ContentSliver extends StatelessWidget {
       builder: (context, constraints) {
         return SliverPadding(
           padding: EdgeInsets.symmetric(
-            horizontal: _horizontalInset(constraints.crossAxisExtent),
+            horizontal: notesGridHorizontalInset(constraints.crossAxisExtent),
           ),
           sliver: SliverToBoxAdapter(child: child),
         );
@@ -449,12 +554,9 @@ class _ContentSliver extends StatelessWidget {
   }
 }
 
-double _horizontalInset(double viewportWidth) {
-  final gutter = viewportWidth >= 600 ? 24.0 : 16.0;
-  return ((viewportWidth - 840) / 2).clamp(gutter, double.infinity).toDouble();
-}
-
 String _displayTitle(Note note) {
   final title = note.title.trim();
   return title.isEmpty ? 'Untitled note' : title;
 }
+
+enum _MutationResult { succeeded, persistedRefreshFailure, failed }

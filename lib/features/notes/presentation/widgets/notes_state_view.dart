@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_grid_layout.dart';
 
 class NotesSkeleton extends StatelessWidget {
   const NotesSkeleton({super.key});
@@ -11,13 +12,13 @@ class NotesSkeleton extends StatelessWidget {
     return SliverLayoutBuilder(
       builder: (context, constraints) {
         final viewportWidth = constraints.crossAxisExtent;
-        final horizontalInset = _horizontalInset(viewportWidth);
+        final horizontalInset = notesGridHorizontalInset(viewportWidth);
         final colorScheme = Theme.of(context).colorScheme;
 
         return SliverPadding(
           padding: EdgeInsets.symmetric(horizontal: horizontalInset),
           sliver: SliverMasonryGrid.count(
-            crossAxisCount: viewportWidth < 360 ? 1 : 2,
+            crossAxisCount: notesGridColumnCount(viewportWidth),
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
             childCount: 4,
@@ -134,13 +135,13 @@ class NotesErrorState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.cloud_off_outlined,
+              Icons.error_outline_rounded,
               size: 36,
               color: Theme.of(context).colorScheme.error,
             ),
             const SizedBox(height: 12),
             Text(
-              'Your notes are out of reach',
+              'Could not load notes',
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
@@ -148,7 +149,7 @@ class NotesErrorState extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Check the connection and try loading them again.',
+              'Try again. Your saved notes are unchanged.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -181,7 +182,7 @@ class _StateSliver extends StatelessWidget {
       builder: (context, constraints) {
         return SliverPadding(
           padding: EdgeInsets.symmetric(
-            horizontal: _horizontalInset(constraints.crossAxisExtent),
+            horizontal: notesGridHorizontalInset(constraints.crossAxisExtent),
           ),
           sliver: SliverToBoxAdapter(
             child: Center(
@@ -216,9 +217,4 @@ class _SkeletonLine extends StatelessWidget {
       ),
     );
   }
-}
-
-double _horizontalInset(double viewportWidth) {
-  final gutter = viewportWidth >= 600 ? 24.0 : 16.0;
-  return ((viewportWidth - 840) / 2).clamp(gutter, double.infinity).toDouble();
 }

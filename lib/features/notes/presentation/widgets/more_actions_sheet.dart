@@ -4,25 +4,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:flutter_clean_notes/app/app_providers.dart';
+import 'package:flutter_clean_notes/app/widgets/busy_aware_modal_bottom_sheet.dart';
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/notes_transfer_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/tag_manager_sheet.dart';
 
 class MoreActionsSheet extends ConsumerStatefulWidget {
-  const MoreActionsSheet({super.key});
+  const MoreActionsSheet({super.key, this.modalController});
+
+  final BusyAwareModalController? modalController;
 
   static Future<void> show(BuildContext context) {
     ProviderScope.containerOf(
       context,
     ).read(notesTransferProvider.notifier).beginSession();
-    return showModalBottomSheet<void>(
+    return showBusyAwareModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      isDismissible: false,
       enableDrag: false,
       backgroundColor: Colors.transparent,
       barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.54),
-      builder: (_) => const MoreActionsSheet(),
+      builder: (_, controller) => MoreActionsSheet(modalController: controller),
     );
   }
 
@@ -31,8 +33,13 @@ class MoreActionsSheet extends ConsumerStatefulWidget {
 }
 
 class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet> {
+  static final _themeBusySource = Object();
+  static final _transferBusySource = Object();
+
   final FocusNode _manageTagsFocusNode = FocusNode(debugLabel: 'Manage tags');
   final FocusNode _importFocusNode = FocusNode(debugLabel: 'Import backup');
+  late final ProviderSubscription<AsyncValue<NotesTransferOutcome?>>
+  _transferSubscription;
 
   bool _themeChoicesVisible = true;
   bool _themeBusy = false;
@@ -40,7 +47,21 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet> {
   String? _themeError;
 
   @override
+  void initState() {
+    super.initState();
+    _transferSubscription = ref.listenManual<AsyncValue<NotesTransferOutcome?>>(
+      notesTransferProvider,
+      (previous, next) => widget.modalController?.setBusy(
+        _transferBusySource,
+        busy: next.isLoading,
+      ),
+      fireImmediately: true,
+    );
+  }
+
+  @override
   void dispose() {
+    _transferSubscription.close();
     _manageTagsFocusNode.dispose();
     _importFocusNode.dispose();
     super.dispose();
@@ -240,6 +261,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet> {
 
   Future<void> _setTheme(ThemeMode mode) async {
     if (_themeBusy) return;
+    widget.modalController?.setBusy(_themeBusySource, busy: true);
     setState(() {
       _themeBusy = true;
       _pendingTheme = mode;
@@ -254,6 +276,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet> {
         });
       }
     } finally {
+      widget.modalController?.setBusy(_themeBusySource, busy: false);
       if (mounted) {
         setState(() {
           _themeBusy = false;
@@ -361,14 +384,12 @@ class _ThemeChoiceRow extends StatelessWidget {
       icon: selected ? Icons.radio_button_checked : Icons.radio_button_off,
       label: label,
       description: description,
+      status: loading ? 'Saving theme preference…' : null,
       selected: selected,
       enabled: enabled,
-      trailing: loading
-          ? const SizedBox.square(
-              dimension: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(selected ? Icons.check : Icons.chevron_right),
+      loading: loading,
+      reserveDescriptionForStatus: true,
+      trailing: Icon(selected ? Icons.check : Icons.chevron_right),
       onPressed: (_) => onSelected(mode),
     );
   }
@@ -469,6 +490,12 @@ class _ActionRow extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final effectiveEnabled = enabled && onPressed != null;
+    final dimmed = !effectiveEnabled && !loading;
+    final surfaceColor = selected == true
+        ? colorScheme.primaryContainer.withValues(alpha: dimmed ? 0.28 : 0.7)
+        : colorScheme.surfaceContainerHighest.withValues(
+            alpha: dimmed ? 0.16 : 0.42,
+          );
     return Builder(
       builder: (rowContext) {
         void activate() {
@@ -488,67 +515,68 @@ class _ActionRow extends StatelessWidget {
           onTap: effectiveEnabled ? activate : null,
           excludeSemantics: true,
           child: Material(
-            color: selected == true
-                ? colorScheme.primaryContainer.withValues(alpha: 0.7)
-                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.42),
+            color: surfaceColor,
             borderRadius: BorderRadius.circular(18),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               focusNode: focusNode,
               onTap: effectiveEnabled ? activate : null,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 56),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      ExcludeSemantics(
-                        child: SizedBox.square(
-                          dimension: 44,
-                          child: Center(child: Icon(icon, size: 24)),
+              child: Opacity(
+                opacity: dimmed ? 0.48 : 1,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 56),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        ExcludeSemantics(
+                          child: SizedBox.square(
+                            dimension: 44,
+                            child: Center(child: Icon(icon, size: 24)),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              label,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                label,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 2),
-                            _ActionRowStatus(
-                              description: description,
-                              status: status,
-                              statusIsError: statusIsError,
-                              reserveDescription: reserveDescriptionForStatus,
-                            ),
-                          ],
+                              const SizedBox(height: 2),
+                              _ActionRowStatus(
+                                description: description,
+                                status: status,
+                                statusIsError: statusIsError,
+                                reserveDescription: reserveDescriptionForStatus,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox.square(
-                        dimension: 44,
-                        child: Center(
-                          child: loading
-                              ? const SizedBox.square(
-                                  dimension: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : trailing ?? const Icon(Icons.chevron_right),
+                        const SizedBox(width: 8),
+                        SizedBox.square(
+                          dimension: 44,
+                          child: Center(
+                            child: loading
+                                ? const SizedBox.square(
+                                    dimension: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : trailing ?? const Icon(Icons.chevron_right),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

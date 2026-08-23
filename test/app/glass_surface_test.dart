@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
 import 'package:flutter_clean_notes/app/widgets/aurora_background.dart';
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 
@@ -70,6 +71,40 @@ void main() {
     expect(borderColor.toARGB32() >>> 24, 255);
   });
 
+  testWidgets(
+    'high contrast opaque glass keeps inherited normal text at 4.5 to 1',
+    (tester) async {
+      for (final theme in [AuroraTheme.light(), AuroraTheme.dark()]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: const Scaffold(
+              body: MediaQuery(
+                data: MediaQueryData(highContrast: true),
+                child: GlassSurface(child: Text('High contrast text')),
+              ),
+            ),
+          ),
+        );
+
+        final glass = find.byType(GlassSurface);
+        final decorated = tester.widget<DecoratedBox>(
+          find.descendant(of: glass, matching: find.byType(DecoratedBox)),
+        );
+        final background = (decorated.decoration as BoxDecoration).color!;
+        final textContext = tester.element(find.text('High contrast text'));
+        final foreground = DefaultTextStyle.of(textContext).style.color!;
+
+        expect(background.a, 1);
+        expect(
+          _contrastRatio(foreground, background),
+          greaterThanOrEqualTo(4.5),
+          reason: theme.brightness.name,
+        );
+      }
+    },
+  );
+
   testWidgets('GlassSurface uses an opaque fallback when blur is zero', (
     tester,
   ) async {
@@ -111,4 +146,16 @@ void main() {
       findsNWidgets(3),
     );
   });
+}
+
+double _contrastRatio(Color first, Color second) {
+  final firstLuminance = first.computeLuminance();
+  final secondLuminance = second.computeLuminance();
+  final lighter = firstLuminance > secondLuminance
+      ? firstLuminance
+      : secondLuminance;
+  final darker = firstLuminance > secondLuminance
+      ? secondLuminance
+      : firstLuminance;
+  return (lighter + 0.05) / (darker + 0.05);
 }

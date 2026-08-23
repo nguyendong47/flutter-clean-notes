@@ -244,10 +244,10 @@ void main() {
   );
 
   testWidgets(
-    'real MyApp applies and persists Dark from More without changing route',
+    'real MyApp Home toggle persists effective themes without changing route',
     (tester) async {
-      // Mutation caught: wiring More outside MyApp's theme provider, changing
-      // the shell URI, or updating the rendered theme without persisting it.
+      // Mutation caught: removing the Home theme toggle, toggling only a local
+      // widget, changing the shell URI, or skipping persistence/reload.
       tester.view.physicalSize = const Size(375, 812);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -284,33 +284,36 @@ void main() {
         Brightness.light,
       );
 
-      await tester.tap(find.bySemanticsLabel('More actions'));
-      await tester.pumpAndSettle();
-      expect(router.routeInformationProvider.value.uri, uriBefore);
-      await tester.tap(find.byKey(const Key('theme-mode-dark')));
+      final toggle = find.byKey(const Key('notes-home-theme-toggle'));
+      expect(toggle, findsOneWidget);
+      expect(tester.getSize(toggle).width, greaterThanOrEqualTo(48));
+      expect(tester.getSize(toggle).height, greaterThanOrEqualTo(48));
+      expect(find.byTooltip('Use dark theme'), findsOneWidget);
+
+      await tester.tap(toggle);
       await tester.pumpAndSettle();
 
       expect(container.read(appThemeProvider).requireValue, ThemeMode.dark);
       expect(store.writeCalls, 1);
       expect(store.mode, ThemeMode.dark);
-      expect(
-        Theme.of(
-          tester.element(find.byKey(const Key('more-actions-sheet'))),
-        ).brightness,
-        Brightness.dark,
-      );
+      expect(Theme.of(tester.element(toggle)).brightness, Brightness.dark);
       expect(router.routeInformationProvider.value.uri, uriBefore);
 
       container.invalidate(appThemeProvider);
       expect(await container.read(appThemeProvider.future), ThemeMode.dark);
       await tester.pumpAndSettle();
       expect(store.readCalls, 2);
-      expect(
-        Theme.of(
-          tester.element(find.byKey(const Key('more-actions-sheet'))),
-        ).brightness,
-        Brightness.dark,
-      );
+      expect(Theme.of(tester.element(toggle)).brightness, Brightness.dark);
+      expect(find.byTooltip('Use light theme'), findsOneWidget);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(container.read(appThemeProvider).requireValue, ThemeMode.light);
+      expect(store.writeCalls, 2);
+      expect(store.mode, ThemeMode.light);
+      expect(Theme.of(tester.element(toggle)).brightness, Brightness.light);
+      expect(router.routeInformationProvider.value.uri, uriBefore);
     },
   );
 
