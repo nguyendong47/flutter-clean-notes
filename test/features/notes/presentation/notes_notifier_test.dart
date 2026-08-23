@@ -235,6 +235,55 @@ void main() {
     },
   );
 
+  test('serializes import refresh before the next mutation', () async {
+    final repository = _GatedImportRefreshRepository(sampleNotes);
+    final container = ProviderContainer(
+      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
+    final subscription = container.listen(notesProvider, (_, _) {});
+    addTearDown(subscription.close);
+    final initial = await container.read(notesProvider.future);
+    final noteToToggle = initial.first;
+    final imported = Note(
+      title: 'Queued import',
+      content: 'Must refresh before the next write',
+      color: 0,
+      createdAt: DateTime.utc(2026, 8, 24),
+    );
+
+    final import = container.read(notesProvider.notifier).importBackup([
+      imported,
+    ]);
+    await repository.importRefreshBlocked.future;
+
+    final mutation = container
+        .read(notesProvider.notifier)
+        .togglePin(noteToToggle);
+    await Future<void>.delayed(Duration.zero);
+    repository.releaseImportRefresh();
+    await Future.wait([import, mutation]);
+
+    expect(repository.events, [
+      'import',
+      'release import refresh',
+      'update:${noteToToggle.id}',
+    ]);
+    final finalNotes = container.read(notesProvider).requireValue;
+    expect(
+      finalNotes.where((note) => note.title == imported.title),
+      hasLength(1),
+    );
+    expect(
+      finalNotes.singleWhere((note) => note.id == noteToToggle.id).isPinned,
+      isNot(noteToToggle.isPinned),
+    );
+    expect(
+      finalNotes.singleWhere((note) => note.id == noteToToggle.id),
+      repository.notes.singleWhere((note) => note.id == noteToToggle.id),
+    );
+  });
+
   test('adds and updates notes then refreshes the all-status state', () async {
     final repository = InMemoryNoteRepository.seeded(sampleNotes);
     final container = ProviderContainer(
@@ -955,6 +1004,42 @@ class _SequencedUpdateRepository extends InMemoryNoteRepository {
     step.entered.complete();
     await step._gate.future;
     if (step.error case final error?) throw error;
+    return super.updateNote(note);
+  }
+}
+
+class _GatedImportRefreshRepository extends InMemoryNoteRepository {
+  _GatedImportRefreshRepository(super.notes) : super.seeded();
+
+  final events = <String>[];
+  final importRefreshBlocked = Completer<void>();
+  final _importRefreshGate = Completer<void>();
+
+  void releaseImportRefresh() {
+    events.add('release import refresh');
+    _importRefreshGate.complete();
+  }
+
+  @override
+  Future<void> importNotes(List<Note> notes) async {
+    await super.importNotes(notes);
+    events.add('import');
+  }
+
+  @override
+  Future<List<Note>> getNotesByStatus(NoteStatus status) async {
+    final snapshot = await super.getNotesByStatus(status);
+    final importRefreshSecondRead = NoteStatus.values.length + 2;
+    if (getCalls == importRefreshSecondRead) {
+      importRefreshBlocked.complete();
+      await _importRefreshGate.future;
+    }
+    return snapshot;
+  }
+
+  @override
+  Future<int> updateNote(Note note) async {
+    events.add('update:${note.id}');
     return super.updateNote(note);
   }
 }

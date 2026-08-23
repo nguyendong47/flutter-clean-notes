@@ -1029,7 +1029,7 @@ final class NotesNotifierProvider
   NotesNotifier create() => NotesNotifier();
 }
 
-String _$notesNotifierHash() => r'5eb34f52bd6ccebcf8a862e28c18876cd9db5465';
+String _$notesNotifierHash() => r'0dfec782204d5947320af632f4668686fe9dbf0b';
 
 abstract class _$NotesNotifier extends $AsyncNotifier<List<Note>> {
   FutureOr<List<Note>> build();

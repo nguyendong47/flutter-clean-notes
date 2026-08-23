@@ -319,9 +319,17 @@ class NotesNotifier extends _$NotesNotifier {
   }
 
   Future<void> importBackup(List<Note> notes) {
-    return _importAndRefresh(() async {
-      await ref.read(importNotesUsecaseProvider)(notes);
+    final keepAlive = ref.keepAlive();
+    final result = _mutationQueue.then((_) {
+      return _importAndRefresh(() async {
+        await ref.read(importNotesUsecaseProvider)(notes);
+      });
     });
+    _mutationQueue = result.then<void>(
+      (_) => keepAlive.close(),
+      onError: (Object _, StackTrace _) => keepAlive.close(),
+    );
+    return result;
   }
 
   Future<void> _importAndRefresh(Future<void> Function() import) async {
