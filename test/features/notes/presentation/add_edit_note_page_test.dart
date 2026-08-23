@@ -517,6 +517,67 @@ void main() {
   );
 
   testWidgets(
+    'Preview blocks remote and local Markdown images without leaking targets',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      const imageTargets = <String>[
+        'https://example.invalid/private.png?token=secret',
+        'file:///C:/Users/Owner/private.png',
+        'private/relative.png',
+      ];
+      const altText = <String>[
+        'Remote illustration',
+        'Local illustration',
+        'Relative illustration',
+      ];
+      final markdown = <String>[
+        '**Normal Markdown remains visible.**',
+        '[Normal note link](note://Missing)',
+        for (var index = 0; index < imageTargets.length; index += 1)
+          '![${altText[index]}](${imageTargets[index]})',
+      ].join('\n\n');
+      await _pumpEditor(tester, note: sampleNote.copyWith(content: markdown));
+
+      await tester.tap(find.byKey(const Key('editor-preview-toggle')));
+      await tester.pump();
+
+      final markdownBody = find.byType(MarkdownBody);
+      final images = find.descendant(
+        of: markdownBody,
+        matching: find.byType(Image),
+      );
+      final placeholders = find.descendant(
+        of: markdownBody,
+        matching: find.byKey(const Key('editor-markdown-image-placeholder')),
+      );
+      expect(find.text('Normal Markdown remains visible.'), findsOneWidget);
+      expect(find.text('Normal note link', findRichText: true), findsOneWidget);
+      expect(placeholders, findsNWidgets(imageTargets.length));
+      expect(images, findsNothing);
+      expect(
+        tester
+            .widgetList<Image>(images)
+            .where((image) => image.image is NetworkImage),
+        isEmpty,
+      );
+      expect(
+        tester
+            .widgetList<Image>(images)
+            .where((image) => image.image is FileImage),
+        isEmpty,
+      );
+      for (var index = 0; index < imageTargets.length; index += 1) {
+        final label = tester.getSemantics(placeholders.at(index)).label;
+        expect(label, contains(altText[index]));
+        expect(label, isNot(contains(imageTargets[index])));
+        expect(find.textContaining(imageTargets[index]), findsNothing);
+      }
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    },
+  );
+
+  testWidgets(
     'short Preview paints full-width editor and top surfaces inside gutters',
     (tester) async {
       await _pumpEditor(

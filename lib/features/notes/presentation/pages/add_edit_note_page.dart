@@ -454,6 +454,35 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
           const SizedBox(height: 12),
           MarkdownBody(
             data: content.isEmpty ? '_Nothing to preview._' : content,
+            sizedImageBuilder: (config) {
+              final alt = config.alt?.trim();
+              final label = alt == null || alt.isEmpty
+                  ? 'Image unavailable'
+                  : 'Image unavailable: $alt';
+              return Semantics(
+                key: const Key('editor-markdown-image-placeholder'),
+                container: true,
+                image: true,
+                label: label,
+                child: ExcludeSemantics(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.72),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.image_not_supported_outlined,
+                        size: 20,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
             onTapLink: _saving
                 ? null
                 : (text, href, title) {
