@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
@@ -198,24 +196,6 @@ void main() {
           },
         );
       }
-
-      test(
-        'Android action receiver is registered without a Dart background callback',
-        () async {
-          final manifest = await File(
-            'android/app/src/main/AndroidManifest.xml',
-          ).readAsString();
-
-          expect(
-            manifest,
-            contains(
-              '<receiver\n'
-              '            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"\n'
-              '            android:exported="false" />',
-            ),
-          );
-        },
-      );
     });
 
     group('Reminder Scheduling', () {

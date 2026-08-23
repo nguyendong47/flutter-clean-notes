@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
@@ -48,6 +49,7 @@ class NotificationService {
   OnNotificationTap? _onNotificationTap;
   GlobalKey<NavigatorState>? _navigatorKey;
   final ListQueue<Note> _pendingOpens = ListQueue<Note>();
+  Future<void>? _initFuture;
   bool _flushScheduled = false;
   bool _launchDetailsChecked = false;
 
@@ -61,7 +63,20 @@ class NotificationService {
   static const String actionSnooze = 'snooze';
   static const String actionOpen = 'open';
 
-  Future<void> init() async {
+  Future<void> init() {
+    final inFlightOrCompleted = _initFuture;
+    if (inFlightOrCompleted != null) return inFlightOrCompleted;
+
+    late final Future<void> initialization;
+    initialization = _initialize().onError((error, stackTrace) {
+      if (identical(_initFuture, initialization)) _initFuture = null;
+      Error.throwWithStackTrace(error as Object, stackTrace);
+    });
+    _initFuture = initialization;
+    return initialization;
+  }
+
+  Future<void> _initialize() async {
     tz.initializeTimeZones();
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     const darwin = DarwinInitializationSettings(
@@ -80,7 +95,7 @@ class NotificationService {
     );
     await _plugin.initialize(
       settings,
-      onDidReceiveNotificationResponse: handleNotificationResponse,
+      onDidReceiveNotificationResponse: _handleLiveNotificationResponse,
     );
 
     if (_launchDetailsChecked || !_supportsNotificationLaunchDetails) return;
@@ -89,7 +104,30 @@ class NotificationService {
     _launchDetailsChecked = true;
     final launchResponse = launchDetails?.notificationResponse;
     if (launchDetails?.didNotificationLaunchApp ?? false) {
-      if (launchResponse != null) handleNotificationResponse(launchResponse);
+      if (launchResponse != null) {
+        await _handleNotificationResponseSafely(launchResponse);
+      }
+    }
+  }
+
+  void _handleLiveNotificationResponse(NotificationResponse response) {
+    unawaited(_handleNotificationResponseSafely(response));
+  }
+
+  Future<void> _handleNotificationResponseSafely(
+    NotificationResponse response,
+  ) async {
+    try {
+      await handleNotificationResponse(response);
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'notification service',
+          context: ErrorDescription('while handling a notification action'),
+        ),
+      );
     }
   }
 
@@ -103,7 +141,7 @@ class NotificationService {
     };
   }
 
-  void handleNotificationResponse(NotificationResponse response) {
+  Future<void> handleNotificationResponse(NotificationResponse response) async {
     final payload = response.payload;
     if (payload == null) return;
 
@@ -122,7 +160,7 @@ class NotificationService {
     if (action != null &&
         (action == actionSnooze || action.startsWith('snooze'))) {
       final delayMinutes = snoozeDelayMinutes(action);
-      scheduleSnoozedReminder(note, delayMinutes);
+      await scheduleSnoozedReminder(note, delayMinutes);
     } else if (action == actionOpen || action == null || action.isEmpty) {
       _openOrQueue(note);
     }
@@ -142,7 +180,13 @@ class NotificationService {
         ? int.tryParse(legacyParts[0])
         : null;
     final id = opaqueId ?? legacyId;
-    return id != null && id > 0 ? id : null;
+    return _isValidNotificationId(id) ? id : null;
+  }
+
+  static const int _maxNotificationId = 0x7fffffff;
+
+  static bool _isValidNotificationId(int? id) {
+    return id != null && id >= 1 && id <= _maxNotificationId;
   }
 
   static int snoozeDelayMinutes(String? actionId) {
@@ -215,11 +259,11 @@ class NotificationService {
 
   Future<void> scheduleReminder(Note note) async {
     final id = note.id;
-    if (id == null) {
+    if (!_isValidNotificationId(id)) {
       throw ArgumentError.value(
         id,
         'note.id',
-        'A persisted note ID is required',
+        'A persisted note ID between 1 and $_maxNotificationId is required',
       );
     }
     final reminder = note.reminder;
@@ -265,7 +309,7 @@ class NotificationService {
     }
 
     await _plugin.zonedSchedule(
-      id,
+      id!,
       'Note reminder',
       'Open Aurora Notes to view your reminder.',
       tz.TZDateTime.from(reminder, tz.local),
