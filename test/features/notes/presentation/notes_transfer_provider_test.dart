@@ -389,6 +389,65 @@ void main() {
   );
 
   test(
+    'sequential legacy and current imports survive a malformed payload without discarding notes',
+    () async {
+      // Mutation caught: accepting only one historical JSON shape or clearing
+      // the current collection after a later malformed import.
+      final gateway = _FakeNotesTransferGateway()
+        ..pickedJson = jsonEncode([
+          {
+            'title': 'Legacy backup note',
+            'content': 'Legacy list tags and named status',
+            'color': 17,
+            'createdAt': '2026-08-22T10:00:00.000Z',
+            'isPinned': true,
+            'tags': ['legacy', 'work'],
+            'status': 'archived',
+            'reminder': null,
+          },
+        ]);
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final container = _container(gateway: gateway, repository: repository);
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+
+      expect(
+        await container.read(notesTransferProvider.notifier).importBackup(),
+        NotesTransferResult.completed,
+      );
+      gateway.pickedJson = jsonEncode([
+        {
+          'id': 904,
+          'title': 'Current backup note',
+          'content': 'Current comma tags and numeric status',
+          'color': 18,
+          'createdAt': '2026-08-23T10:00:00.000Z',
+          'isPinned': 0,
+          'tags': 'current,work',
+          'status': 0,
+          'reminder': null,
+        },
+      ]);
+      expect(
+        await container.read(notesTransferProvider.notifier).importBackup(),
+        NotesTransferResult.completed,
+      );
+      final beforeMalformed = repository.notes.length;
+      gateway.pickedJson = '{"not":"a list"}';
+
+      expect(
+        await container.read(notesTransferProvider.notifier).importBackup(),
+        NotesTransferResult.failed,
+      );
+      expect(repository.notes, hasLength(beforeMalformed));
+      expect(
+        repository.notes.map((note) => note.title),
+        containsAll(['Legacy backup note', 'Current backup note']),
+      );
+    },
+  );
+
+  test(
     'committed import stays successful when its follow-up refresh fails',
     () async {
       final gateway = _FakeNotesTransferGateway()
