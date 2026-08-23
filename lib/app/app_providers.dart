@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:flutter_clean_notes/app/notification_service.dart';
+
 part 'app_providers.g.dart';
 
 const _kThemePrefKey = 'theme_mode';
+
+@riverpod
+NotificationService notificationService(Ref ref) => NotificationService();
 
 abstract interface class ThemeModeStore {
   Future<ThemeMode> readMode();

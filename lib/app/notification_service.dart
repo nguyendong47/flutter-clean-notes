@@ -1,3 +1,6 @@
+import 'dart:collection';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -15,11 +18,22 @@ class NotificationService {
     return _instance;
   }
   NotificationService._internal({FlutterLocalNotificationsPlugin? plugin})
-      : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+    : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   final FlutterLocalNotificationsPlugin _plugin;
 
-  OnNotificationTap? onNotificationTap;
+  OnNotificationTap? _onNotificationTap;
+  GlobalKey<NavigatorState>? _navigatorKey;
+  final ListQueue<Note> _pendingOpens = ListQueue<Note>();
+  bool _flushScheduled = false;
+  bool _launchDetailsChecked = false;
+
+  OnNotificationTap? get onNotificationTap => _onNotificationTap;
+
+  set onNotificationTap(OnNotificationTap? callback) {
+    _onNotificationTap = callback;
+    _schedulePendingDelivery();
+  }
 
   static const String actionSnooze = 'snooze';
   static const String actionOpen = 'open';
@@ -33,6 +47,25 @@ class NotificationService {
       settings,
       onDidReceiveNotificationResponse: handleNotificationResponse,
     );
+
+    if (_launchDetailsChecked || !_supportsNotificationLaunchDetails) return;
+    final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+    if (_launchDetailsChecked) return;
+    _launchDetailsChecked = true;
+    final launchResponse = launchDetails?.notificationResponse;
+    if (launchDetails?.didNotificationLaunchApp ?? false) {
+      if (launchResponse != null) handleNotificationResponse(launchResponse);
+    }
+  }
+
+  bool get _supportsNotificationLaunchDetails {
+    if (kIsWeb) return false;
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android ||
+      TargetPlatform.iOS ||
+      TargetPlatform.macOS => true,
+      _ => false,
+    };
   }
 
   void handleNotificationResponse(NotificationResponse response) {
@@ -61,14 +94,12 @@ class NotificationService {
     );
 
     final action = response.actionId;
-    if (action != null && (action == actionSnooze || action.startsWith('snooze'))) {
+    if (action != null &&
+        (action == actionSnooze || action.startsWith('snooze'))) {
       final delayMinutes = snoozeDelayMinutes(action);
       scheduleSnoozedReminder(note, delayMinutes);
     } else if (action == actionOpen || action == null || action.isEmpty) {
-      final context = _globalContext;
-      if (context != null && context.mounted) {
-        onNotificationTap?.call(note, context);
-      }
+      _openOrQueue(note);
     }
   }
 
@@ -83,10 +114,51 @@ class NotificationService {
     return delays[actionId] ?? 10;
   }
 
-  static BuildContext? _globalContext;
-
   void attachContext(GlobalKey<NavigatorState> navigatorKey) {
-    _globalContext = navigatorKey.currentContext;
+    _navigatorKey = navigatorKey;
+    _schedulePendingDelivery();
+  }
+
+  void _openOrQueue(Note note) {
+    final context = _readyContext;
+    final callback = _onNotificationTap;
+    if (context != null && callback != null) {
+      callback(note, context);
+      return;
+    }
+
+    _pendingOpens.add(note);
+    _schedulePendingDelivery();
+  }
+
+  BuildContext? get _readyContext {
+    final context = _navigatorKey?.currentContext;
+    return context != null && context.mounted ? context : null;
+  }
+
+  void _schedulePendingDelivery() {
+    if (_pendingOpens.isEmpty || _flushScheduled) return;
+    _flushScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _flushScheduled = false;
+      _flushPendingOpens();
+    });
+  }
+
+  void _flushPendingOpens() {
+    final context = _readyContext;
+    final callback = _onNotificationTap;
+    if (context == null || callback == null) {
+      if (_navigatorKey != null && callback != null) {
+        _schedulePendingDelivery();
+      }
+      return;
+    }
+
+    while (_pendingOpens.isNotEmpty) {
+      final note = _pendingOpens.removeFirst();
+      callback(note, context);
+    }
   }
 
   String buildPayload(Note note) {

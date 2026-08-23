@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
@@ -12,7 +13,7 @@ class ZonedScheduleCall {
   final tz.TZDateTime scheduledDate;
   final NotificationDetails notificationDetails;
   final UILocalNotificationDateInterpretation
-      uiLocalNotificationDateInterpretation;
+  uiLocalNotificationDateInterpretation;
   final bool androidAllowWhileIdle;
   final AndroidScheduleMode? androidScheduleMode;
   final String? payload;
@@ -37,7 +38,8 @@ class FakeFlutterLocalNotificationsPlugin extends Fake
   InitializationSettings? lastInitSettings;
   DidReceiveNotificationResponseCallback? onDidReceiveNotificationResponse;
   DidReceiveBackgroundNotificationResponseCallback?
-      onDidReceiveBackgroundNotificationResponse;
+  onDidReceiveBackgroundNotificationResponse;
+  int getLaunchDetailsCalls = 0;
 
   final List<ZonedScheduleCall> zonedScheduleCalls = [];
   final List<int> cancelledIds = [];
@@ -47,13 +49,20 @@ class FakeFlutterLocalNotificationsPlugin extends Fake
     InitializationSettings initializationSettings, {
     DidReceiveNotificationResponseCallback? onDidReceiveNotificationResponse,
     DidReceiveBackgroundNotificationResponseCallback?
-        onDidReceiveBackgroundNotificationResponse,
+    onDidReceiveBackgroundNotificationResponse,
   }) async {
     lastInitSettings = initializationSettings;
     this.onDidReceiveNotificationResponse = onDidReceiveNotificationResponse;
     this.onDidReceiveBackgroundNotificationResponse =
         onDidReceiveBackgroundNotificationResponse;
     return true;
+  }
+
+  @override
+  Future<NotificationAppLaunchDetails?>
+  getNotificationAppLaunchDetails() async {
+    getLaunchDetailsCalls += 1;
+    return const NotificationAppLaunchDetails(false);
   }
 
   @override
@@ -64,7 +73,7 @@ class FakeFlutterLocalNotificationsPlugin extends Fake
     tz.TZDateTime scheduledDate,
     NotificationDetails notificationDetails, {
     required UILocalNotificationDateInterpretation
-        uiLocalNotificationDateInterpretation,
+    uiLocalNotificationDateInterpretation,
     bool androidAllowWhileIdle = false,
     AndroidScheduleMode? androidScheduleMode,
     String? payload,
@@ -121,6 +130,9 @@ void main() {
 
     group('Initialization', () {
       test('init should initialize plugin with proper settings', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
         await notificationService.init();
 
         expect(fakePlugin.lastInitSettings, isNotNull);
@@ -129,50 +141,79 @@ void main() {
           equals('@mipmap/ic_launcher'),
         );
         expect(fakePlugin.onDidReceiveNotificationResponse, isNotNull);
+        expect(fakePlugin.getLaunchDetailsCalls, 1);
       });
+
+      test(
+        'init skips launch details on unsupported desktop targets',
+        () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+          addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+          await notificationService.init();
+
+          expect(fakePlugin.lastInitSettings, isNotNull);
+          expect(fakePlugin.getLaunchDetailsCalls, 0);
+        },
+      );
     });
 
     group('Reminder Scheduling', () {
-      test('scheduleReminder should call plugin zonedSchedule when reminder is valid', () async {
-        await notificationService.scheduleReminder(testNote);
+      test(
+        'scheduleReminder should call plugin zonedSchedule when reminder is valid',
+        () async {
+          await notificationService.scheduleReminder(testNote);
 
-        expect(fakePlugin.zonedScheduleCalls.length, equals(1));
-        final call = fakePlugin.zonedScheduleCalls.first;
-        expect(call.id, equals(1));
-        expect(call.title, equals('Reminder: Test Note'));
-        expect(call.body, equals('Test Content'));
-        expect(call.androidScheduleMode, equals(AndroidScheduleMode.exactAllowWhileIdle));
-        expect(
-          call.uiLocalNotificationDateInterpretation,
-          equals(UILocalNotificationDateInterpretation.absoluteTime),
-        );
-        expect(call.payload, equals(notificationService.buildPayload(testNote)));
-      });
+          expect(fakePlugin.zonedScheduleCalls.length, equals(1));
+          final call = fakePlugin.zonedScheduleCalls.first;
+          expect(call.id, equals(1));
+          expect(call.title, equals('Reminder: Test Note'));
+          expect(call.body, equals('Test Content'));
+          expect(
+            call.androidScheduleMode,
+            equals(AndroidScheduleMode.exactAllowWhileIdle),
+          );
+          expect(
+            call.uiLocalNotificationDateInterpretation,
+            equals(UILocalNotificationDateInterpretation.absoluteTime),
+          );
+          expect(
+            call.payload,
+            equals(notificationService.buildPayload(testNote)),
+          );
+        },
+      );
 
-      test('scheduleReminder should return early when reminder is null', () async {
-        final noteWithoutReminder = Note(
-          id: 1,
-          title: 'No Reminder',
-          content: 'No Reminder Content',
-          color: 0xFF2196F3,
-          createdAt: DateTime.now(),
-          reminder: null,
-        );
+      test(
+        'scheduleReminder should return early when reminder is null',
+        () async {
+          final noteWithoutReminder = Note(
+            id: 1,
+            title: 'No Reminder',
+            content: 'No Reminder Content',
+            color: 0xFF2196F3,
+            createdAt: DateTime.now(),
+            reminder: null,
+          );
 
-        await notificationService.scheduleReminder(noteWithoutReminder);
+          await notificationService.scheduleReminder(noteWithoutReminder);
 
-        expect(fakePlugin.zonedScheduleCalls, isEmpty);
-      });
+          expect(fakePlugin.zonedScheduleCalls, isEmpty);
+        },
+      );
 
-      test('scheduleReminder should return early when reminder is in the past', () async {
-        final pastNote = testNote.copyWith(
-          reminder: DateTime.now().subtract(const Duration(hours: 1)),
-        );
+      test(
+        'scheduleReminder should return early when reminder is in the past',
+        () async {
+          final pastNote = testNote.copyWith(
+            reminder: DateTime.now().subtract(const Duration(hours: 1)),
+          );
 
-        await notificationService.scheduleReminder(pastNote);
+          await notificationService.scheduleReminder(pastNote);
 
-        expect(fakePlugin.zonedScheduleCalls, isEmpty);
-      });
+          expect(fakePlugin.zonedScheduleCalls, isEmpty);
+        },
+      );
 
       test('scheduleReminder should return early when id is null', () async {
         final noteWithoutId = Note(
@@ -199,65 +240,86 @@ void main() {
     });
 
     group('Snooze Functionality', () {
-      test('snooze delay should return correct values for different actions', () {
-        expect(NotificationService.snoozeDelayMinutes('snooze_5'), equals(5));
-        expect(NotificationService.snoozeDelayMinutes('snooze_15'), equals(15));
-        expect(NotificationService.snoozeDelayMinutes('snooze_30'), equals(30));
-        expect(NotificationService.snoozeDelayMinutes('snooze_60'), equals(60));
-        expect(NotificationService.snoozeDelayMinutes('snooze'), equals(10));
-        expect(NotificationService.snoozeDelayMinutes('unknown'), equals(10));
-        expect(NotificationService.snoozeDelayMinutes(null), equals(10));
-      });
+      test(
+        'snooze delay should return correct values for different actions',
+        () {
+          expect(NotificationService.snoozeDelayMinutes('snooze_5'), equals(5));
+          expect(
+            NotificationService.snoozeDelayMinutes('snooze_15'),
+            equals(15),
+          );
+          expect(
+            NotificationService.snoozeDelayMinutes('snooze_30'),
+            equals(30),
+          );
+          expect(
+            NotificationService.snoozeDelayMinutes('snooze_60'),
+            equals(60),
+          );
+          expect(NotificationService.snoozeDelayMinutes('snooze'), equals(10));
+          expect(NotificationService.snoozeDelayMinutes('unknown'), equals(10));
+          expect(NotificationService.snoozeDelayMinutes(null), equals(10));
+        },
+      );
 
-      test('scheduleSnoozedReminder should schedule reminder for the delay period', () async {
-        await notificationService.scheduleSnoozedReminder(testNote, 15);
+      test(
+        'scheduleSnoozedReminder should schedule reminder for the delay period',
+        () async {
+          await notificationService.scheduleSnoozedReminder(testNote, 15);
 
-        expect(fakePlugin.zonedScheduleCalls.length, equals(1));
-        final call = fakePlugin.zonedScheduleCalls.first;
-        expect(call.id, equals(1));
-        expect(call.title, equals('Reminder: Test Note'));
-        expect(call.body, equals('Test Content'));
-      });
+          expect(fakePlugin.zonedScheduleCalls.length, equals(1));
+          final call = fakePlugin.zonedScheduleCalls.first;
+          expect(call.id, equals(1));
+          expect(call.title, equals('Reminder: Test Note'));
+          expect(call.body, equals('Test Content'));
+        },
+      );
     });
 
     group('Payload Serialization', () {
-      test('buildPayload should correctly format note data and sanitize pipe characters', () {
-        final noteWithPipes = Note(
-          id: 5,
-          title: 'Hello|World',
-          content: 'Foo|Bar|Baz',
-          color: 0xFF9C27B0,
-          createdAt: DateTime.parse('2026-08-16 10:00:00'),
-          reminder: DateTime.parse('2026-08-16 12:00:00'),
-        );
+      test(
+        'buildPayload should correctly format note data and sanitize pipe characters',
+        () {
+          final noteWithPipes = Note(
+            id: 5,
+            title: 'Hello|World',
+            content: 'Foo|Bar|Baz',
+            color: 0xFF9C27B0,
+            createdAt: DateTime.parse('2026-08-16 10:00:00'),
+            reminder: DateTime.parse('2026-08-16 12:00:00'),
+          );
 
-        final payload = notificationService.buildPayload(noteWithPipes);
-        expect(
-          payload,
-          equals(
-            '5|HelloWorld|FooBarBaz|4288423856|2026-08-16T10:00:00.000|2026-08-16T12:00:00.000',
-          ),
-        );
-      });
+          final payload = notificationService.buildPayload(noteWithPipes);
+          expect(
+            payload,
+            equals(
+              '5|HelloWorld|FooBarBaz|4288423856|2026-08-16T10:00:00.000|2026-08-16T12:00:00.000',
+            ),
+          );
+        },
+      );
     });
 
     group('Response Handling', () {
-      test('handleNotificationResponse should schedule snoozed reminder on snooze action', () async {
-        final payload = notificationService.buildPayload(testNote);
-        final response = NotificationResponse(
-          notificationResponseType:
-              NotificationResponseType.selectedNotificationAction,
-          actionId: 'snooze_15',
-          payload: payload,
-        );
+      test(
+        'handleNotificationResponse should schedule snoozed reminder on snooze action',
+        () async {
+          final payload = notificationService.buildPayload(testNote);
+          final response = NotificationResponse(
+            notificationResponseType:
+                NotificationResponseType.selectedNotificationAction,
+            actionId: 'snooze_15',
+            payload: payload,
+          );
 
-        notificationService.handleNotificationResponse(response);
+          notificationService.handleNotificationResponse(response);
 
-        expect(fakePlugin.zonedScheduleCalls.length, equals(1));
-        final call = fakePlugin.zonedScheduleCalls.first;
-        expect(call.id, equals(1));
-        expect(call.title, equals('Reminder: Test Note'));
-      });
+          expect(fakePlugin.zonedScheduleCalls.length, equals(1));
+          final call = fakePlugin.zonedScheduleCalls.first;
+          expect(call.id, equals(1));
+          expect(call.title, equals('Reminder: Test Note'));
+        },
+      );
     });
   });
 }

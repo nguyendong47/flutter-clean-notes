@@ -1,41 +1,118 @@
-import 'package:go_router/go_router.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
-import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_page.dart';
-import 'package:flutter_clean_notes/features/notes/presentation/pages/add_edit_note_page.dart';
-import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
+import 'package:go_router/go_router.dart';
 
-/// Application router for Flutter Clean Notes.
+import 'package:flutter_clean_notes/app/app_providers.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/pages/add_edit_note_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/pages/existing_note_route_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_home_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_library_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_search_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_shell_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/search_focus_request.dart';
+
+final rootNavigatorKey = GlobalKey<NavigatorState>(
+  debugLabel: 'root navigator',
+);
+final notesNavigatorKey = GlobalKey<NavigatorState>(
+  debugLabel: 'notes navigator',
+);
+final searchNavigatorKey = GlobalKey<NavigatorState>(
+  debugLabel: 'search navigator',
+);
+final libraryNavigatorKey = GlobalKey<NavigatorState>(
+  debugLabel: 'library navigator',
+);
+
+/// Application router with persistent Notes, Search, and Library branches.
 final routerProvider = Provider<GoRouter>((ref) {
-  return GoRouter(
+  final notificationService = ref.watch(notificationServiceProvider);
+  final router = GoRouter(
+    navigatorKey: rootNavigatorKey,
     routes: <RouteBase>[
-      GoRoute(path: '/', builder: (context, state) => const NotesPage()),
-      GoRoute(
-        path: '/note/new',
-        builder: (context, state) => const AddEditNotePage(),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) =>
+            NotesShellPage(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(
+            navigatorKey: notesNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/',
+                builder: (context, state) => NotesHomePage(
+                  onOpenSearch: () {
+                    ref
+                        .read(searchFocusRequestProvider.notifier)
+                        .requestFocus();
+                    StatefulNavigationShell.of(
+                      context,
+                    ).goBranch(1, initialLocation: false);
+                  },
+                  onCreateNote: () => context.push('/note/new'),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: searchNavigatorKey,
+            preload: true,
+            routes: [
+              GoRoute(
+                path: '/search',
+                builder: (context, state) => const NotesSearchPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: libraryNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/library',
+                builder: (context, state) => NotesLibraryPage(
+                  onShowNotes: () => StatefulNavigationShell.of(
+                    context,
+                  ).goBranch(0, initialLocation: false),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: '/note/new',
+        builder: (context, state) =>
+            AddEditNotePage(onClose: () => _closeEditor(context)),
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
         path: '/note/:id',
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          final notes = ref.read(notesProvider).value ?? const [];
-          final note = notes.firstWhere(
-            (n) => n.id == int.tryParse(id),
-            orElse: () => Note(
-              id: int.tryParse(id),
-              title: '',
-              content: '',
-              color: 0xFF1E3A8A,
-              createdAt: DateTime.now(),
-              tags: const [],
-              status: NoteStatus.active,
-              reminder: null,
-            ),
-          );
-          return AddEditNotePage(note: note);
-        },
+        builder: (context, state) => ExistingNoteRoutePage(
+          noteId: state.pathParameters['id']!,
+          onClose: () => _closeEditor(context),
+        ),
       ),
     ],
     debugLogDiagnostics: true,
   );
+  notificationService
+    ..onNotificationTap = (note, _) {
+      final id = note.id;
+      if (id != null) router.push<void>('/note/$id');
+    }
+    ..attachContext(rootNavigatorKey);
+
+  ref.onDispose(() {
+    notificationService.onNotificationTap = null;
+    router.dispose();
+  });
+  return router;
 });
+
+void _closeEditor(BuildContext context) {
+  if (context.canPop()) {
+    context.pop();
+  } else {
+    context.go('/');
+  }
+}

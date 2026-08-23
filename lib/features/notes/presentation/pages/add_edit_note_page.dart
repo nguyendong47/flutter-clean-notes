@@ -8,8 +8,9 @@ import 'package:go_router/go_router.dart';
 
 class AddEditNotePage extends ConsumerStatefulWidget {
   final Note? note;
+  final VoidCallback? onClose;
 
-  const AddEditNotePage({super.key, this.note});
+  const AddEditNotePage({super.key, this.note, this.onClose});
 
   @override
   ConsumerState<AddEditNotePage> createState() => _AddEditNotePageState();
@@ -208,12 +209,16 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
 
   Future<void> _openLinkedNote(String title) async {
     final notes = ref.read(notesProvider).value ?? const [];
-    final match = notes.where((n) =>
-        n.title.trim().toLowerCase() == title.toLowerCase() && n.id != null);
+    final match = notes.where(
+      (n) =>
+          n.title.trim().toLowerCase() == title.toLowerCase() && n.id != null,
+    );
     if (match.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Linked note not found. Create it first.')),
+        const SnackBar(
+          content: Text('Linked note not found. Create it first.'),
+        ),
       );
       return;
     }
@@ -249,6 +254,15 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       ref.read(notesProvider.notifier).updateNote(note);
     }
 
+    _close();
+  }
+
+  void _close() {
+    final callback = widget.onClose;
+    if (callback != null) {
+      callback();
+      return;
+    }
     context.pop();
   }
 
@@ -257,6 +271,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
     return Scaffold(
       backgroundColor: _selectedColor,
       appBar: AppBar(
+        leading: BackButton(onPressed: _close),
         title: Text(widget.note == null ? 'Add Note' : 'Edit Note'),
         backgroundColor: Colors.transparent,
         elevation: 0,
