@@ -22,8 +22,11 @@ class GlassSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final media = MediaQuery.maybeOf(context);
     final disableBlur =
-        blur == 0 || (MediaQuery.maybeOf(context)?.disableAnimations ?? false);
+        blur == 0 ||
+        media?.disableAnimations == true ||
+        media?.highContrast == true;
     final surface = DecoratedBox(
       decoration: BoxDecoration(
         color: disableBlur

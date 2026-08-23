@@ -36,6 +36,28 @@ void main() {
     expect(semantics.container, isTrue);
   });
 
+  testWidgets('GlassSurface uses an opaque fallback for high contrast', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(highContrast: true),
+          child: GlassSurface(child: Text('High contrast content')),
+        ),
+      ),
+    );
+
+    expect(find.byType(BackdropFilter), findsNothing);
+    final decorated = tester.widget<DecoratedBox>(
+      find.descendant(
+        of: find.byType(GlassSurface),
+        matching: find.byType(DecoratedBox),
+      ),
+    );
+    expect((decorated.decoration as BoxDecoration).border, isNotNull);
+  });
+
   testWidgets('GlassSurface uses an opaque fallback when blur is zero', (
     tester,
   ) async {
