@@ -127,6 +127,202 @@ void main() {
     expect(result.value?.reminder, isNull);
   });
 
+  testWidgets('reminder date picker starts today and excludes past dates', (
+    tester,
+  ) async {
+    final now = DateTime(2030, 1, 15, 10, 15, 30);
+    final result = ValueNotifier<NoteMetadataValue?>(null);
+    addTearDown(result.dispose);
+    await _openSheet(
+      tester,
+      initial: NoteMetadataValue(
+        color: Colors.white,
+        tags: const [],
+        reminder: null,
+      ),
+      result: result,
+      now: () => now,
+    );
+
+    await tester.tap(find.byKey(const Key('metadata-reminder-button')));
+    await tester.pumpAndSettle();
+
+    final calendar = tester.widget<CalendarDatePicker>(
+      find.byType(CalendarDatePicker),
+    );
+    final todayDate = DateTime(now.year, now.month, now.day);
+    expect(calendar.initialDate, todayDate);
+    expect(calendar.firstDate, todayDate);
+  });
+
+  testWidgets('new reminder picker defaults strictly after the current time', (
+    tester,
+  ) async {
+    final now = DateTime(2030, 1, 15, 10, 15, 30);
+    final result = ValueNotifier<NoteMetadataValue?>(null);
+    addTearDown(result.dispose);
+    await _openSheet(
+      tester,
+      initial: NoteMetadataValue(
+        color: Colors.white,
+        tags: const [],
+        reminder: null,
+      ),
+      result: result,
+      now: () => now,
+    );
+
+    await tester.tap(find.byKey(const Key('metadata-reminder-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    final initialTime = tester
+        .widget<TimePickerDialog>(find.byType(TimePickerDialog))
+        .initialTime;
+    final defaultReminder = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      initialTime.hour,
+      initialTime.minute,
+    );
+    expect(defaultReminder.isAfter(now), isTrue);
+  });
+
+  testWidgets('expired reminder is clamped using the injected picker clock', (
+    tester,
+  ) async {
+    final now = DateTime(2030, 1, 15, 10, 15, 30);
+    final result = ValueNotifier<NoteMetadataValue?>(null);
+    addTearDown(result.dispose);
+    await _openSheet(
+      tester,
+      initial: NoteMetadataValue(
+        color: Colors.white,
+        tags: const [],
+        reminder: DateTime(2029, 12, 31, 23, 59),
+      ),
+      result: result,
+      now: () => now,
+    );
+
+    await tester.tap(find.byKey(const Key('metadata-reminder-button')));
+    await tester.pumpAndSettle();
+
+    final calendar = tester.widget<CalendarDatePicker>(
+      find.byType(CalendarDatePicker),
+    );
+    expect(calendar.initialDate, DateTime(2030, 1, 15));
+    expect(calendar.firstDate, DateTime(2030, 1, 15));
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TimePickerDialog>(find.byType(TimePickerDialog))
+          .initialTime,
+      const TimeOfDay(hour: 10, minute: 16),
+    );
+  });
+
+  testWidgets('changed reminder equal to now is rejected inline', (
+    tester,
+  ) async {
+    final now = DateTime(2030, 1, 15, 10, 15);
+    final initialReminder = DateTime(2030, 1, 16, 11);
+    final result = ValueNotifier<NoteMetadataValue?>(null);
+    addTearDown(result.dispose);
+    await _openSheet(
+      tester,
+      initial: NoteMetadataValue(
+        color: Colors.white,
+        tags: const [],
+        reminder: initialReminder,
+      ),
+      result: result,
+      now: () => now,
+    );
+
+    await tester.tap(find.byKey(const Key('metadata-reminder-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('15'));
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Switch to text input mode'));
+    await tester.pumpAndSettle();
+    final timeFields = find.descendant(
+      of: find.byType(TimePickerDialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(timeFields.at(0), '10');
+    await tester.enterText(timeFields.at(1), '15');
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    final error = find.byKey(const Key('metadata-reminder-error'));
+    expect(error, findsOneWidget);
+    expect(find.text('Choose a reminder time in the future'), findsOneWidget);
+    expect(find.text('Jan 16, 2030 11:00 AM'), findsOneWidget);
+    expect(result.value, isNull);
+  });
+
+  testWidgets('Apply rechecks a selected reminder against an advanced clock', (
+    tester,
+  ) async {
+    var now = DateTime(2030, 1, 15, 10, 15);
+    final result = ValueNotifier<NoteMetadataValue?>(null);
+    addTearDown(result.dispose);
+    await _openSheet(
+      tester,
+      initial: NoteMetadataValue(
+        color: Colors.white,
+        tags: const [],
+        reminder: null,
+      ),
+      result: result,
+      now: () => now,
+    );
+
+    await tester.tap(find.byKey(const Key('metadata-reminder-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.text('Jan 15, 2030 10:16 AM'), findsOneWidget);
+
+    now = DateTime(2030, 1, 15, 10, 16);
+    final apply = find.byKey(const Key('metadata-apply'));
+    await tester.ensureVisible(apply);
+    await tester.tap(apply);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('metadata-reminder-error')), findsOneWidget);
+    expect(find.byKey(const Key('metadata-sheet')), findsOneWidget);
+    expect(result.value, isNull);
+  });
+
+  testWidgets('Apply preserves an unchanged expired reminder', (tester) async {
+    final expired = DateTime(2029, 12, 31, 23, 59);
+    final result = ValueNotifier<NoteMetadataValue?>(null);
+    addTearDown(result.dispose);
+    await _openSheet(
+      tester,
+      initial: NoteMetadataValue(
+        color: Colors.white,
+        tags: const [],
+        reminder: expired,
+      ),
+      result: result,
+      now: () => DateTime(2030, 1, 15, 10, 15),
+    );
+
+    await tester.tap(find.byKey(const Key('metadata-apply')));
+    await tester.pumpAndSettle();
+
+    expect(result.value?.reminder, expired);
+  });
+
   testWidgets('date and time pickers update the reminder draft before Apply', (
     tester,
   ) async {
@@ -406,6 +602,7 @@ Future<void> _openSheet(
   EdgeInsets viewPadding = EdgeInsets.zero,
   EdgeInsets viewInsets = EdgeInsets.zero,
   bool disableAnimations = false,
+  DateTime Function()? now,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -441,7 +638,7 @@ Future<void> _openSheet(
                   useSafeArea: true,
                   backgroundColor: Colors.transparent,
                   builder: (context) =>
-                      NoteMetadataSheet(initialValue: initial),
+                      NoteMetadataSheet(initialValue: initial, now: now),
                 );
                 if (value != null) result.value = value;
               },

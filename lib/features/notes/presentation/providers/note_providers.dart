@@ -7,6 +7,7 @@ import 'package:flutter_clean_notes/features/notes/domain/repositories/note_repo
 import 'package:flutter_clean_notes/features/notes/domain/usecases/note_usecases.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_filters.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/invalid_note_reminder_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_save_exception.dart';
 
@@ -254,11 +255,16 @@ class NotesNotifier extends _$NotesNotifier {
     return result;
   }
 
-  Future<void> addNote(Note note) async {
+  Future<void> addNote(Note note, {DateTime Function()? now}) async {
     final requestedNote = _persistedSnapshot(note);
     Note? persistedNote;
     try {
       await _mutate(() async {
+        final reminder = requestedNote.reminder;
+        final currentTime = now?.call() ?? DateTime.now();
+        if (reminder != null && !reminder.isAfter(currentTime)) {
+          throw const InvalidNoteReminderException();
+        }
         final id = await ref.read(addNoteUsecaseProvider)(requestedNote);
         persistedNote = requestedNote.copyWith(id: id);
         if (requestedNote.reminder != null) {
@@ -281,11 +287,32 @@ class NotesNotifier extends _$NotesNotifier {
     }
   }
 
-  Future<void> updateNote(Note note) async {
+  Future<void> updateNote(
+    Note note, {
+    DateTime Function()? now,
+    DateTime? persistedReminder,
+  }) async {
     final requestedNote = _persistedSnapshot(note);
+    var reminderBeforeUpdate = persistedReminder;
+    if (reminderBeforeUpdate == null) {
+      for (final currentNote in state.value ?? const <Note>[]) {
+        if (currentNote.id == requestedNote.id) {
+          reminderBeforeUpdate = currentNote.reminder;
+          break;
+        }
+      }
+    }
     Note? persistedNote;
     try {
       await _mutate(() async {
+        final reminder = requestedNote.reminder;
+        final currentTime = now?.call() ?? DateTime.now();
+        final unchangedReminder = reminder == reminderBeforeUpdate;
+        if (reminder != null &&
+            !unchangedReminder &&
+            !reminder.isAfter(currentTime)) {
+          throw const InvalidNoteReminderException();
+        }
         final updated = await ref.read(updateNoteUsecaseProvider)(
           requestedNote,
         );
@@ -297,7 +324,7 @@ class NotesNotifier extends _$NotesNotifier {
         if (id != null) {
           final gateway = ref.read(noteReminderGatewayProvider);
           await gateway.cancel(id);
-          if (requestedNote.reminder != null) {
+          if (reminder != null && reminder.isAfter(currentTime)) {
             await gateway.schedule(persistedNote!);
           }
         }

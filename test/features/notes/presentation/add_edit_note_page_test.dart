@@ -61,6 +61,41 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('save rechecks a newly expired reminder before any write', (
+    tester,
+  ) async {
+    final initialNow = DateTime.utc(2030, 1, 15, 10, 15);
+    var clockReads = 0;
+    final repository = _RecordingRepository(const []);
+    final harness = await _pumpEditor(
+      tester,
+      note: Note(
+        title: 'Expires during save',
+        content: 'Keep this draft open',
+        color: 0,
+        createdAt: DateTime.utc(2030, 1, 15),
+        reminder: initialNow.add(const Duration(minutes: 1)),
+      ),
+      repository: repository,
+      now: () {
+        clockReads += 1;
+        return clockReads == 1
+            ? initialNow
+            : initialNow.add(const Duration(minutes: 2));
+      },
+    );
+
+    await tester.tap(find.byKey(const Key('editor-done-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose a reminder time in the future'), findsOneWidget);
+    expect(find.byKey(const Key('editor-validation')), findsOneWidget);
+    expect(find.byType(AddEditNotePage), findsOneWidget);
+    expect(repository.addCalls, 0);
+    expect(harness.gateway.events, isEmpty);
+    expect(harness.closeCount.value, 0);
+  });
+
   testWidgets('edit save preserves identity, state, pin, color, and metadata', (
     tester,
   ) async {
@@ -724,15 +759,32 @@ void main() {
         reason: 'Focused content must reveal the end of the short layout',
       );
       final bodyRect = tester.getRect(body);
+      final shortViewport = tester.getRect(
+        find.byKey(const Key('editor-short-layout-scroll')),
+      );
       final formattingRect = tester.getRect(
         find.byKey(const Key('editor-formatting-bar')),
       );
+      final topBarRect = tester.getRect(
+        find.byKey(const Key('editor-top-bar')),
+      );
+      final doneRect = tester.getRect(
+        find.byKey(const Key('editor-done-button')),
+      );
+      expect(topBarRect.top, greaterThanOrEqualTo(20));
+      expect(topBarRect.bottom, lessThanOrEqualTo(shortViewport.top));
+      expect(doneRect.top, greaterThanOrEqualTo(topBarRect.top));
+      expect(doneRect.bottom, lessThanOrEqualTo(topBarRect.bottom));
       expect(
         bodyRect.bottom,
         lessThanOrEqualTo(formattingRect.top),
         reason: 'The focused content field must clear formatting and keyboard',
       );
-      expect(bodyRect.height, greaterThanOrEqualTo(44));
+      expect(
+        bodyRect.intersect(shortViewport).height,
+        greaterThanOrEqualTo(44),
+        reason: 'At least 44px of the focused body must be operable',
+      );
       expect(formattingRect.bottom, lessThanOrEqualTo(200.1));
       expect(tester.takeException(), isNull);
 
@@ -740,17 +792,13 @@ void main() {
       tester.widget<TextField>(title).focusNode!.requestFocus();
       await tester.pump();
       await tester.pump();
-      expect(
-        shortScroll.pixels,
-        moreOrLessEquals(
-          64.0.clamp(shortScroll.minScrollExtent, shortScroll.maxScrollExtent),
-        ),
-        reason: 'Title focus must align the editor start below short chrome',
-      );
       final titleRect = tester.getRect(title);
-      expect(titleRect.top, greaterThanOrEqualTo(20));
       expect(titleRect.bottom, lessThanOrEqualTo(formattingRect.top));
-      expect(titleRect.height, greaterThanOrEqualTo(44));
+      expect(
+        titleRect.intersect(shortViewport).height,
+        greaterThanOrEqualTo(44),
+        reason: 'At least 44px of the focused title must be operable',
+      );
 
       harness.viewInsets.value = EdgeInsets.zero;
       await tester.pumpAndSettle();
@@ -903,6 +951,7 @@ Future<_EditorHarness> _pumpEditor(
   EdgeInsets viewPadding = EdgeInsets.zero,
   EdgeInsets viewInsets = EdgeInsets.zero,
   bool disableAnimations = false,
+  DateTime Function()? now,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -950,9 +999,10 @@ Future<_EditorHarness> _pumpEditor(
                   child: child!,
                 );
               },
-              child: AddEditNotePage(
+              child: _editorPage(
                 note: note,
                 onClose: () => closeCount.value += 1,
+                now: now,
               ),
             );
           },
@@ -972,6 +1022,14 @@ Future<_EditorHarness> _pumpEditor(
     closeCount: closeCount,
     viewInsets: mutableViewInsets,
   );
+}
+
+Widget _editorPage({
+  required Note? note,
+  required VoidCallback onClose,
+  required DateTime Function()? now,
+}) {
+  return AddEditNotePage(note: note, onClose: onClose, now: now);
 }
 
 String _text(WidgetTester tester, String key) {

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/note_reminder_gateway.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -110,21 +111,26 @@ void main() {
     late FakeFlutterLocalNotificationsPlugin fakePlugin;
     late NotificationService notificationService;
     late Note testNote;
+    late DateTime now;
 
     setUp(() {
+      now = DateTime.utc(2030, 1, 15, 10, 15);
       fakePlugin = FakeFlutterLocalNotificationsPlugin();
-      notificationService = NotificationService(plugin: fakePlugin);
+      notificationService = NotificationService(
+        plugin: fakePlugin,
+        now: () => now,
+      );
 
       testNote = Note(
         id: 1,
         title: 'Test Note',
         content: 'Test Content',
         color: 0xFF2196F3,
-        createdAt: DateTime.now(),
+        createdAt: now,
         isPinned: false,
         tags: const [],
         status: NoteStatus.active,
-        reminder: DateTime.now().add(const Duration(hours: 1)),
+        reminder: now.add(const Duration(hours: 1)),
       );
     });
 
@@ -203,47 +209,91 @@ void main() {
       );
 
       test(
-        'scheduleReminder should return early when reminder is null',
+        'scheduleReminder rejects a null reminder without plugin work',
         () async {
           final noteWithoutReminder = Note(
             id: 1,
             title: 'No Reminder',
             content: 'No Reminder Content',
             color: 0xFF2196F3,
-            createdAt: DateTime.now(),
+            createdAt: now,
             reminder: null,
           );
 
-          await notificationService.scheduleReminder(noteWithoutReminder);
+          await expectLater(
+            notificationService.scheduleReminder(noteWithoutReminder),
+            throwsArgumentError,
+          );
 
           expect(fakePlugin.zonedScheduleCalls, isEmpty);
         },
       );
 
       test(
-        'scheduleReminder should return early when reminder is in the past',
+        'scheduleReminder rejects a past reminder without plugin work',
         () async {
           final pastNote = testNote.copyWith(
-            reminder: DateTime.now().subtract(const Duration(hours: 1)),
+            reminder: now.subtract(const Duration(hours: 1)),
           );
 
-          await notificationService.scheduleReminder(pastNote);
+          await expectLater(
+            notificationService.scheduleReminder(pastNote),
+            throwsArgumentError,
+          );
 
           expect(fakePlugin.zonedScheduleCalls, isEmpty);
         },
       );
 
-      test('scheduleReminder should return early when id is null', () async {
+      test('scheduleReminder rejects a null ID without plugin work', () async {
         final noteWithoutId = Note(
           id: null,
           title: 'No ID',
           content: 'No ID Content',
           color: 0xFF2196F3,
-          createdAt: DateTime.now(),
-          reminder: DateTime.now().add(const Duration(hours: 1)),
+          createdAt: now,
+          reminder: now.add(const Duration(hours: 1)),
         );
 
-        await notificationService.scheduleReminder(noteWithoutId);
+        await expectLater(
+          notificationService.scheduleReminder(noteWithoutId),
+          throwsArgumentError,
+        );
+
+        expect(fakePlugin.zonedScheduleCalls, isEmpty);
+      });
+
+      test(
+        'scheduleReminder rejects a reminder equal to the injected time',
+        () async {
+          final now = DateTime.utc(2030, 1, 15, 10, 15);
+          final service = NotificationService(
+            plugin: fakePlugin,
+            now: () => now,
+          );
+          final equalReminder = testNote.copyWith(reminder: now);
+
+          await expectLater(
+            service.scheduleReminder(equalReminder),
+            throwsArgumentError,
+          );
+
+          expect(fakePlugin.zonedScheduleCalls, isEmpty);
+        },
+      );
+
+      test('concrete gateway rejects every invalid reminder shape', () async {
+        final gateway = NotificationNoteReminderGateway(notificationService);
+        final invalidNotes = <Note>[
+          testNote.copyWith(id: null),
+          testNote.copyWith(reminder: null),
+          testNote.copyWith(reminder: now.subtract(const Duration(seconds: 1))),
+          testNote.copyWith(reminder: now),
+        ];
+
+        for (final note in invalidNotes) {
+          await expectLater(gateway.schedule(note), throwsArgumentError);
+        }
 
         expect(fakePlugin.zonedScheduleCalls, isEmpty);
       });
@@ -290,6 +340,10 @@ void main() {
           expect(call.id, equals(1));
           expect(call.title, equals('Reminder: Test Note'));
           expect(call.body, equals('Test Content'));
+          expect(
+            call.scheduledDate,
+            tz.TZDateTime.from(now.add(const Duration(minutes: 15)), tz.local),
+          );
         },
       );
     });

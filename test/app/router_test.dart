@@ -741,7 +741,12 @@ void main() {
   testWidgets(
     'pushed partial save defers one pop and refetches the persisted note',
     (tester) async {
-      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final repository = InMemoryNoteRepository.seeded([
+        sampleNotes.first.copyWith(
+          reminder: DateTime.now().add(const Duration(days: 1)),
+        ),
+        ...sampleNotes.skip(1),
+      ]);
       final gateway = FakeNoteReminderGateway()
         ..scheduleError = StateError('notification failed');
       final harness = await _pumpRouter(

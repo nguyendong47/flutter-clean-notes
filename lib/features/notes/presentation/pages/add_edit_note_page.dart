@@ -7,15 +7,17 @@ import 'package:flutter_clean_notes/app/widgets/aurora_background.dart';
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/invalid_note_reminder_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_save_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/editor_formatting_bar.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/note_metadata_sheet.dart';
 
 class AddEditNotePage extends ConsumerStatefulWidget {
-  const AddEditNotePage({super.key, this.note, this.onClose});
+  const AddEditNotePage({super.key, this.note, this.onClose, this.now});
 
   final Note? note;
   final VoidCallback? onClose;
+  final DateTime Function()? now;
 
   @override
   ConsumerState<AddEditNotePage> createState() => _AddEditNotePageState();
@@ -35,6 +37,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
   late Color _selectedColor;
   late List<String> _tags;
   late DateTime? _reminder;
+  late DateTime? _persistedReminder;
   bool _previewMode = false;
   bool _saving = false;
   bool _closed = false;
@@ -66,6 +69,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
     _selectedColor = note == null ? Colors.white : Color(note.color);
     _tags = List<String>.of(note?.tags ?? const []);
     _reminder = note?.reminder;
+    _persistedReminder = note?.id == null ? null : note?.reminder;
   }
 
   @override
@@ -146,16 +150,15 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       }
       return Column(
         children: [
+          _buildTopBar(),
+          const SizedBox(height: 8),
           Expanded(
             child: SingleChildScrollView(
               key: const Key('editor-short-layout-scroll'),
               controller: _shortLayoutScrollController,
-              child: Column(
-                children: [
-                  _buildTopBar(),
-                  const SizedBox(height: 8),
-                  SizedBox(height: editorHeight, child: _buildEditorSurface()),
-                ],
+              child: SizedBox(
+                height: editorHeight,
+                child: _buildEditorSurface(),
               ),
             ),
           ),
@@ -592,6 +595,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (context) => NoteMetadataSheet(
+        now: widget.now,
         initialValue: NoteMetadataValue(
           color: _selectedColor,
           tags: _tags,
@@ -623,6 +627,18 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       return;
     }
 
+    final reminder = _reminder;
+    final reminderChanged = reminder != _persistedReminder;
+    final now = widget.now?.call() ?? DateTime.now();
+    if (reminderChanged && reminder != null && !reminder.isAfter(now)) {
+      setState(() {
+        _previewMode = false;
+        _validationMessage = 'Choose a reminder time in the future';
+        _saveError = null;
+      });
+      return;
+    }
+
     final note = Note(
       id: _persistedId,
       title: title,
@@ -643,16 +659,29 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
     try {
       final notifier = ref.read(notesProvider.notifier);
       if (_persistedId == null) {
-        await notifier.addNote(note);
+        await notifier.addNote(note, now: widget.now);
       } else {
-        await notifier.updateNote(note);
+        await notifier.updateNote(
+          note,
+          now: widget.now,
+          persistedReminder: _persistedReminder,
+        );
       }
       if (!mounted) return;
       _saving = false;
       _requestClose();
+    } on InvalidNoteReminderException {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _previewMode = false;
+        _validationMessage = 'Choose a reminder time in the future';
+        _saveError = null;
+      });
     } on PersistedNoteSaveException catch (error) {
       final persistedId = error.persistedNote.id;
       if (persistedId != null) _persistedId = persistedId;
+      _persistedReminder = error.persistedNote.reminder;
       _hasPartialSave = true;
       if (!mounted) return;
       ref.invalidate(notesProvider);

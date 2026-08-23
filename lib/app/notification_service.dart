@@ -11,16 +11,23 @@ typedef OnNotificationTap = void Function(Note note, BuildContext context);
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
-  factory NotificationService({FlutterLocalNotificationsPlugin? plugin}) {
-    if (plugin != null) {
-      return NotificationService._internal(plugin: plugin);
+  factory NotificationService({
+    FlutterLocalNotificationsPlugin? plugin,
+    DateTime Function()? now,
+  }) {
+    if (plugin != null || now != null) {
+      return NotificationService._internal(plugin: plugin, now: now);
     }
     return _instance;
   }
-  NotificationService._internal({FlutterLocalNotificationsPlugin? plugin})
-    : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+  NotificationService._internal({
+    FlutterLocalNotificationsPlugin? plugin,
+    DateTime Function()? now,
+  }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
+       _now = now ?? DateTime.now;
 
   final FlutterLocalNotificationsPlugin _plugin;
+  final DateTime Function() _now;
 
   OnNotificationTap? _onNotificationTap;
   GlobalKey<NavigatorState>? _navigatorKey;
@@ -176,14 +183,35 @@ class NotificationService {
   }
 
   Future<void> scheduleSnoozedReminder(Note note, int delayMinutes) async {
-    final snoozedTime = DateTime.now().add(Duration(minutes: delayMinutes));
+    final snoozedTime = _now().add(Duration(minutes: delayMinutes));
     final updatedNote = note.copyWith(reminder: snoozedTime);
     await scheduleReminder(updatedNote);
   }
 
   Future<void> scheduleReminder(Note note) async {
-    if (note.reminder == null || note.id == null) return;
-    if (note.reminder!.isBefore(DateTime.now())) return;
+    final id = note.id;
+    if (id == null) {
+      throw ArgumentError.value(
+        id,
+        'note.id',
+        'A persisted note ID is required',
+      );
+    }
+    final reminder = note.reminder;
+    if (reminder == null) {
+      throw ArgumentError.value(
+        reminder,
+        'note.reminder',
+        'A reminder time is required',
+      );
+    }
+    if (!reminder.isAfter(_now())) {
+      throw ArgumentError.value(
+        reminder,
+        'note.reminder',
+        'The reminder must be in the future',
+      );
+    }
 
     final payload = buildPayload(note);
     final snoozeActions = <AndroidNotificationAction>[];
@@ -206,10 +234,10 @@ class NotificationService {
     );
 
     await _plugin.zonedSchedule(
-      note.id!,
+      id,
       'Reminder: ${note.title}',
       note.content,
-      tz.TZDateTime.from(note.reminder!, tz.local),
+      tz.TZDateTime.from(reminder, tz.local),
       NotificationDetails(
         android: androidDetails,
         iOS: const DarwinNotificationDetails(),

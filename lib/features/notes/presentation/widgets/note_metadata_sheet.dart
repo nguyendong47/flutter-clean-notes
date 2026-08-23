@@ -16,9 +16,10 @@ class NoteMetadataValue {
 }
 
 class NoteMetadataSheet extends StatefulWidget {
-  const NoteMetadataSheet({required this.initialValue, super.key});
+  const NoteMetadataSheet({required this.initialValue, this.now, super.key});
 
   final NoteMetadataValue initialValue;
+  final DateTime Function()? now;
 
   @override
   State<NoteMetadataSheet> createState() => _NoteMetadataSheetState();
@@ -40,6 +41,7 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
   late DateTime? _reminder;
   final _tagController = TextEditingController();
   String? _tagError;
+  String? _reminderError;
   int? _focusedTint;
 
   @override
@@ -203,13 +205,30 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
                           constraints: const BoxConstraints(minHeight: 44),
                           child: TextButton.icon(
                             key: const Key('metadata-clear-reminder'),
-                            onPressed: () => setState(() => _reminder = null),
+                            onPressed: () => setState(() {
+                              _reminder = null;
+                              _reminderError = null;
+                            }),
                             icon: const Icon(Icons.alarm_off_rounded),
                             label: const Text('Clear reminder'),
                           ),
                         ),
                     ],
                   ),
+                  if (_reminderError case final error?) ...[
+                    const SizedBox(height: 8),
+                    Semantics(
+                      key: const Key('metadata-reminder-error'),
+                      liveRegion: true,
+                      child: Text(
+                        error,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   Divider(color: colorScheme.outlineVariant),
                   const SizedBox(height: 8),
@@ -340,12 +359,21 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
   }
 
   Future<void> _pickReminder() async {
-    final now = DateTime.now();
-    final initial = _reminder ?? now;
+    final now = widget.now?.call() ?? DateTime.now();
+    final futureDefault = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      now.hour,
+      now.minute,
+    ).add(const Duration(minutes: 1));
+    final initial = _reminder?.isAfter(now) ?? false
+        ? _reminder!
+        : futureDefault;
     final date = await showDatePicker(
       context: context,
       initialDate: initial,
-      firstDate: DateTime(now.year - 5),
+      firstDate: DateTime(now.year, now.month, now.day),
       lastDate: DateTime(now.year + 10),
     );
     if (!mounted) return;
@@ -356,20 +384,34 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
     );
     if (!mounted) return;
     if (time == null) return;
+    final reminder = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+    final validationNow = widget.now?.call() ?? DateTime.now();
+    if (!reminder.isAfter(validationNow)) {
+      setState(() => _reminderError = 'Choose a reminder time in the future');
+      return;
+    }
     setState(() {
-      _reminder = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        time.hour,
-        time.minute,
-      );
+      _reminder = reminder;
+      _reminderError = null;
     });
   }
 
   void _cancel() => Navigator.of(context).pop();
 
   void _apply() {
+    final reminder = _reminder;
+    final reminderChanged = reminder != widget.initialValue.reminder;
+    final now = widget.now?.call() ?? DateTime.now();
+    if (reminderChanged && reminder != null && !reminder.isAfter(now)) {
+      setState(() => _reminderError = 'Choose a reminder time in the future');
+      return;
+    }
     Navigator.of(
       context,
     ).pop(NoteMetadataValue(color: _color, tags: _tags, reminder: _reminder));
