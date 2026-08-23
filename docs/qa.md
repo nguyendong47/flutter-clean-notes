@@ -1,0 +1,167 @@
+# Quality Assurance Matrix
+
+Use this matrix for every release candidate. A run is complete only when evidence
+identifies the exact commit, app version/build, Flutter/Dart version, platform/OS,
+device or simulator, viewport, text scale, theme, accessibility settings, and
+result. File defects with reproduction steps and link them from the release record.
+
+## Automated gate
+
+Run from the repository root in PowerShell:
+
+```powershell
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs
+dart format --output=none --set-exit-if-changed lib test
+flutter analyze
+flutter test --concurrency=1
+git diff --check
+git status --short
+```
+
+For focused reruns, use paths rather than cached test counts, for example:
+
+```powershell
+flutter test test/features/notes/presentation/aurora_accessibility_test.dart
+flutter test test/features/notes/presentation/aurora_notes_flow_test.dart
+flutter test test/features/notes/presentation/notes_transfer_provider_test.dart
+flutter test test/notification_service_test.dart test/app/notification_routing_test.dart
+```
+
+Passing widget/unit tests does not replace physical-device, native share-sheet,
+notification permission, signing, database-file upgrade, or store-build evidence.
+
+## Devices and configurations
+
+Test every approved shipping platform. If a row is not shipping, record the
+product/release owner and decision instead of silently omitting it.
+
+| Target | Minimum evidence |
+| --- | --- |
+| Android | One supported low/small device and one current large device; physical-device notification, permission, share/import, upgrade, background, and cold-launch evidence. |
+| iOS/iPadOS | One supported iPhone and one iPad size; physical-device notification authorization/delivery/tap, share/import, upgrade, background, and cold-launch evidence. |
+| Windows | Signed or release-mode desktop run covering SQLite FFI, file picker/share behavior, resizing, keyboard, restart, and upgrade. |
+| macOS | Signed or release-mode desktop run covering SQLite FFI, notifications, picker/share, resizing, keyboard, restart, and upgrade. |
+| Linux | Release-mode run covering SQLite FFI, notifications where supported, picker/share behavior, resizing, keyboard, restart, and upgrade. |
+
+Within the approved set, cover these layout/accessibility combinations:
+
+| Dimension | Required values |
+| --- | --- |
+| Viewport | Compact phone around 320 logical px, typical phone, large phone, tablet/large window, and a narrow resized desktop window |
+| Orientation | Portrait and landscape; include the 640 x 320 class used by editor regression tests |
+| Text scaling | Default, 1.5x, and 2.0x (or the platform's nearest exposed values) |
+| Appearance | Light and dark; system theme switching while the app is running and after relaunch |
+| Accessibility | High contrast on/off and reduced motion on/off where the platform exposes them |
+| Input | Touch, keyboard traversal/activation, pointer/hover on desktop, and screen-reader traversal on at least Android and Apple targets |
+
+Run the full critical path once at default settings and once at the most
+constrained combination: compact/landscape, 2.0x text, high contrast, and reduced
+motion. Pairwise coverage may be used for the remaining combinations only when
+the release record shows which pair covers each value.
+
+## Surface matrix
+
+For every surface, verify loading, populated, empty, initial-error, and
+cached-data-with-refresh-error states when applicable. Confirm no overflow,
+clipping, obscured controls, duplicate announcements, lost focus, or unreachable
+action at every required layout.
+
+| Surface | Core checks |
+| --- | --- |
+| Home | Pinned/unpinned ordering, tag filter, sort/filter sheet, create/open, active-empty vs whole-notebook-empty copy, scroll retention, archive/trash/pin, Undo, and retry. |
+| Search | Initial focus, title/content/tag matching, clear, suggestions, filters/sort, no-match, open result, archive/trash and Undo, keyboard/safe-area reflow, and retained query/state after navigation. |
+| Library | Archive/Trash segments, selection retention, restore, archive-to-trash, permanent-delete confirmation, cancel/focus return, busy/duplicate protection, failures, and Undo where offered. |
+| More | Theme persistence, tag counts/removal confirmation, nested sheet/back/focus order, text/Markdown/JSON export, JSON import, cancellation, busy-state blocking, and truthful success/failure copy. |
+| Editor | Create/edit, empty validation, Markdown formatting and preview, metadata/color/tags, future reminder validation, save/cancel/back, keyboard insets, linked/deep-open note, persistence failures, retry, and relaunch persistence. |
+
+## Mutations, Undo, and failure injection
+
+For pin, archive, trash, restore, permanent delete, tag removal, save, import, and
+reminder schedule/cancel:
+
+1. Trigger the operation once and rapidly attempt it again; only one durable
+   mutation should occur.
+2. Verify busy state, navigation blocking where required, focus, and accessible
+   status announcement.
+3. Use a test double or controlled platform/database failure before persistence;
+   cached content and drafts must remain usable and retry must not duplicate data.
+4. Use a post-commit refresh failure; the UI must not invite a destructive retry
+   of a mutation that already committed.
+5. Exercise every offered Undo action before and after its display timeout and
+   verify the restored status/order after a fresh database read or relaunch.
+
+## Backup import and export
+
+- Export text, Markdown, and JSON through the real OS share sheet. Inspect files
+  in a user-selected destination; verify Unicode, Markdown characters, commas in
+  tags, empty fields, all note statuses, colors, pin state, timestamps, and
+  reminders.
+- Inspect JSON against the fields listed in [privacy.md](privacy.md), then import
+  into a clean database and compare every note. Repeat into a populated database
+  and record the chosen ID-conflict behavior.
+- Verify cancel/dismiss/unavailable share results and chooser/picker failures.
+- Import valid UTF-8 with and without BOM, malformed JSON, wrong top-level type,
+  invalid/missing fields, empty file, wrong extension, multiple-file attempt,
+  exactly 10 MB, and over 10 MB. No partial import may remain after a failed row.
+- Treat exported files as sensitive test evidence; use synthetic notes and remove
+  device/cloud copies when the test record is complete.
+
+## Reminders and notifications
+
+On physical Android and Apple devices, test permission not-determined, allowed,
+denied, and later-revoked states. Include any exact-alarm settings required by
+the approved Android policy.
+
+- Schedule a future reminder; verify time-zone/local-time behavior, displayed
+  title/body, lock-screen exposure, sound/priority, and delivery with the app in
+  foreground, background, and terminated states.
+- Tap the notification from each state. The intended persisted note must open
+  exactly once; back navigation and any previous Home/Search/Library origin must
+  remain coherent.
+- Exercise 5/15/30/60-minute snooze actions, cancellation after editing/removing
+  a reminder, deletion cancellation, device reboot, time-zone change, and app
+  relaunch.
+- Verify past/equal-time reminders and notes without persisted IDs fail safely.
+- Record platform/version cases where exact delivery or notification actions are
+  unsupported, denied, or degraded; the user-facing behavior must match the
+  release decision.
+
+## Database upgrades v1-v5
+
+Current automated datasource tests cover persistence and transaction behavior,
+but they do not prove file upgrades through every schema version. Maintain
+versioned, synthetic database fixtures outside user data and test each path:
+
+| Start | Expected v5 result |
+| --- | --- |
+| v1 | Adds `isPinned`, `tags`, `status`, and nullable `reminder` with existing notes intact. |
+| v2 | Adds `tags`, `status`, and nullable `reminder`; existing pin values remain intact. |
+| v3 | Adds `status` and nullable `reminder`; existing tags remain readable. |
+| v4 | Adds nullable `reminder`; existing active/archive/trash values remain intact. |
+| v5 | Opens without migration or data changes. |
+
+For every approved Android, iOS, and desktop database path: install/run the old
+fixture build, create representative notes, replace it with the candidate build,
+then verify schema version, row count, all fields/statuses, reminder behavior,
+search, export, mutation, and persistence after relaunch. Also test fresh v5
+creation, interrupted/failed upgrade recovery, low storage, and backup before any
+destructive recovery. Downgrade is unsupported until separate evidence proves it.
+
+## Evidence and exit criteria
+
+Store release evidence in the release system, not an ignored local directory.
+Use stable names such as `<commit>-<platform>-<device>-<surface>-<state>` and
+attach screenshots/video, console logs, test output, artifact hashes, and defect
+links. Synthetic data must be visible in captures; exclude real notes and secrets.
+
+QA approval requires:
+
+- every automated gate exits zero with no unexpected generated or modified files;
+- every applicable matrix row has evidence for the exact signed candidate;
+- database upgrade, native share/import, and physical reminder paths pass on each
+  approved platform class;
+- accessibility blockers, crashes, data loss, duplicate mutations, and unresolved
+  severity-one/severity-two defects are zero; and
+- lower-severity known limitations have an owner, disposition, and release-note or
+  store-disclosure decision.

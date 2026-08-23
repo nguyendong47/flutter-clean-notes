@@ -1,5 +1,10 @@
 # Aurora Glass Mobile Redesign Implementation Plan
 
+> **Historical implementation recipe:** This plan is retained as the stable
+> task-by-task implementation contract. Its checkboxes are not live project
+> status. Use the [Project Sync / Handoff](../handoff.md) for the current
+> checkpoint, evidence, open work, and continuation path.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (- [ ]) syntax for tracking.
 
 **Goal:** Replace the current notes interface with the approved mobile-first Aurora Glass experience while preserving all existing note, reminder, search, archive, trash, theme, and transfer behavior.
