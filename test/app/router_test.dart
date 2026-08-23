@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -209,6 +210,10 @@ void main() {
         manageTeardown: false,
       );
       expect(find.byKey(const Key('existing-note-error')), findsOneWidget);
+      expect(find.text('Please try again.'), findsOneWidget);
+      expect(find.textContaining('connection'), findsNothing);
+      expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.cloud_off_rounded), findsNothing);
       final retry = find.byKey(const Key('existing-note-retry'));
       expect(retry, findsOneWidget);
       expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
@@ -491,6 +496,107 @@ void main() {
     expect(_path(harness.router), '/');
   });
 
+  testWidgets('keyboard activation preserves selected destination focus', (
+    tester,
+  ) async {
+    final previousStrategy = FocusManager.instance.highlightStrategy;
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(
+      () => FocusManager.instance.highlightStrategy = previousStrategy,
+    );
+    final harness = await _pumpRouter(
+      tester,
+      repository: InMemoryNoteRepository.seeded(sampleNotes),
+    );
+    final libraryControl = tester.widget<InkWell>(
+      find.byKey(const Key('notes-bottom-bar-library-control')),
+    );
+    expect(libraryControl.focusNode, isNotNull);
+    libraryControl.focusNode!.requestFocus();
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(_path(harness.router), '/library');
+    expect(
+      tester
+          .widget<InkWell>(
+            find.byKey(const Key('notes-bottom-bar-library-control')),
+          )
+          .focusNode
+          ?.hasFocus,
+      isTrue,
+    );
+  });
+
+  testWidgets('keyboard overlay actions transfer focus off the shell', (
+    tester,
+  ) async {
+    final previousStrategy = FocusManager.instance.highlightStrategy;
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(
+      () => FocusManager.instance.highlightStrategy = previousStrategy,
+    );
+    await _pumpRouter(
+      tester,
+      repository: InMemoryNoteRepository.seeded(sampleNotes),
+    );
+
+    final createNode = tester
+        .widget<FloatingActionButton>(
+          find.byKey(const Key('notes-bottom-bar-create-control')),
+        )
+        .focusNode!;
+    createNode.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.byType(AddEditNotePage), findsOneWidget);
+    expect(createNode.hasFocus, isFalse);
+    expect(
+      FocusScope.of(tester.element(find.byType(AddEditNotePage))).hasFocus,
+      isTrue,
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    final moreNode = tester
+        .widget<InkWell>(find.byKey(const Key('notes-bottom-bar-more-control')))
+        .focusNode!;
+    moreNode.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    final sheet = find.byKey(const Key('more-actions-sheet'));
+    expect(sheet, findsOneWidget);
+    expect(moreNode.hasFocus, isFalse);
+    expect(FocusScope.of(tester.element(sheet)).hasFocus, isTrue);
+  });
+
+  testWidgets('Search keeps shell clearance after keyboard resizes body', (
+    tester,
+  ) async {
+    await _pumpRouter(
+      tester,
+      repository: InMemoryNoteRepository.seeded(sampleNotes),
+      initialLocation: '/search',
+      viewInsets: const EdgeInsets.only(bottom: 240),
+    );
+
+    final list = tester.widget<ListView>(
+      find.descendant(
+        of: find.byType(NotesSearchPage),
+        matching: find.byType(ListView),
+      ),
+    );
+    final pageRect = tester.getRect(find.byType(NotesSearchPage));
+    expect(pageRect.height, tester.view.physicalSize.height - 240);
+    expect(list.padding!.resolve(TextDirection.ltr).bottom, 120);
+  });
+
   for (final theme in <ThemeData>[AuroraTheme.light(), AuroraTheme.dark()]) {
     testWidgets(
       'compact ${theme.brightness.name} shell reserves 112 pixels and does not overflow',
@@ -517,7 +623,15 @@ void main() {
           ),
         );
         final bottomPadding = list.padding!.resolve(TextDirection.ltr).bottom;
-        expect(barRegion.height + bottomPadding, greaterThanOrEqualTo(112));
+        final shellScaffold = tester.widget<Scaffold>(
+          find.ancestor(
+            of: find.byKey(const Key('notes-bottom-bar-region')),
+            matching: find.byType(Scaffold),
+          ),
+        );
+        expect(shellScaffold.extendBody, isTrue);
+        expect(barRegion.height, greaterThanOrEqualTo(92));
+        expect(bottomPadding, greaterThanOrEqualTo(120));
         expect(find.byType(FloatingActionButton), findsOneWidget);
         expect(find.byType(NotesPage), findsNothing);
         expect(_path(harness.router), '/search');
@@ -541,6 +655,7 @@ Future<_RouterHarness> _pumpRouter(
   bool manageTeardown = true,
   Size size = const Size(375, 812),
   ThemeData? theme,
+  EdgeInsets viewInsets = EdgeInsets.zero,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -566,6 +681,10 @@ Future<_RouterHarness> _pumpRouter(
         debugShowCheckedModeBanner: false,
         theme: theme ?? AuroraTheme.light(),
         darkTheme: AuroraTheme.dark(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(viewInsets: viewInsets),
+          child: child!,
+        ),
         routerConfig: router,
       ),
     ),

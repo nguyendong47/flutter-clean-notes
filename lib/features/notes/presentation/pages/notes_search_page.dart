@@ -82,7 +82,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
                 horizontalInset,
                 24,
                 horizontalInset,
-                mediaQuery.viewInsets.bottom + 24,
+                mediaQuery.viewInsets.bottom + 120,
               ),
               children: [
                 Text(

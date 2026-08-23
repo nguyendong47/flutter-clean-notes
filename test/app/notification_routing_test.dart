@@ -20,34 +20,41 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('terminated-app notification launch opens exactly once', (
-    tester,
-  ) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    final plugin = _LaunchDetailsPlugin();
-    final service = NotificationService(plugin: plugin);
-    plugin.launchDetails = NotificationAppLaunchDetails(
-      true,
-      notificationResponse: _openResponse(service),
+  for (final platform in [
+    TargetPlatform.android,
+    TargetPlatform.iOS,
+    TargetPlatform.macOS,
+  ]) {
+    testWidgets(
+      'terminated-app notification launch opens exactly once on ${platform.name}',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = platform;
+        final plugin = _LaunchDetailsPlugin();
+        final service = NotificationService(plugin: plugin);
+        plugin.launchDetails = NotificationAppLaunchDetails(
+          true,
+          notificationResponse: _openResponse(service),
+        );
+
+        try {
+          await service.init();
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+        final harness = await _pumpRouter(tester, service: service);
+
+        expect(_path(harness.router), '/');
+        expect(find.byType(AddEditNotePage), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(find.byType(AddEditNotePage), findsOneWidget);
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(_path(harness.router), '/');
+        expect(find.byType(AddEditNotePage), findsNothing);
+      },
     );
-
-    try {
-      await service.init();
-    } finally {
-      debugDefaultTargetPlatformOverride = null;
-    }
-    final harness = await _pumpRouter(tester, service: service);
-
-    expect(_path(harness.router), '/');
-    expect(find.byType(AddEditNotePage), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 16));
-    expect(find.byType(AddEditNotePage), findsOneWidget);
-
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-    expect(_path(harness.router), '/');
-    expect(find.byType(AddEditNotePage), findsNothing);
-  });
+  }
 
   testWidgets('queued open retries when its navigator mounts later', (
     tester,

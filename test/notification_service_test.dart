@@ -129,33 +129,51 @@ void main() {
     });
 
     group('Initialization', () {
-      test('init should initialize plugin with proper settings', () async {
-        debugDefaultTargetPlatformOverride = TargetPlatform.android;
-        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      for (final platform in [
+        TargetPlatform.android,
+        TargetPlatform.iOS,
+        TargetPlatform.macOS,
+      ]) {
+        test(
+          'init configures every target and reads cold launch details on ${platform.name}',
+          () async {
+            debugDefaultTargetPlatformOverride = platform;
+            addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
-        await notificationService.init();
+            await notificationService.init();
 
-        expect(fakePlugin.lastInitSettings, isNotNull);
-        expect(
-          fakePlugin.lastInitSettings!.android?.defaultIcon,
-          equals('@mipmap/ic_launcher'),
+            final settings = fakePlugin.lastInitSettings;
+            expect(settings, isNotNull);
+            expect(
+              settings!.android?.defaultIcon,
+              equals('@mipmap/ic_launcher'),
+            );
+            expect(settings.iOS, isNotNull);
+            expect(settings.macOS, isNotNull);
+            expect(settings.linux?.defaultActionName, 'Open notification');
+            expect(fakePlugin.onDidReceiveNotificationResponse, isNotNull);
+            expect(fakePlugin.getLaunchDetailsCalls, 1);
+          },
         );
-        expect(fakePlugin.onDidReceiveNotificationResponse, isNotNull);
-        expect(fakePlugin.getLaunchDetailsCalls, 1);
-      });
+      }
 
-      test(
-        'init skips launch details on unsupported desktop targets',
-        () async {
-          debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-          addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      for (final platform in [TargetPlatform.linux, TargetPlatform.windows]) {
+        test(
+          'init configures ${platform.name} without an unsupported launch query',
+          () async {
+            debugDefaultTargetPlatformOverride = platform;
+            addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
-          await notificationService.init();
+            await notificationService.init();
 
-          expect(fakePlugin.lastInitSettings, isNotNull);
-          expect(fakePlugin.getLaunchDetailsCalls, 0);
-        },
-      );
+            final settings = fakePlugin.lastInitSettings;
+            expect(settings, isNotNull);
+            expect(settings!.macOS, isNotNull);
+            expect(settings.linux?.defaultActionName, 'Open notification');
+            expect(fakePlugin.getLaunchDetailsCalls, 0);
+          },
+        );
+      }
     });
 
     group('Reminder Scheduling', () {

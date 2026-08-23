@@ -41,8 +41,16 @@ class NotificationService {
   Future<void> init() async {
     tz.initializeTimeZones();
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const ios = DarwinInitializationSettings();
-    const settings = InitializationSettings(android: android, iOS: ios);
+    const darwin = DarwinInitializationSettings();
+    const linux = LinuxInitializationSettings(
+      defaultActionName: 'Open notification',
+    );
+    const settings = InitializationSettings(
+      android: android,
+      iOS: darwin,
+      macOS: darwin,
+      linux: linux,
+    );
     await _plugin.initialize(
       settings,
       onDidReceiveNotificationResponse: handleNotificationResponse,

@@ -13,11 +13,11 @@ class NotesShellPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       body: navigationShell,
       bottomNavigationBar: NotesBottomBar(
         currentIndex: navigationShell.currentIndex,
         onDestinationSelected: (index) {
-          FocusManager.instance.primaryFocus?.unfocus();
           navigationShell.goBranch(index, initialLocation: false);
         },
         onCreate: () => context.push('/note/new'),

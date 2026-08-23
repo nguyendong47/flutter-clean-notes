@@ -2,6 +2,7 @@ import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
@@ -159,7 +160,7 @@ void main() {
   });
 
   for (final textScale in [1.5, 2.0]) {
-    testWidgets('compact labels fit without clipping at ${textScale}x', (
+    testWidgets('labels visibly scale at ${textScale}x without clipping', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(320, 640);
@@ -167,13 +168,13 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(
+      Future<void> pumpBar(double scale) => tester.pumpWidget(
         MaterialApp(
           theme: AuroraTheme.light(),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(
               context,
-            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            ).copyWith(textScaler: TextScaler.linear(scale)),
             child: child!,
           ),
           home: Scaffold(
@@ -187,15 +188,302 @@ void main() {
         ),
       );
 
+      const labels = ['Notes', 'Search', 'Library', 'More'];
+      await pumpBar(1);
+      final baselineHeights = {
+        for (final label in labels)
+          label: tester.getRect(find.text(label)).height,
+      };
+
+      await pumpBar(textScale);
+
       expect(tester.takeException(), isNull);
-      for (final label in const ['Notes', 'Search', 'Library', 'More']) {
+      expect(
+        find.descendant(
+          of: find.byType(NotesBottomBar),
+          matching: find.byType(FittedBox),
+        ),
+        findsNothing,
+      );
+      for (final label in labels) {
         final labelFinder = find.text(label);
         final labelRect = tester.getRect(labelFinder);
         final paragraph = tester.renderObject<RenderParagraph>(labelFinder);
-        expect(labelRect.width, lessThanOrEqualTo(48), reason: label);
-        expect(labelRect.height, lessThanOrEqualTo(24), reason: label);
+        final targetLabel = label == 'More' ? 'More actions' : '$label tab';
+        final targetRect = tester.getRect(find.bySemanticsLabel(targetLabel));
+        expect(
+          labelRect.height,
+          greaterThan(baselineHeights[label]! * (textScale - 0.1)),
+          reason: '$label must retain the user requested text enlargement',
+        );
+        expect(targetRect.width, greaterThanOrEqualTo(48), reason: label);
+        expect(targetRect.height, greaterThanOrEqualTo(48), reason: label);
+        expect(
+          targetRect.left <= labelRect.left &&
+              targetRect.top <= labelRect.top &&
+              targetRect.right >= labelRect.right &&
+              targetRect.bottom >= labelRect.bottom,
+          isTrue,
+          reason: '$label paint bounds must remain inside its target',
+        );
+        final text = tester.widget<Text>(labelFinder);
+        expect(
+          text.overflow,
+          isNot(anyOf(TextOverflow.fade, TextOverflow.ellipsis)),
+        );
         expect(paragraph.didExceedMaxLines, isFalse, reason: label);
       }
     });
   }
+
+  testWidgets('reduced motion disables bottom bar selection animations', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AuroraTheme.light(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
+        home: Scaffold(
+          bottomNavigationBar: NotesBottomBar(
+            currentIndex: 0,
+            onDestinationSelected: (_) {},
+            onCreate: () {},
+            onMore: () {},
+          ),
+        ),
+      ),
+    );
+
+    final animations = tester.widgetList<AnimatedContainer>(
+      find.descendant(
+        of: find.byType(NotesBottomBar),
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    expect(animations, isNotEmpty);
+    expect(
+      animations.every((animation) => animation.duration == Duration.zero),
+      isTrue,
+    );
+  });
+
+  testWidgets('Tab order is visual and Enter preserves keyboard focus', (
+    tester,
+  ) async {
+    final previousStrategy = FocusManager.instance.highlightStrategy;
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(
+      () => FocusManager.instance.highlightStrategy = previousStrategy,
+    );
+    var selectedIndex = -1;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AuroraTheme.light(),
+        home: Scaffold(
+          bottomNavigationBar: NotesBottomBar(
+            currentIndex: 0,
+            onDestinationSelected: (index) => selectedIndex = index,
+            onCreate: () {},
+            onMore: () {},
+          ),
+        ),
+      ),
+    );
+
+    const controlKeys = [
+      Key('notes-bottom-bar-notes-control'),
+      Key('notes-bottom-bar-search-control'),
+      Key('notes-bottom-bar-create-control'),
+      Key('notes-bottom-bar-library-control'),
+      Key('notes-bottom-bar-more-control'),
+    ];
+    for (final key in controlKeys) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      final focusNode = switch (tester.widget(find.byKey(key))) {
+        final InkWell inkWell => inkWell.focusNode,
+        final FloatingActionButton button => button.focusNode,
+        _ => null,
+      };
+      expect(focusNode?.hasFocus, isTrue, reason: key.toString());
+    }
+
+    FocusScope.of(tester.element(find.byType(NotesBottomBar))).requestFocus(
+      tester
+          .widget<InkWell>(
+            find.byKey(const Key('notes-bottom-bar-search-control')),
+          )
+          .focusNode,
+    );
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(selectedIndex, 1);
+    expect(
+      tester
+          .widget<InkWell>(
+            find.byKey(const Key('notes-bottom-bar-search-control')),
+          )
+          .focusNode
+          ?.hasFocus,
+      isTrue,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      tester
+          .widget<FloatingActionButton>(
+            find.byKey(const Key('notes-bottom-bar-create-control')),
+          )
+          .focusNode
+          ?.hasFocus,
+      isTrue,
+      reason: 'a queued restore must not override a later Tab',
+    );
+
+    tester
+        .widget<InkWell>(
+          find.byKey(const Key('notes-bottom-bar-notes-control')),
+        )
+        .focusNode!
+        .requestFocus();
+    await tester.pump();
+    final selectedSurface = tester.widget<AnimatedContainer>(
+      find.byKey(const Key('notes-bottom-bar-notes-surface')),
+    );
+    final decoration = selectedSurface.decoration! as BoxDecoration;
+    expect(decoration.color, isNot(Colors.transparent));
+    expect(decoration.border?.top.width, 2);
+    expect(
+      decoration.border?.top.color,
+      Theme.of(tester.element(find.byType(NotesBottomBar))).colorScheme.primary,
+    );
+  });
+
+  testWidgets('touch activation dismisses an active text input', (
+    tester,
+  ) async {
+    final fieldFocus = FocusNode();
+    addTearDown(fieldFocus.dispose);
+    var selectedIndex = -1;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AuroraTheme.light(),
+        home: Scaffold(
+          body: TextField(focusNode: fieldFocus),
+          bottomNavigationBar: NotesBottomBar(
+            currentIndex: 0,
+            onDestinationSelected: (index) => selectedIndex = index,
+            onCreate: () {},
+            onMore: () {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    expect(fieldFocus.hasFocus, isTrue);
+    await tester.tap(find.bySemanticsLabel('Search tab'));
+    await tester.pump();
+    expect(selectedIndex, 1);
+    expect(fieldFocus.hasFocus, isFalse);
+  });
+
+  testWidgets('external focus cancels a pending destination restore', (
+    tester,
+  ) async {
+    final previousStrategy = FocusManager.instance.highlightStrategy;
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(
+      () => FocusManager.instance.highlightStrategy = previousStrategy,
+    );
+    final externalFocus = FocusNode();
+    addTearDown(externalFocus.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AuroraTheme.light(),
+        home: Scaffold(
+          body: TextButton(
+            focusNode: externalFocus,
+            onPressed: () {},
+            child: const Text('Outside action'),
+          ),
+          bottomNavigationBar: NotesBottomBar(
+            currentIndex: 0,
+            onDestinationSelected: (_) {},
+            onCreate: () {},
+            onMore: () {},
+          ),
+        ),
+      ),
+    );
+
+    final notesNode = tester
+        .widget<InkWell>(
+          find.byKey(const Key('notes-bottom-bar-notes-control')),
+        )
+        .focusNode!;
+    notesNode.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    externalFocus.requestFocus();
+    await tester.pump();
+
+    expect(externalFocus.hasFocus, isTrue);
+    expect(notesNode.hasFocus, isFalse);
+  });
+
+  testWidgets('high text remains usable in phone landscape', (tester) async {
+    tester.view.physicalSize = const Size(640, 320);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AuroraTheme.dark(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: Scaffold(
+          bottomNavigationBar: NotesBottomBar(
+            currentIndex: 1,
+            onDestinationSelected: (_) {},
+            onCreate: () {},
+            onMore: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    final surfaceRect = tester.getRect(
+      find.byKey(const Key('notes-bottom-bar-surface')),
+    );
+    expect(surfaceRect.left, greaterThanOrEqualTo(24));
+    expect(640 - surfaceRect.right, greaterThanOrEqualTo(24));
+    for (final label in const [
+      'Notes tab',
+      'Search tab',
+      'Create new note',
+      'Library tab',
+      'More actions',
+    ]) {
+      final targetRect = tester.getRect(find.bySemanticsLabel(label));
+      expect(targetRect.width, greaterThanOrEqualTo(48), reason: label);
+      expect(targetRect.height, greaterThanOrEqualTo(48), reason: label);
+    }
+  });
 }

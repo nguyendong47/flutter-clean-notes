@@ -43,8 +43,8 @@ class ExistingNoteRoutePage extends ConsumerWidget {
                 error: (error, stackTrace) => _RouteStateScaffold(
                   key: const Key('existing-note-error'),
                   title: 'Could not open note',
-                  message: 'Check your connection and try again.',
-                  icon: Icons.cloud_off_rounded,
+                  message: 'Please try again.',
+                  icon: Icons.error_outline_rounded,
                   onClose: onClose,
                   onRetry: () => ref.invalidate(notesProvider),
                 ),
