@@ -201,13 +201,26 @@ class _NotesPageState extends ConsumerState<NotesPage> {
           IconButton(
             tooltip: 'Toggle theme',
             icon: const Icon(Icons.brightness_6_outlined),
-            onPressed: () {
+            onPressed: () async {
               final current =
                   ref.read(appThemeProvider).value ?? ThemeMode.system;
               final next = current == ThemeMode.dark
                   ? ThemeMode.light
                   : ThemeMode.dark;
-              ref.read(appThemeProvider.notifier).setMode(next);
+              try {
+                await ref.read(appThemeProvider.notifier).setMode(next);
+              } catch (_) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Could not save theme preference. Try again.',
+                      ),
+                    ),
+                  );
+              }
             },
           ),
           IconButton(

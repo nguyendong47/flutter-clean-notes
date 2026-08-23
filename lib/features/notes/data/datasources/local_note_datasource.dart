@@ -9,6 +9,7 @@ import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 abstract class LocalNoteDataSource {
   Future<List<NoteModel>> getNotes();
   Future<int> addNote(NoteModel note);
+  Future<void> importNotes(List<NoteModel> notes);
   Future<int> updateNote(NoteModel note);
   Future<int> deleteNote(int id);
   Future<List<NoteModel>> getNotesByStatus(int status);
@@ -17,8 +18,11 @@ abstract class LocalNoteDataSource {
 }
 
 class LocalNoteDataSourceImpl implements LocalNoteDataSource {
+  LocalNoteDataSourceImpl({Database? database}) : _databaseOverride = database;
+
   static Database? _database;
   static const String _tableName = 'notes';
+  final Database? _databaseOverride;
 
   @override
   Future<int> cleanupTrash() async {
@@ -32,6 +36,7 @@ class LocalNoteDataSourceImpl implements LocalNoteDataSource {
   }
 
   Future<Database> get database async {
+    if (_databaseOverride case final database?) return database;
     if (_database != null) return _database!;
     _database = await _initDB();
     return _database!;
@@ -144,6 +149,16 @@ class LocalNoteDataSourceImpl implements LocalNoteDataSource {
   Future<int> addNote(NoteModel note) async {
     final db = await database;
     return await db.insert(_tableName, note.toJson());
+  }
+
+  @override
+  Future<void> importNotes(List<NoteModel> notes) async {
+    final db = await database;
+    await db.transaction((transaction) async {
+      for (final note in notes) {
+        await transaction.insert(_tableName, note.toJson());
+      }
+    });
   }
 
   @override

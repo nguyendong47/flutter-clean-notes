@@ -12,6 +12,9 @@ class MoreActionsSheet extends ConsumerStatefulWidget {
   const MoreActionsSheet({super.key});
 
   static Future<void> show(BuildContext context) {
+    ProviderScope.containerOf(
+      context,
+    ).read(notesTransferProvider.notifier).beginSession();
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -388,7 +391,7 @@ class _TransferRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String description;
-  final AsyncValue<NotesTransferOperation?> state;
+  final AsyncValue<NotesTransferOutcome?> state;
   final NotesTransferOperation? activeOperation;
   final bool enabled;
   final FocusNode? focusNode;
@@ -401,14 +404,26 @@ class _TransferRow extends StatelessWidget {
     final error = active && state.hasError
         ? _transferError(operation, state.error)
         : null;
+    final outcome = state.value;
+    final success = outcome?.operation == operation
+        ? _transferSuccess(outcome!)
+        : null;
+    final status = loading ? _transferProgress(operation) : error ?? success;
     return _ActionRow(
       focusNode: focusNode,
       icon: icon,
       label: label,
       description: description,
-      error: error,
+      status: status,
+      statusIsError: error != null,
+      statusKey: Key(
+        error != null
+            ? 'more-transfer-error-${operation.name}'
+            : 'more-transfer-status-${operation.name}',
+      ),
       enabled: enabled,
       loading: loading,
+      reserveDescriptionForStatus: true,
       onPressed: (rowContext) => onPressed(_shareOrigin(rowContext)),
     );
   }
@@ -423,9 +438,12 @@ class _ActionRow extends StatelessWidget {
     this.onPressed,
     this.focusNode,
     this.trailing,
-    this.error,
+    this.status,
+    this.statusKey,
+    this.statusIsError = false,
     this.loading = false,
-    this.selected = false,
+    this.reserveDescriptionForStatus = false,
+    this.selected,
     super.key,
   });
 
@@ -436,9 +454,12 @@ class _ActionRow extends StatelessWidget {
   final FutureOr<void> Function(BuildContext context)? onPressed;
   final FocusNode? focusNode;
   final Widget? trailing;
-  final String? error;
+  final String? status;
+  final Key? statusKey;
+  final bool statusIsError;
   final bool loading;
-  final bool selected;
+  final bool reserveDescriptionForStatus;
+  final bool? selected;
 
   @override
   Widget build(BuildContext context) {
@@ -450,9 +471,9 @@ class _ActionRow extends StatelessWidget {
       enabled: effectiveEnabled,
       selected: selected,
       label: label,
-      value: error ?? description,
+      value: status ?? description,
       child: Material(
-        color: selected
+        color: selected == true
             ? colorScheme.primaryContainer.withValues(alpha: 0.7)
             : colorScheme.surfaceContainerHighest.withValues(alpha: 0.42),
         borderRadius: BorderRadius.circular(18),
@@ -492,26 +513,13 @@ class _ActionRow extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          if (error case final message?)
-                            Semantics(
-                              key: Key(
-                                'more-transfer-error-${_operationKey(label)}',
-                              ),
-                              liveRegion: true,
-                              child: Text(
-                                message,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.error,
-                                ),
-                              ),
-                            )
-                          else
-                            Text(
-                              description,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
+                          _ActionRowStatus(
+                            description: description,
+                            status: status,
+                            statusKey: statusKey,
+                            statusIsError: statusIsError,
+                            reserveDescription: reserveDescriptionForStatus,
+                          ),
                         ],
                       ),
                     ),
@@ -540,6 +548,57 @@ class _ActionRow extends StatelessWidget {
   }
 }
 
+class _ActionRowStatus extends StatelessWidget {
+  const _ActionRowStatus({
+    required this.description,
+    required this.status,
+    required this.statusKey,
+    required this.statusIsError,
+    required this.reserveDescription,
+  });
+
+  final String description;
+  final String? status;
+  final Key? statusKey;
+  final bool statusIsError;
+  final bool reserveDescription;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final descriptionWidget = Text(
+      description,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: colorScheme.onSurfaceVariant,
+      ),
+    );
+    final message = status;
+    if (message == null) return descriptionWidget;
+
+    final statusWidget = Semantics(
+      key: statusKey,
+      liveRegion: true,
+      child: Text(
+        message,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: statusIsError ? colorScheme.error : colorScheme.primary,
+          fontWeight: statusIsError ? FontWeight.w500 : FontWeight.w700,
+        ),
+      ),
+    );
+    if (!reserveDescription) return statusWidget;
+
+    return Stack(
+      alignment: AlignmentDirectional.topStart,
+      children: [
+        ExcludeSemantics(child: Opacity(opacity: 0, child: descriptionWidget)),
+        statusWidget,
+      ],
+    );
+  }
+}
+
 String _themeLabel(ThemeMode mode) {
   return switch (mode) {
     ThemeMode.system => 'Follow device setting',
@@ -563,13 +622,24 @@ String _transferError(NotesTransferOperation operation, Object? error) {
   };
 }
 
-String _operationKey(String label) {
-  return switch (label) {
-    'Export text' => NotesTransferOperation.exportText.name,
-    'Backup JSON' => NotesTransferOperation.backupJson.name,
-    'Export Markdown' => NotesTransferOperation.exportMarkdown.name,
-    'Import backup' => NotesTransferOperation.importBackup.name,
-    _ => label,
+String _transferProgress(NotesTransferOperation operation) {
+  return switch (operation) {
+    NotesTransferOperation.exportText => 'Exporting text…',
+    NotesTransferOperation.backupJson => 'Sharing backup…',
+    NotesTransferOperation.exportMarkdown => 'Exporting Markdown…',
+    NotesTransferOperation.importBackup => 'Importing backup…',
+  };
+}
+
+String _transferSuccess(NotesTransferOutcome outcome) {
+  return switch (outcome.operation) {
+    NotesTransferOperation.exportText => 'Text export complete.',
+    NotesTransferOperation.backupJson => 'Backup sharing complete.',
+    NotesTransferOperation.exportMarkdown => 'Markdown export complete.',
+    NotesTransferOperation.importBackup => switch (outcome.importedCount ?? 0) {
+      1 => 'Imported 1 note.',
+      final count => 'Imported $count notes.',
+    },
   };
 }
 

@@ -180,6 +180,48 @@ final class AddNoteUsecaseProvider
 
 String _$addNoteUsecaseHash() => r'353e7625178786590cf3fa6d17678569049de940';
 
+@ProviderFor(importNotesUsecase)
+final importNotesUsecaseProvider = ImportNotesUsecaseProvider._();
+
+final class ImportNotesUsecaseProvider
+    extends $FunctionalProvider<ImportNotes, ImportNotes, ImportNotes>
+    with $Provider<ImportNotes> {
+  ImportNotesUsecaseProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'importNotesUsecaseProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$importNotesUsecaseHash();
+
+  @$internal
+  @override
+  $ProviderElement<ImportNotes> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  ImportNotes create(Ref ref) {
+    return importNotesUsecase(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(ImportNotes value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<ImportNotes>(value),
+    );
+  }
+}
+
+String _$importNotesUsecaseHash() =>
+    r'cd7d61b084458c51ddb1494412f5d3dcd2dea439';
+
 @ProviderFor(updateNoteUsecase)
 final updateNoteUsecaseProvider = UpdateNoteUsecaseProvider._();
 
@@ -946,7 +988,7 @@ final class NotesNotifierProvider
   NotesNotifier create() => NotesNotifier();
 }
 
-String _$notesNotifierHash() => r'a3b2664b85382ba9bd22b2229aad362630869136';
+String _$notesNotifierHash() => r'360401048eeaac58b06a41d206a1aeed93087c2f';
 
 abstract class _$NotesNotifier extends $AsyncNotifier<List<Note>> {
   FutureOr<List<Note>> build();

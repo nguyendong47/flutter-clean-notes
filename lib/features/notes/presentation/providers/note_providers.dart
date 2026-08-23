@@ -37,6 +37,12 @@ AddNote addNoteUsecase(Ref ref) {
 }
 
 @riverpod
+ImportNotes importNotesUsecase(Ref ref) {
+  final repository = ref.watch(noteRepositoryProvider);
+  return ImportNotes(repository);
+}
+
+@riverpod
 UpdateNote updateNoteUsecase(Ref ref) {
   final repository = ref.watch(noteRepositoryProvider);
   return UpdateNote(repository);
@@ -238,16 +244,34 @@ class NotesNotifier extends _$NotesNotifier {
   }
 
   Future<void> importBackup(List<Note> notes) {
-    return _mutate(() async {
-      for (final note in notes) {
-        final sanitized = note.copyWith(
+    final sanitized = [
+      for (final note in notes)
+        note.copyWith(
           id: null, // Let the destination database allocate a fresh ID
           status: NoteStatus.active, // Imported notes start as active
           reminder: null, // Reset reminder on import
-        );
-        await ref.read(addNoteUsecaseProvider)(sanitized);
-      }
+        ),
+    ];
+    return _importAndRefresh(() async {
+      await ref.read(importNotesUsecaseProvider)(sanitized);
     });
+  }
+
+  Future<void> _importAndRefresh(Future<void> Function() import) async {
+    try {
+      await import();
+    } catch (error, stackTrace) {
+      state = AsyncError<List<Note>>(error, stackTrace);
+      rethrow;
+    }
+
+    try {
+      state = AsyncData(await _fetchAllNotes());
+    } catch (error, stackTrace) {
+      // The transaction has already committed. Keep the cached list available
+      // and do not turn a refresh issue into a retryable import failure.
+      state = AsyncError<List<Note>>(error, stackTrace);
+    }
   }
 
   Future<void> removeTag(String tag) async {

@@ -19,6 +19,13 @@ enum NotesTransferOperation {
 
 enum NotesTransferResult { completed, cancelled, busy, failed }
 
+class NotesTransferOutcome {
+  const NotesTransferOutcome({required this.operation, this.importedCount});
+
+  final NotesTransferOperation operation;
+  final int? importedCount;
+}
+
 @Riverpod(keepAlive: true)
 NotesTransferGateway notesTransferGateway(Ref ref) {
   return const NotesTransferGateway();
@@ -32,7 +39,13 @@ class NotesTransfer extends _$NotesTransfer {
   NotesTransferOperation? get operation => _operation;
 
   @override
-  FutureOr<NotesTransferOperation?> build() => null;
+  FutureOr<NotesTransferOutcome?> build() => null;
+
+  void beginSession() {
+    if (_running) return;
+    _operation = null;
+    state = const AsyncData(null);
+  }
 
   Future<NotesTransferResult> exportText({Rect? sharePositionOrigin}) {
     return _run(NotesTransferOperation.exportText, () async {
@@ -44,7 +57,9 @@ class NotesTransfer extends _$NotesTransfer {
             subject: 'My Notes',
             sharePositionOrigin: sharePositionOrigin,
           );
-      return true;
+      return const NotesTransferOutcome(
+        operation: NotesTransferOperation.exportText,
+      );
     });
   }
 
@@ -59,7 +74,9 @@ class NotesTransfer extends _$NotesTransfer {
             mimeType: 'application/json',
             sharePositionOrigin: sharePositionOrigin,
           );
-      return true;
+      return const NotesTransferOutcome(
+        operation: NotesTransferOperation.backupJson,
+      );
     });
   }
 
@@ -74,7 +91,9 @@ class NotesTransfer extends _$NotesTransfer {
             mimeType: 'text/markdown',
             sharePositionOrigin: sharePositionOrigin,
           );
-      return true;
+      return const NotesTransferOutcome(
+        operation: NotesTransferOperation.exportMarkdown,
+      );
     });
   }
 
@@ -83,10 +102,13 @@ class NotesTransfer extends _$NotesTransfer {
       final payload = await ref
           .read(notesTransferGatewayProvider)
           .pickJsonText();
-      if (payload == null) return false;
+      if (payload == null) return null;
       final notes = NoteExportFormatter.fromJson(payload);
       await ref.read(notesProvider.notifier).importBackup(notes);
-      return true;
+      return NotesTransferOutcome(
+        operation: NotesTransferOperation.importBackup,
+        importedCount: notes.length,
+      );
     });
   }
 
@@ -97,20 +119,20 @@ class NotesTransfer extends _$NotesTransfer {
 
   Future<NotesTransferResult> _run(
     NotesTransferOperation operation,
-    Future<bool> Function() action,
+    Future<NotesTransferOutcome?> Function() action,
   ) async {
     if (_running) return NotesTransferResult.busy;
     _running = true;
     _operation = operation;
     state = const AsyncLoading();
     try {
-      final completed = await action();
-      if (!completed) {
+      final outcome = await action();
+      if (outcome == null) {
         _operation = null;
         state = const AsyncData(null);
         return NotesTransferResult.cancelled;
       }
-      state = AsyncData(operation);
+      state = AsyncData(outcome);
       return NotesTransferResult.completed;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);

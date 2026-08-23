@@ -21,6 +21,16 @@ class AddNote {
   }
 }
 
+class ImportNotes {
+  final NoteRepository repository;
+
+  ImportNotes(this.repository);
+
+  Future<void> call(List<Note> notes) async {
+    return repository.importNotes(notes);
+  }
+}
+
 class UpdateNote {
   final NoteRepository repository;
 

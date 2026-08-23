@@ -187,6 +187,55 @@ void main() {
     );
   });
 
+  test(
+    'failed multi-note import is atomic and retry adds one copy each',
+    () async {
+      final repository = InMemoryNoteRepository.seeded(sampleNotes)
+        ..addErrorAtCall = 2;
+      final container = ProviderContainer(
+        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+      final imported = [
+        Note(
+          title: 'First imported note',
+          content: 'First',
+          color: 1,
+          createdAt: DateTime.utc(2026, 8, 23),
+        ),
+        Note(
+          title: 'Second imported note',
+          content: 'Second',
+          color: 2,
+          createdAt: DateTime.utc(2026, 8, 23, 0, 1),
+        ),
+      ];
+
+      await expectLater(
+        container.read(notesProvider.notifier).importBackup(imported),
+        throwsStateError,
+      );
+
+      expect(
+        repository.notes.where((note) => note.title.contains('imported note')),
+        isEmpty,
+      );
+
+      repository.addErrorAtCall = null;
+      await container.read(notesProvider.notifier).importBackup(imported);
+
+      expect(
+        repository.notes.where((note) => note.title == 'First imported note'),
+        hasLength(1),
+      );
+      expect(
+        repository.notes.where((note) => note.title == 'Second imported note'),
+        hasLength(1),
+      );
+    },
+  );
+
   test('archive trash restore and delete mutate the full collection', () async {
     final repository = InMemoryNoteRepository.seeded(sampleNotes);
     final container = ProviderContainer(

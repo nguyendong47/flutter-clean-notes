@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui';
 
@@ -64,18 +65,82 @@ void main() {
     },
   );
 
-  test('platform picker strips a UTF-8 BOM from byte-backed JSON', () async {
+  test(
+    'platform picker accepts unknown-size byte data and strips BOM',
+    () async {
+      final picker = _FakeFilePicker()
+        ..result = FilePickerResult([
+          PlatformFile(
+            name: 'backup.json',
+            size: 0,
+            bytes: Uint8List.fromList([0xEF, 0xBB, 0xBF, 0x5B, 0x5D]),
+          ),
+        ]);
+      FilePicker.platform = picker;
+
+      expect(await const NotesTransferGateway().pickJsonText(), '[]');
+    },
+  );
+
+  test('platform picker accepts an unknown-size path-backed file', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'notes-transfer-gateway-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}${Platform.pathSeparator}backup.json');
+    await file.writeAsString('[{"title":"path backed"}]');
     final picker = _FakeFilePicker()
       ..result = FilePickerResult([
-        PlatformFile(
-          name: 'backup.json',
-          size: 5,
-          bytes: Uint8List.fromList([0xEF, 0xBB, 0xBF, 0x5B, 0x5D]),
-        ),
+        PlatformFile(name: 'backup.json', size: 0, path: file.path),
       ]);
     FilePicker.platform = picker;
 
-    expect(await const NotesTransferGateway().pickJsonText(), '[]');
+    expect(
+      await const NotesTransferGateway().pickJsonText(),
+      '[{"title":"path backed"}]',
+    );
+  });
+
+  test('platform picker rejects actual empty data after reading it', () async {
+    final picker = _FakeFilePicker()
+      ..result = FilePickerResult([
+        PlatformFile(name: 'backup.json', size: 0, bytes: Uint8List(0)),
+      ]);
+    FilePicker.platform = picker;
+
+    await expectLater(
+      const NotesTransferGateway().pickJsonText(),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('empty'),
+        ),
+      ),
+    );
+  });
+
+  test('platform picker exceptions are replaced with safe user copy', () async {
+    final picker = _FakeFilePicker()
+      ..error = StateError(r'plugin leaked C:\private\backup.json');
+    FilePicker.platform = picker;
+
+    await expectLater(
+      const NotesTransferGateway().pickJsonText(),
+      throwsA(
+        isA<FormatException>()
+            .having(
+              (error) => error.message,
+              'message',
+              'Could not open the file picker. Try again.',
+            )
+            .having(
+              (error) => error.message,
+              'sanitized message',
+              isNot(contains('private')),
+            ),
+      ),
+    );
   });
 
   test(
@@ -152,7 +217,7 @@ void main() {
       expect(await export, NotesTransferResult.completed);
       expect(container.read(notesTransferProvider).hasValue, isTrue);
       expect(
-        container.read(notesTransferProvider).value,
+        container.read(notesTransferProvider).value?.operation,
         NotesTransferOperation.exportText,
       );
       expect(gateway.lastSharedText, contains('Aurora design'));
@@ -217,12 +282,83 @@ void main() {
       expect(imported.tags, ['backup', 'work']);
       expect(repository.notes.map((note) => note.id), containsAll(existingIds));
       expect(repository.notes, hasLength(sampleNotes.length + 1));
+      final outcome = container.read(notesTransferProvider).requireValue!;
+      expect(outcome.operation, NotesTransferOperation.importBackup);
+      expect(outcome.importedCount, 1);
+    },
+  );
+
+  test(
+    'committed import stays successful when its follow-up refresh fails',
+    () async {
+      final gateway = _FakeNotesTransferGateway()
+        ..pickedJson = jsonEncode([
+          {
+            'id': 88,
+            'title': 'Committed import',
+            'content': 'Do not offer a duplicate retry',
+            'color': 9,
+            'createdAt': '2026-08-23T10:00:00.000Z',
+            'isPinned': 0,
+            'tags': '',
+            'status': 0,
+            'reminder': null,
+          },
+        ]);
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final container = _container(gateway: gateway, repository: repository);
+      addTearDown(container.dispose);
+      final cached = await container.read(notesProvider.future);
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      final result = await container
+          .read(notesTransferProvider.notifier)
+          .importBackup();
+
+      expect(result, NotesTransferResult.completed);
       expect(
-        container.read(notesTransferProvider).value,
-        NotesTransferOperation.importBackup,
+        repository.notes.where((note) => note.title == 'Committed import'),
+        hasLength(1),
+      );
+      expect(container.read(notesTransferProvider).hasError, isFalse);
+      expect(
+        container.read(notesTransferProvider).requireValue?.importedCount,
+        1,
+      );
+      expect(container.read(notesProvider).hasError, isTrue);
+      expect(container.read(notesProvider).value, cached);
+
+      repository.getErrorAtCall = null;
+      container.invalidate(notesProvider);
+      final refreshed = await container.read(notesProvider.future);
+
+      expect(
+        refreshed.where((note) => note.title == 'Committed import'),
+        hasLength(1),
+      );
+      expect(
+        repository.notes.where((note) => note.title == 'Committed import'),
+        hasLength(1),
       );
     },
   );
+
+  test('beginSession clears settled transfer state before reopening', () async {
+    final gateway = _FakeNotesTransferGateway();
+    final container = _container(gateway: gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    expect(
+      await container.read(notesTransferProvider.notifier).exportText(),
+      NotesTransferResult.completed,
+    );
+    expect(container.read(notesTransferProvider).requireValue, isNotNull);
+
+    container.read(notesTransferProvider.notifier).beginSession();
+
+    expect(container.read(notesTransferProvider).requireValue, isNull);
+  });
 
   test(
     'malformed import exposes an error and preserves existing notes',
@@ -449,6 +585,7 @@ class _FakeNotesTransferGateway extends NotesTransferGateway {
 
 class _FakeFilePicker extends FilePicker {
   FilePickerResult? result;
+  Object? error;
   FileType? type;
   List<String>? allowedExtensions;
   bool? allowMultiple;
@@ -468,6 +605,7 @@ class _FakeFilePicker extends FilePicker {
     bool lockParentWindow = false,
     bool readSequential = false,
   }) async {
+    if (error case final error?) throw error;
     this.type = type;
     this.allowedExtensions = allowedExtensions;
     this.allowMultiple = allowMultiple;

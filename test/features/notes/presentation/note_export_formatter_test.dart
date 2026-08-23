@@ -170,20 +170,32 @@ void main() {
       expect(NoteExportFormatter.toText(const []), 'No notes to export.');
     });
 
-    test('escapes Markdown metacharacters while preserving content lines', () {
+    test('preserves authored Markdown and escapes generated metadata only', () {
       final markdown = NoteExportFormatter.toMarkdown([
         Note(
-          title: 'Plan #1',
-          content: 'First | line\nSecond *line*',
+          title: 'Plan\r\n## injected #1',
+          content: '''## Existing heading
+**bold** and [link](https://example.com)
+- [ ] checklist
+| A | B |
+| - | - |
+`code *literal*`''',
           color: 0,
           createdAt: DateTime.utc(2026, 8, 23),
           tags: const ['work|urgent', 'multi\nline'],
         ),
       ]);
 
-      expect(markdown, contains('# Plan \\#1'));
-      expect(markdown, contains('First \\| line\nSecond \\*line\\*'));
-      expect(markdown, contains('Tags: #work\\|urgent, #multi line'));
+      expect(markdown, '''# Plan \\#\\# injected \\#1
+
+## Existing heading
+**bold** and [link](https://example.com)
+- [ ] checklist
+| A | B |
+| - | - |
+`code *literal*`
+
+Tags: #work\\|urgent, #multi line''');
     });
   });
 }

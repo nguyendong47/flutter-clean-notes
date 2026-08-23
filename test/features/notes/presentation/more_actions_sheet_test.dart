@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -57,6 +58,27 @@ void main() {
           .isSelected,
       Tristate.isTrue,
     );
+    for (final key in [
+      'more-row-theme',
+      'more-row-manage-tags',
+      'more-row-export-text',
+      'more-row-backup-json',
+      'more-row-export-markdown',
+      'more-row-import-backup',
+    ]) {
+      expect(
+        tester.getSemantics(find.byKey(Key(key))).flagsCollection.isSelected,
+        Tristate.none,
+        reason: key,
+      );
+    }
+    for (final key in ['theme-mode-light', 'theme-mode-dark']) {
+      expect(
+        tester.getSemantics(find.byKey(Key(key))).flagsCollection.isSelected,
+        Tristate.isFalse,
+        reason: key,
+      );
+    }
     expect(find.byType(GlassSurface), findsOneWidget);
     expect(find.byType(SafeArea), findsWidgets);
   });
@@ -120,6 +142,16 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(find.text('Exporting text…'), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(
+            find.byKey(const Key('more-transfer-status-exportText')),
+          )
+          .flagsCollection
+          .isLiveRegion,
+      isTrue,
+    );
     expect(tester.getSize(exportRow), sizeBefore);
 
     await tester.binding.handlePopRoute();
@@ -133,6 +165,7 @@ void main() {
     gateway.shareGate!.complete();
     await tester.pumpAndSettle();
     expect(find.byType(MoreActionsSheet), findsOneWidget);
+    expect(find.text('Text export complete.'), findsOneWidget);
 
     gateway
       ..shareGate = null
@@ -149,6 +182,58 @@ void main() {
       ),
       findsOneWidget,
     );
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open more'));
+    await tester.pump();
+
+    expect(find.text('Could not share backup. Try again.'), findsNothing);
+    expect(find.text('Text export complete.'), findsNothing);
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not share backup. Try again.'), findsNothing);
+    expect(find.text('Text export complete.'), findsNothing);
+  });
+
+  testWidgets('announces row-local import success with imported count', (
+    tester,
+  ) async {
+    final gateway = _FakeNotesTransferGateway()
+      ..pickedJson = jsonEncode([
+        {
+          'title': 'First import',
+          'content': 'First body',
+          'color': 1,
+          'createdAt': '2026-08-23T00:00:00.000Z',
+          'isPinned': 0,
+          'tags': '',
+          'status': 0,
+          'reminder': null,
+        },
+        {
+          'title': 'Second import',
+          'content': 'Second body',
+          'color': 2,
+          'createdAt': '2026-08-23T00:01:00.000Z',
+          'isPinned': 0,
+          'tags': '',
+          'status': 0,
+          'reminder': null,
+        },
+      ]);
+    await _pumpMore(tester, gateway: gateway);
+    final importRow = find.byKey(const Key('more-row-import-backup'));
+    await tester.ensureVisible(importRow);
+
+    await tester.tap(importRow);
+    await tester.pumpAndSettle();
+
+    final status = find.byKey(const Key('more-transfer-status-importBackup'));
+    expect(find.descendant(of: importRow, matching: status), findsOneWidget);
+    expect(find.text('Imported 2 notes.'), findsOneWidget);
+    expect(tester.getSemantics(status).flagsCollection.isLiveRegion, isTrue);
   });
 
   testWidgets('silent import cancellation restores import focus', (
@@ -197,6 +282,87 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byType(MoreActionsSheet), findsNothing);
+  });
+
+  testWidgets('tag manager distinguishes loading from a true empty state', (
+    tester,
+  ) async {
+    final repository = _ControlledRepository.seeded(_tagNotes)
+      ..readGate = Completer<void>();
+    await _pumpMore(tester, repository: repository, awaitNotes: false);
+    final manageTags = find.byKey(const Key('more-row-manage-tags'));
+    await tester.ensureVisible(manageTags);
+
+    await tester.tap(manageTags);
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byType(TagManagerSheet), findsOneWidget);
+    expect(find.text('Loading tags…'), findsOneWidget);
+    expect(find.text('No tags yet'), findsNothing);
+
+    repository.readGate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Loading tags…'), findsNothing);
+    expect(find.text('shared'), findsOneWidget);
+  });
+
+  testWidgets('tag manager shows initial error and a 48 pixel retry', (
+    tester,
+  ) async {
+    final repository = _ControlledRepository.seeded(_tagNotes)
+      ..getError = StateError('database path leaked');
+    await _pumpMore(tester, repository: repository, awaitNotes: false);
+    await _openTags(tester);
+
+    expect(find.text('Could not load tags. Try again.'), findsOneWidget);
+    expect(find.text('No tags yet'), findsNothing);
+    final retry = find.byKey(const Key('tag-retry'));
+    expect(retry, findsOneWidget);
+    expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
+
+    repository.getError = null;
+    await tester.tap(retry);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not load tags. Try again.'), findsNothing);
+    expect(find.text('shared'), findsOneWidget);
+  });
+
+  testWidgets('tag manager retains counts when a refresh fails', (
+    tester,
+  ) async {
+    final repository = _ControlledRepository.seeded(_tagNotes);
+    final harness = await _pumpMore(tester, repository: repository);
+    await _openTags(tester);
+    final first = harness.container.read(notesProvider).requireValue.first;
+    repository.updateError = StateError('refresh failed');
+
+    await expectLater(
+      harness.container.read(notesProvider.notifier).togglePin(first),
+      throwsStateError,
+    );
+    await tester.pump();
+
+    expect(
+      find.text('Could not refresh tag counts. Showing saved counts.'),
+      findsOneWidget,
+    );
+    expect(find.text('shared'), findsOneWidget);
+    expect(find.text('3 notes'), findsOneWidget);
+    expect(find.text('No tags yet'), findsNothing);
+    expect(find.byKey(const Key('tag-retry')), findsOneWidget);
+  });
+
+  testWidgets('tag manager shows empty only after an empty load completes', (
+    tester,
+  ) async {
+    await _pumpMore(tester, notes: const []);
+    await _openTags(tester);
+
+    expect(find.text('No tags yet'), findsOneWidget);
+    expect(find.text('Loading tags…'), findsNothing);
+    expect(find.byKey(const Key('tag-retry')), findsNothing);
   });
 
   testWidgets('tag removal confirms exact global count and blocks busy back', (
@@ -314,6 +480,16 @@ void main() {
       );
       expect(tester.takeException(), isNull, reason: '$mode tags');
 
+      final remove = find.byTooltip(
+        'Remove a very long global tag that must wrap without clipping tag',
+      );
+      await tester.tap(remove);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: '$mode dialog');
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       await tester.binding.handlePopRoute();
@@ -351,6 +527,7 @@ _pumpMore(
   TextScaler textScaler = TextScaler.noScaling,
   ThemeMode themeMode = ThemeMode.light,
   double viewInsetsBottom = 0,
+  bool awaitNotes = true,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -400,8 +577,10 @@ _pumpMore(
   final container = ProviderScope.containerOf(
     tester.element(find.byType(MoreActionsSheet)),
   );
-  await container.read(notesProvider.future);
-  await tester.pumpAndSettle();
+  if (awaitNotes) {
+    await container.read(notesProvider.future);
+    await tester.pumpAndSettle();
+  }
   return (container: container, gateway: resolvedGateway);
 }
 
@@ -512,6 +691,7 @@ class _ControlledRepository extends InMemoryNoteRepository {
   _ControlledRepository.seeded(super.notes) : super.seeded();
 
   Completer<void>? updateGate;
+  Completer<void>? readGate;
   int updateCalls = 0;
 
   @override
@@ -519,5 +699,11 @@ class _ControlledRepository extends InMemoryNoteRepository {
     updateCalls += 1;
     await updateGate?.future;
     return super.updateNote(note);
+  }
+
+  @override
+  Future<List<Note>> getNotesByStatus(NoteStatus status) async {
+    await readGate?.future;
+    return super.getNotesByStatus(status);
   }
 }

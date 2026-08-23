@@ -61,7 +61,7 @@ String _$notesTransferGatewayHash() =>
 final notesTransferProvider = NotesTransferProvider._();
 
 final class NotesTransferProvider
-    extends $AsyncNotifierProvider<NotesTransfer, NotesTransferOperation?> {
+    extends $AsyncNotifierProvider<NotesTransfer, NotesTransferOutcome?> {
   NotesTransferProvider._()
     : super(
         from: null,
@@ -81,27 +81,24 @@ final class NotesTransferProvider
   NotesTransfer create() => NotesTransfer();
 }
 
-String _$notesTransferHash() => r'b2ce80347448f418ea7919f1add238532f7ce805';
+String _$notesTransferHash() => r'e4e561d1fe55626b0cfa72bff214a8e8d0b1e46c';
 
-abstract class _$NotesTransfer extends $AsyncNotifier<NotesTransferOperation?> {
-  FutureOr<NotesTransferOperation?> build();
+abstract class _$NotesTransfer extends $AsyncNotifier<NotesTransferOutcome?> {
+  FutureOr<NotesTransferOutcome?> build();
   @$mustCallSuper
   @override
   void runBuild() {
     final ref =
         this.ref
-            as $Ref<
-              AsyncValue<NotesTransferOperation?>,
-              NotesTransferOperation?
-            >;
+            as $Ref<AsyncValue<NotesTransferOutcome?>, NotesTransferOutcome?>;
     final element =
         ref.element
             as $ClassProviderElement<
               AnyNotifier<
-                AsyncValue<NotesTransferOperation?>,
-                NotesTransferOperation?
+                AsyncValue<NotesTransferOutcome?>,
+                NotesTransferOutcome?
               >,
-              AsyncValue<NotesTransferOperation?>,
+              AsyncValue<NotesTransferOutcome?>,
               Object?,
               Object?
             >;

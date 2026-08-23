@@ -10,22 +10,23 @@ class NotesTransferGateway {
   const NotesTransferGateway();
 
   Future<String?> pickJsonText() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['json'],
-      allowMultiple: false,
-      withData: kIsWeb,
-    );
+    final FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        allowMultiple: false,
+        withData: kIsWeb,
+      );
+    } catch (_) {
+      throw const FormatException('Could not open the file picker. Try again.');
+    }
     if (result == null) return null;
     if (result.files.length != 1) {
       throw const FormatException('Choose one JSON backup file.');
     }
 
     final file = result.files.single;
-    if (file.size <= 0) {
-      throw const FormatException('The selected backup file is empty.');
-    }
-
     final bytes = file.bytes;
     final XFile xFile;
     if (bytes != null) {
@@ -35,7 +36,7 @@ class NotesTransferGateway {
       xFile = XFile.fromData(
         bytes,
         name: file.name,
-        length: file.size,
+        length: bytes.length,
         mimeType: 'application/json',
       );
     } else if (!kIsWeb) {
@@ -45,7 +46,11 @@ class NotesTransferGateway {
           'The selected backup file could not be read.',
         );
       }
-      xFile = XFile(path, name: file.name, length: file.size);
+      xFile = XFile(
+        path,
+        name: file.name,
+        length: file.size > 0 ? file.size : null,
+      );
     } else {
       throw const FormatException(
         'The selected backup file could not be read.',

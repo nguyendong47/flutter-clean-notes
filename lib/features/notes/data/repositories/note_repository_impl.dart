@@ -21,6 +21,12 @@ class NoteRepositoryImpl implements NoteRepository {
   }
 
   @override
+  Future<void> importNotes(List<Note> notes) async {
+    final noteModels = notes.map(NoteModel.fromEntity).toList(growable: false);
+    await localDataSource.importNotes(noteModels);
+  }
+
+  @override
   Future<int> updateNote(Note note) async {
     final noteModel = NoteModel.fromEntity(note);
     return await localDataSource.updateNote(noteModel);

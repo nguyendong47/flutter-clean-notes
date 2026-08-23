@@ -31,6 +31,7 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
+    final notesState = ref.watch(notesProvider);
     final usage = ref.watch(tagUsageProvider);
 
     return Padding(
@@ -88,18 +89,28 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    if (usage.isEmpty)
-                      const _EmptyTags()
-                    else
-                      for (var index = 0; index < usage.length; index++) ...[
-                        _TagRow(
-                          usage: usage[index],
-                          enabled: !_confirmationOpen,
-                          onRemove: () => _requestRemoval(usage[index]),
-                        ),
-                        if (index != usage.length - 1)
-                          const SizedBox(height: 8),
+                    if (!notesState.hasValue && notesState.isLoading)
+                      const _TagLoading()
+                    else if (!notesState.hasValue && notesState.hasError)
+                      _TagLoadError(onRetry: _retry)
+                    else ...[
+                      if (notesState.hasError) ...[
+                        _TagRefreshError(onRetry: _retry),
+                        const SizedBox(height: 12),
                       ],
+                      if (usage.isEmpty)
+                        const _EmptyTags()
+                      else
+                        for (var index = 0; index < usage.length; index++) ...[
+                          _TagRow(
+                            usage: usage[index],
+                            enabled: !_confirmationOpen,
+                            onRemove: () => _requestRemoval(usage[index]),
+                          ),
+                          if (index != usage.length - 1)
+                            const SizedBox(height: 8),
+                        ],
+                    ],
                   ],
                 ),
               ),
@@ -108,6 +119,10 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
         ),
       ),
     );
+  }
+
+  void _retry() {
+    ref.invalidate(notesProvider);
   }
 
   Future<void> _requestRemoval(TagUsage usage) async {
@@ -133,6 +148,108 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
         });
       }
     }
+  }
+}
+
+class _TagLoading extends StatelessWidget {
+  const _TagLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 12),
+            Expanded(child: Text('Loading tags…')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TagLoadError extends StatelessWidget {
+  const _TagLoadError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return _TagErrorPanel(
+      message: 'Could not load tags. Try again.',
+      onRetry: onRetry,
+    );
+  }
+}
+
+class _TagRefreshError extends StatelessWidget {
+  const _TagRefreshError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return _TagErrorPanel(
+      message: 'Could not refresh tag counts. Showing saved counts.',
+      onRetry: onRetry,
+      compact: true,
+    );
+  }
+}
+
+class _TagErrorPanel extends StatelessWidget {
+  const _TagErrorPanel({
+    required this.message,
+    required this.onRetry,
+    this.compact = false,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Semantics(
+      liveRegion: true,
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: compact ? 0 : 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              message,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: colorScheme.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                child: OutlinedButton.icon(
+                  key: const Key('tag-retry'),
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -167,23 +284,27 @@ class _TagRow extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    usage.tag,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        usage.tag,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        countLabel,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    countLabel,
-                    textAlign: TextAlign.end,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
                 IconButton(
                   constraints: const BoxConstraints(
                     minWidth: 48,

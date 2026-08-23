@@ -29,11 +29,11 @@ abstract final class NoteExportFormatter {
       final note = materialized[index];
       final title = note.title.trim().isEmpty ? 'Untitled note' : note.title;
       buffer
-        ..writeln('# ${_escapeMarkdown(title)}')
+        ..writeln('# ${_escapeMarkdown(_singleLine(title))}')
         ..writeln();
       if (note.content.isNotEmpty) {
         buffer
-          ..writeln(_escapeMarkdown(note.content))
+          ..writeln(note.content)
           ..writeln();
       }
       if (note.tags.isNotEmpty) {

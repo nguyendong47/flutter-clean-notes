@@ -18,7 +18,11 @@ class InMemoryNoteRepository implements NoteRepository {
   int _nextId = 1;
 
   Object? getError;
+  int? getErrorAtCall;
+  int getCalls = 0;
   Object? addError;
+  int? addErrorAtCall;
+  int addCalls = 0;
   Object? updateError;
   Object? deleteError;
   Object? statusError;
@@ -30,23 +34,53 @@ class InMemoryNoteRepository implements NoteRepository {
 
   @override
   Future<List<Note>> getNotes() async {
+    getCalls += 1;
     if (getError case final error?) _throw(error);
+    if (getErrorAtCall == getCalls) {
+      throw StateError('note refresh $getCalls failed');
+    }
     return [..._notes];
   }
 
   @override
   Future<List<Note>> getNotesByStatus(NoteStatus status) async {
+    getCalls += 1;
     if (getError case final error?) _throw(error);
+    if (getErrorAtCall == getCalls) {
+      throw StateError('note refresh $getCalls failed');
+    }
     return _notes.where((note) => note.status == status).toList();
   }
 
   @override
   Future<int> addNote(Note note) async {
+    addCalls += 1;
     if (addError case final error?) _throw(error);
+    if (addErrorAtCall == addCalls) {
+      throw StateError('import insert $addCalls failed');
+    }
     final id = note.id ?? _nextId++;
     if (id >= _nextId) _nextId = id + 1;
     _notes.add(note.copyWith(id: id));
     return id;
+  }
+
+  @override
+  Future<void> importNotes(List<Note> notes) async {
+    final staged = <Note>[];
+    var nextId = _nextId;
+    for (final note in notes) {
+      addCalls += 1;
+      if (addError case final error?) _throw(error);
+      if (addErrorAtCall == addCalls) {
+        throw StateError('import insert $addCalls failed');
+      }
+      final id = note.id ?? nextId++;
+      if (id >= nextId) nextId = id + 1;
+      staged.add(note.copyWith(id: id));
+    }
+    _notes.addAll(staged);
+    _nextId = nextId;
   }
 
   @override
