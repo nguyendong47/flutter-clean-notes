@@ -39,7 +39,7 @@ Stable architecture, bootstrap, code-generation, and platform constraints live i
 | 1 | Add Aurora theme and glass primitives | `249f0bc` |
 | 2 | Stabilize all-status collections and mutations | `7456e73` |
 | 3 | Build Aurora home, note cards, masonry, and stable states | `fca345e` |
-| 4 | Add focused search, filters, and one-shot focus | `159563f..8fc79be` |
+| 4 | Add focused search, filters, and one-shot focus | `8fc79be` |
 
 Task 4 adds exactly five files: the search page, filter sheet, focus-request source and generated provider, and focused widget test.
 
@@ -65,7 +65,7 @@ Task 4 adds exactly five files: the search page, filter sheet, focus-request sou
 
 ## Exact continuation path
 
-1. Start from product baseline `8fc79be`; confirm the worktree is otherwise clean and preserve the protected untracked `.claude/skills/` directory.
+1. Start from the current branch tip (this tracked handoff commit) above product baseline `8fc79be`; confirm the worktree is otherwise clean and preserve the protected untracked `.claude/skills/` directory.
 2. Follow the [Task 5 plan section](plans/2026-08-17-aurora-glass-redesign.md#task-5-archive-and-trash-library) and, when local SDD evidence exists, the [Task 5 brief](../../.superpowers/sdd/2026-08-17-aurora-glass-redesign/task-5-brief.md).
 3. Preserve Task 4's search/filter state and one-shot focus interface for Task 7; Task 5 owns only the Archive and Trash Library surface.
 4. After the Task 5 commit or a session handoff, update this file and the local ledger/report with the new evidence and next task.
