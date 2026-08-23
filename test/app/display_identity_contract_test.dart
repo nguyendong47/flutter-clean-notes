@@ -69,7 +69,15 @@ void main() {
 
       expect(manifest['name'], _displayName);
       expect(manifest['short_name'], _displayName);
+      expect(
+        manifest['description'],
+        'Clean Notes is a local-first note-taking app.',
+      );
       expect(_capture(index, RegExp(r'<title>([^<]+)</title>')), _displayName);
+      expect(
+        _capture(index, RegExp(r'<meta name="description" content="([^"]+)">')),
+        'Clean Notes is a local-first note-taking app.',
+      );
       expect(
         _capture(
           index,
