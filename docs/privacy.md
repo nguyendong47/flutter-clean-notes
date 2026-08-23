@@ -14,8 +14,8 @@
 | Text export | Note titles, content, and tags | Sent to the operating-system share sheet only after the user selects **Export text**. The destination selected in that sheet controls subsequent handling. |
 | Markdown export | Note titles, content, and tags | A generated `notes.md` file is sent to the operating-system share sheet only after the user selects **Export Markdown**. |
 | JSON backup | Note IDs, titles, content, tags, color, creation time, pin state, status, and reminder time | A generated `notes_backup.json` file is sent to the operating-system share sheet only after the user selects **Backup JSON**. |
-| JSON import | The same note fields accepted by the JSON backup format | The user selects one `.json` file through the platform file picker. The app rejects an empty selection and payloads over 10 MB, validates the JSON, then imports the notes in a SQLite transaction. |
-| Reminders | Notification title, body, and payload derived from the note | Scheduling hands data to the platform notification service. The notification title includes the note title, the body includes note content, and the payload includes ID, title, content, color, creation time, and reminder time. Android and Apple code paths handle tap/open. Snooze actions are Android-only; Apple targets have no Darwin snooze categories unless a future release adds them. Permission, delivery, action, process-death, and reboot behavior require device verification. |
+| JSON import | The fields accepted by the JSON backup format | The user selects one `.json` file through the platform file picker. The app rejects an empty selection and payloads over 10 MB, validates the JSON, then imports the notes in one SQLite transaction. Imported entries are copies: title, content, tags, color, creation time, and pin state are retained, while each entry receives a fresh ID, active status, and no reminder. |
+| Reminders | Opaque local note ID and generic notification copy | Scheduling hands the generic title **Note reminder**, generic body **Open Aurora Notes to view your reminder.**, and an opaque `note:v1:<id>` payload to the platform notification service. The app does not put note title or content in those fields, and Android requests private notification visibility. Android and Apple code paths handle tap/open. Snooze actions are Android-only; Apple targets have no Darwin snooze categories unless a future release adds them. Permission, delivery, action, process-death, and reboot behavior require device verification. |
 
 The current app source and primary platform configuration contain no app-owned
 HTTP client, remote API, analytics SDK, crash-reporting SDK, or telemetry
@@ -42,11 +42,13 @@ platform backups, and future dependencies remain separate boundaries.
 
 ## Notification disclosure
 
-Reminder notifications may expose a note title and content on the lock screen,
-notification center, connected wearables, or other platform surfaces, depending
-on OS settings and implementation behavior. Permission prompts, preview settings,
-delivery after process death or reboot, and action behavior require
-physical-device evidence; see [QA](qa.md#reminders-and-notifications) and
+App-supplied reminder fields use generic copy and an opaque local ID rather than
+note title or content. The OS can still expose the app name, generic reminder
+copy, timing, and action labels on the lock screen, notification center,
+connected wearables, or other platform surfaces; platform settings may override
+preview behavior. Permission prompts, delivery after process death or reboot,
+and action behavior require physical-device evidence; see
+[QA](qa.md#reminders-and-notifications) and
 [release readiness](release.md#notifications-and-platform-permissions).
 
 ## Owner decisions
@@ -63,8 +65,8 @@ updated to match.
   protection is sufficient or an app-managed encryption design is required.
 - **[OWNER: Release/Product] Supported platforms:** name the platforms that ship;
   validate this disclosure and storage paths on each one.
-- **[OWNER: Product/Legal] Lock-screen disclosure:** decide whether notification
-  title/content previews are acceptable, configurable, or must be redacted.
+- **[OWNER: Product/Legal] Lock-screen disclosure:** approve the generic reminder
+  preview and action labels, including platform overrides and connected devices.
 - **[OWNER: Product/Legal] No-network language:** choose whether to make any
   contractual no-network/no-tracking claim. Require a release-build network and
   dependency audit before approving one.

@@ -1,10 +1,10 @@
 # AGENTS.md
 
-Flutter note-taking app using feature-first Clean Architecture, Riverpod code generation, and local SQLite. Treat `pubspec.yaml` as the dependency and SDK source of truth, `lib/` as the runtime source of truth, and `test/` as the test source of truth.
+Flutter note-taking app using feature-first Clean Architecture, Riverpod code generation, and local SQLite. `pubspec.yaml` declares the dependency and SDK constraints, while the tracked `pubspec.lock` pins the application resolution. Treat `lib/` as the runtime source of truth and `test/` plus `integration_test/` as the test source of truth.
 
 ## Setup and verification
 
-- Resolve dependencies after checkout with `flutter pub get`.
+- Resolve dependencies after checkout with `flutter pub get --enforce-lockfile`. Use plain `flutter pub get` only for an intentional dependency update, then review and commit the lockfile diff.
 - Run the app with `flutter run`.
 - Run static analysis with `flutter analyze` and the full test suite with `flutter test`.
 - Add focused tests under the matching `test/` subtree and run them during implementation. Do not cache test counts in this file; inspect the test tree and current command output.
@@ -20,7 +20,7 @@ Flutter note-taking app using feature-first Clean Architecture, Riverpod code ge
 ## Riverpod code generation
 
 - Providers use `riverpod_annotation` and generated `.g.dart` files rather than hand-written provider declarations.
-- After editing a file containing `@riverpod`, run `dart run build_runner build --delete-conflicting-outputs`, inspect the generated diff, and commit the matching generated file.
+- After editing a file containing `@riverpod`, run `dart run build_runner build`, inspect the generated diff, and commit the matching generated file.
 - Import and consume the generated provider name; never edit generated `.g.dart` files manually.
 
 ## Database and platform constraints

@@ -17,7 +17,7 @@ not approved production values.
 | Linux application ID | `com.example.flutter_clean_notes` | `linux/CMakeLists.txt` | Template identifier; replace or record Linux as non-shipping. |
 | Android release signing | Debug signing configuration | `android/app/build.gradle.kts` | Blocking for distribution. |
 | Apple signing team | No development team recorded | Xcode project settings | Blocking for device/archive distribution. |
-| Dependency lock | `pubspec.lock` is ignored and untracked | `.gitignore` | Owner decision required before a reproducible release. |
+| Dependency lock | Tracked application resolution | `pubspec.lock` | Keep pinned; review and commit every intentional resolution change. |
 
 ## Local release gates
 
@@ -26,11 +26,13 @@ Run from the repository root in PowerShell on the exact release commit:
 ```powershell
 flutter --version
 flutter doctor -v
-flutter pub get
-dart run build_runner build --delete-conflicting-outputs
-dart format --output=none --set-exit-if-changed lib test
+flutter pub get --enforce-lockfile
+dart run build_runner build
+dart format --output=none --set-exit-if-changed lib test integration_test
 flutter analyze
 flutter test --concurrency=1
+$deviceId = 'emulator-5554'
+flutter test integration_test/aurora_smoke_test.dart -d $deviceId
 git diff --check
 git status --short
 ```
@@ -115,20 +117,20 @@ that the current branch or generated manifest already satisfies them.
   schedule after fresh-install denial/grant, terminate the process, reboot the
   device, and capture delivery plus open/snooze evidence. Record timing variance
   expected from inexact scheduling and verify denied/revoked states fail safely.
-- [ ] **[OWNER: Apple Engineering/QA]** Decide whether the current startup-time
-  authorization request is acceptable; implement the approved iOS notification
-  permission UX and verify denied/revoked states, scheduling, tap/open, cold
-  launch, and App Store capability/privacy declarations on physical devices.
+- [ ] **[OWNER: Apple Engineering/QA]** Verify notification authorization is
+  requested contextually from the reminder flow and never by unrelated startup.
+  Verify denied/revoked states, scheduling, tap/open, cold launch, and App Store
+  capability/privacy declarations on physical devices.
   Apple verification covers tap/open only unless Darwin notification categories
   are added in a future release; Android snooze expectations do not apply.
-- [ ] **[OWNER: Product/Legal]** Approve lock-screen title/content behavior or
-  require redaction/settings before release.
+- [ ] **[OWNER: Product/Legal]** Approve the generic lock-screen reminder copy,
+  private-visibility behavior, actions, and platform override disclosure.
 
 ## Dependencies, SBOM, and lockfile
 
-- [ ] **[OWNER: Engineering/Release]** Decide and document the lockfile policy.
-  For an application release, prefer tracking `pubspec.lock`; if it remains
-  untracked, record the resolved file and artifact hash in the release evidence.
+- [ ] **[OWNER: Engineering/Release]** Keep `pubspec.lock` tracked, prove
+  `flutter pub get --enforce-lockfile` leaves the candidate clean, record its
+  SHA-256, and review every intentional dependency-resolution diff.
 - [ ] **[OWNER: Security]** Generate an SBOM from the exact resolved dependency
   graph and native artifacts in an approved format; a `flutter pub deps --json`
   inventory alone is not a formal SBOM.

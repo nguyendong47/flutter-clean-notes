@@ -18,7 +18,7 @@
 - Dart SDK remains ^3.11.1.
 - Domain code must not import presentation or data implementations.
 - Riverpod providers use annotations and generated .g.dart files; never edit generated files manually.
-- After every annotated-provider change, run 'dart run build_runner build --delete-conflicting-outputs'.
+- After every annotated-provider change, run 'dart run build_runner build'.
 - Preserve desktop sqflite FFI initialization and the mobile database path split.
 - The current SQLite schema is version 5; this redesign does not change it.
 - Preserve every existing user feature and notification-service test.
@@ -169,7 +169,7 @@ Add 'package:go_router/go_router.dart' to notes_page.dart so BuildContext.push/p
 Run:
 
 ~~~text
-dart run build_runner build --delete-conflicting-outputs
+dart run build_runner build
 dart format lib/app/app_providers.dart lib/app/router.dart lib/features/notes/presentation/pages/notes_page.dart lib/main.dart test/app/app_theme_provider_test.dart
 flutter analyze
 flutter test
@@ -469,7 +469,7 @@ Every mutation delegates through '_mutate'. Add family/derived providers for sta
 Run:
 
 ~~~text
-dart run build_runner build --delete-conflicting-outputs
+dart run build_runner build
 dart format lib/features/notes test/helpers test/features/notes
 flutter test test/features/notes/domain/note_test.dart test/features/notes/presentation/note_filters_test.dart test/features/notes/presentation/notes_notifier_test.dart
 flutter analyze
@@ -821,7 +821,7 @@ Implement NotesNotifier.removeTag as one '_mutate' operation that updates every 
 Run:
 
 ~~~text
-dart run build_runner build --delete-conflicting-outputs
+dart run build_runner build
 dart format lib/features/notes/presentation test/features/notes/presentation
 flutter test test/features/notes/presentation/note_export_formatter_test.dart test/features/notes/presentation/notes_transfer_provider_test.dart test/features/notes/presentation/more_actions_sheet_test.dart
 flutter analyze
@@ -1122,8 +1122,8 @@ Use the in-app browser or Flutter screenshots to inspect at least the home, sear
 Run:
 
 ~~~text
-dart run build_runner build --delete-conflicting-outputs
-dart format --output=none --set-exit-if-changed lib test
+dart run build_runner build
+dart format --output=none --set-exit-if-changed lib test integration_test
 flutter analyze
 flutter test
 git diff --check

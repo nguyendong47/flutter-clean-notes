@@ -48,7 +48,7 @@ target platform, then run:
 
 ```powershell
 flutter doctor
-flutter pub get
+flutter pub get --enforce-lockfile
 flutter devices
 $deviceId = 'emulator-5554'
 flutter run -d $deviceId
@@ -62,11 +62,12 @@ external database service is required.
 
 | Task | Command |
 | --- | --- |
-| Resolve dependencies | `flutter pub get` |
+| Resolve pinned dependencies | `flutter pub get --enforce-lockfile` |
 | Run the app | `$deviceId = 'emulator-5554'; flutter run -d $deviceId` |
 | Analyze and lint | `flutter analyze` |
 | Run automated tests | `flutter test --concurrency=1` |
-| Regenerate Riverpod code | `dart run build_runner build --delete-conflicting-outputs` |
+| Run Android smoke test | `$deviceId = 'emulator-5554'; flutter test integration_test/aurora_smoke_test.dart -d $deviceId` |
+| Regenerate Riverpod code | `dart run build_runner build` |
 
 Run code generation after changing a file containing `@riverpod`, review the
 resulting diff, and commit the corresponding `.g.dart` changes.

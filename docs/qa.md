@@ -10,11 +10,13 @@ result. File defects with reproduction steps and link them from the release reco
 Run from the repository root in PowerShell:
 
 ```powershell
-flutter pub get
-dart run build_runner build --delete-conflicting-outputs
-dart format --output=none --set-exit-if-changed lib test
+flutter pub get --enforce-lockfile
+dart run build_runner build
+dart format --output=none --set-exit-if-changed lib test integration_test
 flutter analyze
 flutter test --concurrency=1
+$deviceId = 'emulator-5554'
+flutter test integration_test/aurora_smoke_test.dart -d $deviceId
 git diff --check
 git status --short
 ```
@@ -30,6 +32,9 @@ flutter test test/notification_service_test.dart test/app/notification_routing_t
 
 Passing widget/unit tests does not replace physical-device, native share-sheet,
 notification permission, signing, database-file upgrade, or store-build evidence.
+Run the Android smoke test twice without clearing app data between runs; both runs
+must pass and the test-created note must be absent afterward. Replace the sample
+device ID with the intended Android device printed by `flutter devices`.
 
 ## Devices and configurations
 
@@ -98,8 +103,9 @@ reminder schedule/cancel:
   tags, empty fields, all note statuses, colors, pin state, timestamps, and
   reminders.
 - Inspect JSON against the fields listed in [privacy.md](privacy.md), then import
-  into a clean database and compare every note. Repeat into a populated database
-  and record the chosen ID-conflict behavior.
+  into a clean database. Verify title, content, tags, color, creation time, and pin
+  state are retained; imported entries must receive fresh IDs, active status, and
+  no reminder. Repeat in a populated database and confirm fresh IDs avoid conflicts.
 - Verify cancel/dismiss/unavailable share results and chooser/picker failures.
 - Import valid UTF-8 with and without BOM, malformed JSON, wrong top-level type,
   invalid/missing fields, empty file, wrong extension, multiple-file attempt,
