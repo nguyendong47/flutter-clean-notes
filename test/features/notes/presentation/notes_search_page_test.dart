@@ -368,7 +368,7 @@ void main() {
             ),
           ]) {
         final repository = InMemoryNoteRepository.seeded(sampleNotes);
-        await _pumpSearch(
+        final container = await _pumpSearch(
           tester,
           repository: repository,
           size: const Size(600, 1000),
@@ -378,7 +378,8 @@ void main() {
           'follow-up',
         );
         await tester.pumpAndSettle();
-        repository.getErrorAtCall = repository.getCalls + 1;
+        final refreshFailure = StateError('note refresh failed');
+        repository.getError = refreshFailure;
 
         await tester.tap(find.byTooltip('More actions for Design follow-up'));
         await tester.pumpAndSettle();
@@ -402,19 +403,73 @@ void main() {
         );
         expect(find.text('Undo'), findsOneWidget);
         expect(
+          find.byKey(const Key('notes-search-cached-error')),
+          findsNothing,
+        );
+        expect(
           find.text('Could not update this note. Try again.'),
           findsNothing,
         );
         expect(find.textContaining('note refresh'), findsNothing);
         expect(find.textContaining('StateError'), findsNothing);
 
-        repository.getErrorAtCall = null;
+        repository.getError = null;
         await tester.tap(find.text('Undo'));
         await tester.pumpAndSettle();
 
         expect(_statusOf(repository, 2), NoteStatus.active);
         expect(find.text('Design follow-up'), findsOneWidget);
+
+        repository.getError = refreshFailure;
+        container.invalidate(notesProvider);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('notes-search-cached-error')),
+          findsOneWidget,
+        );
       }
+    },
+  );
+
+  testWidgets(
+    'committed pin refresh failure leaves one sanitized cached notice',
+    (tester) async {
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final container = await _pumpSearch(
+        tester,
+        repository: repository,
+        size: const Size(600, 1000),
+      );
+      await tester.enterText(
+        find.byKey(const Key('notes-search-field')),
+        'follow-up',
+      );
+      await tester.pumpAndSettle();
+      repository.getError = StateError(r'C:\private\notes.db refresh failed');
+
+      await tester.tap(find.byTooltip('More actions for Design follow-up'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pin note').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(
+        repository.notes.singleWhere((note) => note.id == 2).isPinned,
+        isTrue,
+      );
+      expect(container.read(notesProvider).hasError, isTrue);
+      expect(container.read(notesProvider).hasValue, isTrue);
+      expect(
+        find.byKey(const Key('notes-search-cached-error')),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Could not refresh notes. Showing saved notes.'),
+        findsOneWidget,
+      );
+      expect(find.byType(SnackBar), findsNothing);
+      expect(find.textContaining('notes.db'), findsNothing);
+      expect(find.textContaining('StateError'), findsNothing);
     },
   );
 
@@ -690,6 +745,15 @@ void main() {
         tester.getTopLeft(find.text('Zulu project')).dy,
         lessThan(tester.getTopLeft(find.text('Alpha project')).dy),
       );
+
+      await tester.tap(retry);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(notice, findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(container.read(notesProvider).hasError, isTrue);
+      expect(find.textContaining('notes.db'), findsNothing);
 
       repository.getError = null;
       await tester.tap(retry);

@@ -32,6 +32,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
 
   bool _syncingQuery = false;
   bool _filtersOpen = false;
+  Object? _mutationOwnedRefreshError;
 
   @override
   void initState() {
@@ -128,7 +129,12 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
                   return _buildState(
                     viewState: viewState,
                     showCachedRefreshError:
-                        notesState.hasError && notesState.hasValue,
+                        notesState.hasError &&
+                        notesState.hasValue &&
+                        !identical(
+                          notesState.error,
+                          _mutationOwnedRefreshError,
+                        ),
                     query: query,
                     results: results,
                     tags: tags,
@@ -394,11 +400,16 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
   }
 
   Future<void> _retry() async {
+    final currentState = ref.read(notesProvider);
+    final retryingCachedNotes = currentState.hasError && currentState.hasValue;
     try {
       final refresh = ref.refresh(notesProvider.future);
       await refresh;
+      _mutationOwnedRefreshError = null;
     } catch (_) {
-      _showError('Could not refresh notes. Try again.');
+      if (!retryingCachedNotes) {
+        _showError('Could not refresh notes. Try again.');
+      }
     }
   }
 
@@ -419,6 +430,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
   Future<void> _archive(Note note) async {
     final result = await _runMutation(
       () => ref.read(notesProvider.notifier).archiveNote(note),
+      ownsPersistedRefreshFeedback: true,
     );
     if (result != _MutationResult.failed) {
       _showUndo(
@@ -432,6 +444,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
   Future<void> _trash(Note note) async {
     final result = await _runMutation(
       () => ref.read(notesProvider.notifier).trashNote(note),
+      ownsPersistedRefreshFeedback: true,
     );
     if (result != _MutationResult.failed) {
       _showUndo(
@@ -454,11 +467,23 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
     await _runMutation(() => ref.read(notesProvider.notifier).deleteNote(id));
   }
 
-  Future<_MutationResult> _runMutation(Future<void> Function() mutation) async {
+  Future<_MutationResult> _runMutation(
+    Future<void> Function() mutation, {
+    bool ownsPersistedRefreshFeedback = false,
+  }) async {
     try {
       await mutation();
+      _mutationOwnedRefreshError = null;
       return _MutationResult.succeeded;
-    } on PersistedNoteMutationException {
+    } on PersistedNoteMutationException catch (error) {
+      final mutationOwnedError = ownsPersistedRefreshFeedback
+          ? error.cause
+          : null;
+      if (mounted) {
+        setState(() => _mutationOwnedRefreshError = mutationOwnedError);
+      } else {
+        _mutationOwnedRefreshError = mutationOwnedError;
+      }
       return _MutationResult.persistedRefreshFailure;
     } catch (_) {
       _showError('Could not update this note. Try again.');
