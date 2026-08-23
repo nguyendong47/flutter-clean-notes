@@ -41,13 +41,21 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<List<Note>>>(notesProvider, (previous, next) {
+      if (next is AsyncData<List<Note>>) {
+        _committedDeletedNoteIds.clear();
+      }
+    });
+
     final notesState = ref.watch(notesProvider);
     final selectedNotes = ref.watch(
       notesByStatusProvider(_statusFor(_section)),
     );
-    final visibleNotes = selectedNotes
-        .where((note) => !_committedDeletedNoteIds.contains(note.id))
-        .toList(growable: false);
+    final visibleNotes = notesState.hasError && notesState.hasValue
+        ? selectedNotes
+              .where((note) => !_committedDeletedNoteIds.contains(note.id))
+              .toList(growable: false)
+        : selectedNotes;
 
     return Scaffold(
       backgroundColor: Colors.transparent,

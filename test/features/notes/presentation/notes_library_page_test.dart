@@ -419,7 +419,7 @@ void main() {
   });
 
   testWidgets(
-    'committed permanent delete hides stale card and cannot be invoked again',
+    'committed delete releases its tombstone after fresh same-ID data',
     (tester) async {
       final repository = _ControlledNoteRepository.seeded(sampleNotes);
       final container = await _pumpLibrary(tester, repository: repository);
@@ -444,20 +444,50 @@ void main() {
       _expectSingleCachedRefreshNotice(tester);
       _expectNoCommittedMutationFailureUi();
 
+      final recoveredNote = _libraryNote(
+        id: 5,
+        title: 'Recovered same ID',
+        status: NoteStatus.trashed,
+      );
       repository.getErrorAtCall = null;
+      await repository.importNotes([recoveredNote]);
       container.invalidate(notesProvider);
       await container.read(notesProvider.future);
       await tester.pumpAndSettle();
 
-      _expectPermanentlyDeletedNoteUnavailable(
-        repository,
-        id: 5,
-        title: 'Discarded draft',
+      expect(
+        repository.notes.singleWhere((note) => note.id == 5).title,
+        'Recovered same ID',
+      );
+      expect(find.text('Discarded draft'), findsNothing);
+      expect(find.text('Recovered same ID'), findsOneWidget);
+      expect(
+        find.byTooltip('More actions for Recovered same ID'),
+        findsOneWidget,
       );
       expect(
         find.text('Could not update library. Showing saved notes.'),
         findsNothing,
       );
+
+      repository.getErrorAtCall = repository.getCalls + 1;
+      await expectLater(
+        container.read(notesProvider.notifier).trashNote(recoveredNote),
+        throwsA(anything),
+      );
+      await tester.pumpAndSettle();
+
+      _expectSingleCachedRefreshNotice(tester);
+      expect(find.text('Recovered same ID'), findsOneWidget);
+      final recoveredMenu = find.byTooltip(
+        'More actions for Recovered same ID',
+      );
+      expect(recoveredMenu, findsOneWidget);
+      await tester.tap(recoveredMenu);
+      await tester.pumpAndSettle();
+      expect(find.text('Delete forever'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
     },
   );
 
