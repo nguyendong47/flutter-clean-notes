@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -454,8 +454,8 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
           const SizedBox(height: 12),
           MarkdownBody(
             data: content.isEmpty ? '_Nothing to preview._' : content,
-            sizedImageBuilder: (config) {
-              final alt = config.alt?.trim();
+            imageBuilder: (_, _, altText) {
+              final alt = altText?.trim();
               final label = alt == null || alt.isEmpty
                   ? 'Image unavailable'
                   : 'Image unavailable: $alt';
