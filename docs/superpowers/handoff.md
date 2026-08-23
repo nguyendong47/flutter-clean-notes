@@ -64,11 +64,11 @@ focused widget test.
 - Three non-blocking Task 3 review notes remain for final review: repeated gutter/content-cap calculations, preview truncation at UTF-16 boundaries, and active-empty-state copy that can imply no notes exist elsewhere.
 - Three non-blocking Task 4 review notes remain: replace raw exception details with user-facing error copy while retaining diagnostics, add rendered light-theme filter-sheet coverage, and revisit the search page's private-widget file locality if it becomes a maintenance seam.
 - Six non-blocking Task 5 review notes remain: explicitly define and test busy
-  modal-barrier dismissal semantics; exercise a real duplicate submission in
-  addition to the disabled-state assertion; validate one actual accessibility
-  announcement rather than only one live-region node; add gated awaiting
-  coverage for archive-to-trash; prove refresh preserves Trash selection; and
-  update `_refresh`'s stale provider-listener comment.
+  modal-barrier dismissal semantics; avoid duplicate busy-delete announcements
+  from the semantic label and visible `Deleting…` text; validate one actual
+  accessibility announcement rather than only one live-region node; add gated
+  awaiting coverage for archive-to-trash; prove refresh preserves Trash
+  selection; and update `_refresh`'s stale provider-listener comment.
 - Task 9 owns rendered light/dark contrast inspection for search and the filter sheet; widget tests currently cover narrow light/dark search layouts and dark keyboard-safe sheet geometry.
 - Browser or native visual inspection has not replaced the final Task 9 QA contract. The current gate is based on analyzer, unit/widget tests, and independent review evidence.
 - The local execution ledger and reports are ignored by Git. They may be absent in another clone and must not replace tracked project documentation.
