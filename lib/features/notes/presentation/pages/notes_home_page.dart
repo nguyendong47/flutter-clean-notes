@@ -246,14 +246,17 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
     if (identical(_lastAnnouncedError, error)) return;
     _lastAnnouncedError = error;
     if (!mounted) return;
+    final hasCachedNotes = ref.read(notesProvider).hasValue;
     final messenger = ScaffoldMessenger.of(context);
     messenger
       ..removeCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: const Text(
-            'Could not refresh notes. Showing saved notes. Try again.',
+          content: Text(
+            hasCachedNotes
+                ? 'Could not refresh notes. Showing saved notes. Try again.'
+                : 'Could not load notes. Try again.',
           ),
         ),
       );

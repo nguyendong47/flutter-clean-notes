@@ -191,6 +191,35 @@ void main() {
     expect(find.byType(NotesEmptyState), findsOneWidget);
   });
 
+  testWidgets(
+    'failed retry without cached notes announces a sanitized load error',
+    (tester) async {
+      final repository = InMemoryNoteRepository.seeded(const [])
+        ..getError = StateError(r'C:\private\notes.db read failed');
+      await _pumpHome(tester, repository: repository);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Try again'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      const message = 'Could not load notes. Try again.';
+      expect(find.byType(NotesErrorState), findsOneWidget);
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.text(message), findsOneWidget);
+      expect(
+        find.text('Could not refresh notes. Showing saved notes. Try again.'),
+        findsNothing,
+      );
+      expect(find.textContaining('notes.db'), findsNothing);
+
+      final announcement = find.bySemanticsLabel(message);
+      expect(announcement, findsOneWidget);
+      final semantics = tester.getSemantics(announcement).getSemanticsData();
+      expect(semantics.label, message);
+      expect(semantics.flagsCollection.isLiveRegion, isTrue);
+    },
+  );
+
   testWidgets('pre-write failure restores notes without a refresh notice', (
     tester,
   ) async {
