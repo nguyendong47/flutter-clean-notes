@@ -118,6 +118,39 @@ void main() {
     expect(find.byType(AddEditNotePage), findsNothing);
   });
 
+  testWidgets('legacy six-part payload opens the persisted note by ID', (
+    tester,
+  ) async {
+    final harness = await _pumpRouter(tester);
+
+    harness.service.handleNotificationResponse(
+      NotificationResponse(
+        notificationResponseType:
+            NotificationResponseType.selectedNotificationAction,
+        actionId: NotificationService.actionOpen,
+        payload:
+            '${sampleNote.id}|Stale private title|Stale private body|4280391411|2020-01-01T00:00:00.000Z|2020-01-02T00:00:00.000Z',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AddEditNotePage), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('editor-title-field')))
+          .controller!
+          .text,
+      sampleNote.title,
+    );
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('editor-body-field')))
+          .controller!
+          .text,
+      sampleNote.content,
+    );
+  });
+
   testWidgets('notification received after mount preserves Search origin', (
     tester,
   ) async {

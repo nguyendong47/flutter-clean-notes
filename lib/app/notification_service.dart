@@ -9,25 +9,41 @@ import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 
 typedef OnNotificationTap = void Function(Note note, BuildContext context);
 
+class NotificationPermissionDeniedException implements Exception {
+  const NotificationPermissionDeniedException();
+
+  @override
+  String toString() =>
+      'NotificationPermissionDeniedException: Notification permission was not granted.';
+}
+
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService({
     FlutterLocalNotificationsPlugin? plugin,
     DateTime Function()? now,
+    Future<bool> Function()? requestPermission,
   }) {
-    if (plugin != null || now != null) {
-      return NotificationService._internal(plugin: plugin, now: now);
+    if (plugin != null || now != null || requestPermission != null) {
+      return NotificationService._internal(
+        plugin: plugin,
+        now: now,
+        requestPermission: requestPermission,
+      );
     }
     return _instance;
   }
   NotificationService._internal({
     FlutterLocalNotificationsPlugin? plugin,
     DateTime Function()? now,
+    Future<bool> Function()? requestPermission,
   }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
-       _now = now ?? DateTime.now;
+       _now = now ?? DateTime.now,
+       _requestPermissionOverride = requestPermission;
 
   final FlutterLocalNotificationsPlugin _plugin;
   final DateTime Function() _now;
+  final Future<bool> Function()? _requestPermissionOverride;
 
   OnNotificationTap? _onNotificationTap;
   GlobalKey<NavigatorState>? _navigatorKey;
@@ -48,7 +64,11 @@ class NotificationService {
   Future<void> init() async {
     tz.initializeTimeZones();
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const darwin = DarwinInitializationSettings();
+    const darwin = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
     const linux = LinuxInitializationSettings(
       defaultActionName: 'Open notification',
     );
@@ -87,25 +107,15 @@ class NotificationService {
     final payload = response.payload;
     if (payload == null) return;
 
-    final parts = payload.split('|');
-    if (parts.length < 6) return;
-
-    final id = int.tryParse(parts[0]);
-    final title = parts[1];
-    final content = parts.length > 2 ? parts[2] : '';
-    final color = int.tryParse(parts[3]) ?? 0xFF2196F3;
-    final createdAt = DateTime.tryParse(parts[4]) ?? DateTime.now();
-    final reminder = DateTime.tryParse(parts[5]);
-
+    final id = _noteIdFromPayload(payload);
     if (id == null) return;
 
     final note = Note(
       id: id,
-      title: title,
-      content: content,
-      color: color,
-      createdAt: createdAt,
-      reminder: reminder,
+      title: '',
+      content: '',
+      color: 0,
+      createdAt: DateTime.utc(1970),
     );
 
     final action = response.actionId;
@@ -116,6 +126,23 @@ class NotificationService {
     } else if (action == actionOpen || action == null || action.isEmpty) {
       _openOrQueue(note);
     }
+  }
+
+  int? _noteIdFromPayload(String payload) {
+    final opaqueParts = payload.split(':');
+    final opaqueId =
+        opaqueParts.length == 3 &&
+            opaqueParts[0] == 'note' &&
+            opaqueParts[1] == 'v1'
+        ? int.tryParse(opaqueParts[2])
+        : null;
+
+    final legacyParts = payload.split('|');
+    final legacyId = legacyParts.length == 6
+        ? int.tryParse(legacyParts[0])
+        : null;
+    final id = opaqueId ?? legacyId;
+    return id != null && id > 0 ? id : null;
   }
 
   static int snoozeDelayMinutes(String? actionId) {
@@ -177,9 +204,7 @@ class NotificationService {
   }
 
   String buildPayload(Note note) {
-    final title = note.title.replaceAll('|', '');
-    final content = note.content.replaceAll('|', '');
-    return '${note.id}|$title|$content|${note.color}|${note.createdAt.toIso8601String()}|${note.reminder?.toIso8601String() ?? ''}';
+    return 'note:v1:${note.id}';
   }
 
   Future<void> scheduleSnoozedReminder(Note note, int delayMinutes) async {
@@ -220,7 +245,7 @@ class NotificationService {
         AndroidNotificationAction(
           'snooze_$minutes',
           'Snooze $minutes min',
-          showsUserInterface: false,
+          showsUserInterface: true,
         ),
       );
     }
@@ -230,23 +255,66 @@ class NotificationService {
       'Note Reminders',
       importance: Importance.max,
       priority: Priority.high,
+      visibility: NotificationVisibility.private,
       actions: snoozeActions,
     );
 
+    final permissionGranted = await _requestNotificationPermission();
+    if (!permissionGranted) {
+      throw const NotificationPermissionDeniedException();
+    }
+
     await _plugin.zonedSchedule(
       id,
-      'Reminder: ${note.title}',
-      note.content,
+      'Note reminder',
+      'Open Aurora Notes to view your reminder.',
       tz.TZDateTime.from(reminder, tz.local),
       NotificationDetails(
         android: androidDetails,
         iOS: const DarwinNotificationDetails(),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
       payload: payload,
     );
+  }
+
+  Future<bool> _requestNotificationPermission() async {
+    final override = _requestPermissionOverride;
+    if (override != null) return override();
+
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'Scheduling reminders is not supported on the web.',
+      );
+    }
+
+    final permissionGranted = switch (defaultTargetPlatform) {
+      TargetPlatform.android =>
+        await _plugin
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >()
+            ?.requestNotificationsPermission(),
+      TargetPlatform.iOS =>
+        await _plugin
+            .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin
+            >()
+            ?.requestPermissions(alert: true, badge: true, sound: true),
+      TargetPlatform.macOS =>
+        await _plugin
+            .resolvePlatformSpecificImplementation<
+              MacOSFlutterLocalNotificationsPlugin
+            >()
+            ?.requestPermissions(alert: true, badge: true, sound: true),
+      final platform => throw UnsupportedError(
+        'Scheduling reminders is not supported on ${platform.name}.',
+      ),
+    };
+
+    return permissionGranted ?? false;
   }
 
   Future<void> cancelReminder(int id) async {

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
@@ -112,13 +114,19 @@ void main() {
     late NotificationService notificationService;
     late Note testNote;
     late DateTime now;
+    late int permissionRequests;
 
     setUp(() {
       now = DateTime.utc(2030, 1, 15, 10, 15);
+      permissionRequests = 0;
       fakePlugin = FakeFlutterLocalNotificationsPlugin();
       notificationService = NotificationService(
         plugin: fakePlugin,
         now: () => now,
+        requestPermission: () async {
+          permissionRequests += 1;
+          return true;
+        },
       );
 
       testNote = Note(
@@ -156,8 +164,18 @@ void main() {
             );
             expect(settings.iOS, isNotNull);
             expect(settings.macOS, isNotNull);
+            expect(settings.iOS!.requestAlertPermission, isFalse);
+            expect(settings.iOS!.requestBadgePermission, isFalse);
+            expect(settings.iOS!.requestSoundPermission, isFalse);
+            expect(settings.macOS!.requestAlertPermission, isFalse);
+            expect(settings.macOS!.requestBadgePermission, isFalse);
+            expect(settings.macOS!.requestSoundPermission, isFalse);
             expect(settings.linux?.defaultActionName, 'Open notification');
             expect(fakePlugin.onDidReceiveNotificationResponse, isNotNull);
+            expect(
+              fakePlugin.onDidReceiveBackgroundNotificationResponse,
+              isNull,
+            );
             expect(fakePlugin.getLaunchDetailsCalls, 1);
           },
         );
@@ -180,30 +198,73 @@ void main() {
           },
         );
       }
+
+      test(
+        'Android action receiver is registered without a Dart background callback',
+        () async {
+          final manifest = await File(
+            'android/app/src/main/AndroidManifest.xml',
+          ).readAsString();
+
+          expect(
+            manifest,
+            contains(
+              '<receiver\n'
+              '            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"\n'
+              '            android:exported="false" />',
+            ),
+          );
+        },
+      );
     });
 
     group('Reminder Scheduling', () {
       test(
-        'scheduleReminder should call plugin zonedSchedule when reminder is valid',
+        'scheduleReminder uses a private generic inexact notification when permission is granted',
         () async {
-          await notificationService.scheduleReminder(testNote);
+          final sensitiveNote = testNote.copyWith(
+            tags: const ['classified-tag'],
+          );
 
+          await notificationService.scheduleReminder(sensitiveNote);
+
+          expect(permissionRequests, 1);
           expect(fakePlugin.zonedScheduleCalls.length, equals(1));
           final call = fakePlugin.zonedScheduleCalls.first;
           expect(call.id, equals(1));
-          expect(call.title, equals('Reminder: Test Note'));
-          expect(call.body, equals('Test Content'));
+          expect(call.title, equals('Note reminder'));
+          expect(call.body, equals('Open Aurora Notes to view your reminder.'));
           expect(
             call.androidScheduleMode,
-            equals(AndroidScheduleMode.exactAllowWhileIdle),
+            equals(AndroidScheduleMode.inexactAllowWhileIdle),
           );
           expect(
             call.uiLocalNotificationDateInterpretation,
             equals(UILocalNotificationDateInterpretation.absoluteTime),
           );
+          expect(call.payload, equals('note:v1:1'));
           expect(
-            call.payload,
-            equals(notificationService.buildPayload(testNote)),
+            call.notificationDetails.android?.visibility,
+            NotificationVisibility.private,
+          );
+          final actions = call.notificationDetails.android?.actions;
+          expect(
+            actions?.map((action) => action.id),
+            orderedEquals(['snooze_5', 'snooze_15', 'snooze_30', 'snooze_60']),
+          );
+          expect(actions?.every((action) => action.showsUserInterface), isTrue);
+          final previewAndPayload =
+              '${call.title}|${call.body}|${call.payload}';
+          expect(previewAndPayload, isNot(contains(testNote.title)));
+          expect(previewAndPayload, isNot(contains(testNote.content)));
+          expect(previewAndPayload, isNot(contains('classified-tag')));
+          expect(
+            previewAndPayload,
+            isNot(contains(testNote.createdAt.toIso8601String())),
+          );
+          expect(
+            previewAndPayload,
+            isNot(contains(testNote.reminder!.toIso8601String())),
           );
         },
       );
@@ -226,6 +287,7 @@ void main() {
           );
 
           expect(fakePlugin.zonedScheduleCalls, isEmpty);
+          expect(permissionRequests, 0);
         },
       );
 
@@ -242,6 +304,7 @@ void main() {
           );
 
           expect(fakePlugin.zonedScheduleCalls, isEmpty);
+          expect(permissionRequests, 0);
         },
       );
 
@@ -261,6 +324,7 @@ void main() {
         );
 
         expect(fakePlugin.zonedScheduleCalls, isEmpty);
+        expect(permissionRequests, 0);
       });
 
       test(
@@ -279,6 +343,7 @@ void main() {
           );
 
           expect(fakePlugin.zonedScheduleCalls, isEmpty);
+          expect(permissionRequests, 0);
         },
       );
 
@@ -296,7 +361,61 @@ void main() {
         }
 
         expect(fakePlugin.zonedScheduleCalls, isEmpty);
+        expect(permissionRequests, 0);
       });
+
+      test(
+        'scheduleReminder throws a typed error without scheduling when permission is denied',
+        () async {
+          final service = NotificationService(
+            plugin: fakePlugin,
+            now: () => now,
+            requestPermission: () async {
+              permissionRequests += 1;
+              return false;
+            },
+          );
+
+          await expectLater(
+            service.scheduleReminder(testNote),
+            throwsA(isA<NotificationPermissionDeniedException>()),
+          );
+
+          expect(permissionRequests, 1);
+          expect(fakePlugin.zonedScheduleCalls, isEmpty);
+        },
+      );
+
+      for (final platform in [
+        TargetPlatform.linux,
+        TargetPlatform.windows,
+        TargetPlatform.fuchsia,
+      ]) {
+        test(
+          'scheduleReminder rejects unsupported ${platform.name} before scheduling',
+          () async {
+            debugDefaultTargetPlatformOverride = platform;
+            addTearDown(() => debugDefaultTargetPlatformOverride = null);
+            final service = NotificationService(
+              plugin: fakePlugin,
+              now: () => now,
+            );
+
+            await expectLater(
+              service.scheduleReminder(testNote),
+              throwsA(
+                isA<UnsupportedError>().having(
+                  (error) => error.message,
+                  'message',
+                  contains(platform.name),
+                ),
+              ),
+            );
+
+            expect(fakePlugin.zonedScheduleCalls, isEmpty);
+          },
+        );
+      }
     });
 
     group('Reminder Cancellation', () {
@@ -338,43 +457,43 @@ void main() {
           expect(fakePlugin.zonedScheduleCalls.length, equals(1));
           final call = fakePlugin.zonedScheduleCalls.first;
           expect(call.id, equals(1));
-          expect(call.title, equals('Reminder: Test Note'));
-          expect(call.body, equals('Test Content'));
+          expect(call.title, equals('Note reminder'));
+          expect(call.body, equals('Open Aurora Notes to view your reminder.'));
           expect(
             call.scheduledDate,
             tz.TZDateTime.from(now.add(const Duration(minutes: 15)), tz.local),
+          );
+          expect(
+            call.androidScheduleMode,
+            AndroidScheduleMode.inexactAllowWhileIdle,
           );
         },
       );
     });
 
     group('Payload Serialization', () {
-      test(
-        'buildPayload should correctly format note data and sanitize pipe characters',
-        () {
-          final noteWithPipes = Note(
-            id: 5,
-            title: 'Hello|World',
-            content: 'Foo|Bar|Baz',
-            color: 0xFF9C27B0,
-            createdAt: DateTime.parse('2026-08-16 10:00:00'),
-            reminder: DateTime.parse('2026-08-16 12:00:00'),
-          );
+      test('buildPayload contains only the version and persisted note ID', () {
+        final noteWithPipes = Note(
+          id: 5,
+          title: 'Hello|World',
+          content: 'Foo|Bar|Baz',
+          color: 0xFF9C27B0,
+          createdAt: DateTime.parse('2026-08-16 10:00:00'),
+          reminder: DateTime.parse('2026-08-16 12:00:00'),
+        );
 
-          final payload = notificationService.buildPayload(noteWithPipes);
-          expect(
-            payload,
-            equals(
-              '5|HelloWorld|FooBarBaz|4288423856|2026-08-16T10:00:00.000|2026-08-16T12:00:00.000',
-            ),
-          );
-        },
-      );
+        final payload = notificationService.buildPayload(noteWithPipes);
+        expect(payload, equals('note:v1:5'));
+        expect(payload, isNot(contains('Hello')));
+        expect(payload, isNot(contains('Foo')));
+        expect(payload, isNot(contains('4288423856')));
+        expect(payload, isNot(contains('2026-08-16')));
+      });
     });
 
     group('Response Handling', () {
       test(
-        'handleNotificationResponse should schedule snoozed reminder on snooze action',
+        'opaque payload schedules a snoozed reminder on a snooze action',
         () async {
           final payload = notificationService.buildPayload(testNote);
           final response = NotificationResponse(
@@ -385,13 +504,65 @@ void main() {
           );
 
           notificationService.handleNotificationResponse(response);
+          await pumpEventQueue();
 
           expect(fakePlugin.zonedScheduleCalls.length, equals(1));
           final call = fakePlugin.zonedScheduleCalls.first;
           expect(call.id, equals(1));
-          expect(call.title, equals('Reminder: Test Note'));
+          expect(call.title, equals('Note reminder'));
+          expect(call.payload, 'note:v1:1');
         },
       );
+
+      test('legacy six-part payload remains snooze compatible', () async {
+        final response = NotificationResponse(
+          notificationResponseType:
+              NotificationResponseType.selectedNotificationAction,
+          actionId: 'snooze_15',
+          payload:
+              '1|Legacy private title|Legacy private body|4280391411|2030-01-15T10:15:00.000Z|2030-01-15T11:15:00.000Z',
+        );
+
+        notificationService.handleNotificationResponse(response);
+        await pumpEventQueue();
+
+        expect(fakePlugin.zonedScheduleCalls, hasLength(1));
+        final call = fakePlugin.zonedScheduleCalls.single;
+        expect(call.id, 1);
+        expect(call.title, 'Note reminder');
+        expect(call.body, 'Open Aurora Notes to view your reminder.');
+        expect(call.payload, 'note:v1:1');
+      });
+
+      test('invalid or missing payload IDs are ignored without work', () async {
+        final invalidPayloads = <String?>[
+          null,
+          '',
+          'note:v1:',
+          'note:v1:not-an-id',
+          'note:v1:0',
+          'note:v1:-1',
+          'not|six|parts',
+          'not-an-id|title|body|4280391411|2030-01-15T10:15:00.000Z|2030-01-15T11:15:00.000Z',
+          '0|title|body|4280391411|2030-01-15T10:15:00.000Z|2030-01-15T11:15:00.000Z',
+          '-1|title|body|4280391411|2030-01-15T10:15:00.000Z|2030-01-15T11:15:00.000Z',
+        ];
+
+        for (final payload in invalidPayloads) {
+          notificationService.handleNotificationResponse(
+            NotificationResponse(
+              notificationResponseType:
+                  NotificationResponseType.selectedNotificationAction,
+              actionId: 'snooze_15',
+              payload: payload,
+            ),
+          );
+        }
+        await pumpEventQueue();
+
+        expect(permissionRequests, 0);
+        expect(fakePlugin.zonedScheduleCalls, isEmpty);
+      });
     });
   });
 }
