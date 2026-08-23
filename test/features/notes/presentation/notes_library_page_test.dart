@@ -420,53 +420,135 @@ void main() {
     expect(find.text('Discarded draft'), findsNothing);
   });
 
-  testWidgets('committed delete warns once when reminder cancellation fails', (
-    tester,
-  ) async {
-    final repository = _ControlledNoteRepository.seeded(sampleNotes);
-    final reminderGateway = FakeNoteReminderGateway()
-      ..cancelError = StateError('private cancellation details');
-    await _pumpLibrary(
-      tester,
-      repository: repository,
-      reminderGateway: reminderGateway,
-    );
-    await _selectTrash(tester);
-    await _openDeleteDialog(tester, 'Discarded draft');
+  testWidgets(
+    'committed delete retries reminder cancellation without deleting again',
+    (tester) async {
+      final repository = _ControlledNoteRepository.seeded(sampleNotes);
+      final reminderGateway = FakeNoteReminderGateway()
+        ..cancelError = StateError('private cancellation details');
+      await _pumpLibrary(
+        tester,
+        repository: repository,
+        reminderGateway: reminderGateway,
+      );
+      await _selectTrash(tester);
+      await _openDeleteDialog(tester, 'Discarded draft');
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Delete forever'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete forever'));
+      await tester.pumpAndSettle();
 
-    expect(find.byType(AlertDialog), findsNothing);
-    _expectPermanentlyDeletedNoteUnavailable(
-      repository,
-      id: 5,
-      title: 'Discarded draft',
-    );
-    expect(reminderGateway.cancelled, [5]);
-    const warning = 'Note deleted, but its reminder could not be cancelled.';
-    expect(find.text(warning), findsOneWidget);
-    expect(
-      tester.getSemantics(find.text(warning)).flagsCollection.isLiveRegion,
-      isTrue,
-    );
-    expect(find.byType(SnackBar), findsOneWidget);
-    expect(
-      find.text('Could not update library. Showing saved notes.'),
-      findsNothing,
-    );
-    expect(
-      find.text('Could not delete “Discarded draft”. Try again.'),
-      findsNothing,
-    );
-    expect(find.textContaining('private cancellation details'), findsNothing);
-    expect(find.textContaining('StateError'), findsNothing);
-    expect(find.textContaining('PersistedNoteMutationException'), findsNothing);
+      expect(find.byType(AlertDialog), findsNothing);
+      _expectPermanentlyDeletedNoteUnavailable(
+        repository,
+        id: 5,
+        title: 'Discarded draft',
+      );
+      expect(reminderGateway.cancelled, [5]);
+      const warning = 'Note deleted, but its reminder could not be cancelled.';
+      expect(find.text(warning), findsOneWidget);
+      expect(
+        tester.getSemantics(find.text(warning)).flagsCollection.isLiveRegion,
+        isTrue,
+      );
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
+      expect(
+        find.text('Could not update library. Showing saved notes.'),
+        findsNothing,
+      );
+      expect(
+        find.text('Could not delete “Discarded draft”. Try again.'),
+        findsNothing,
+      );
+      expect(find.textContaining('private cancellation details'), findsNothing);
+      expect(find.textContaining('StateError'), findsNothing);
+      expect(
+        find.textContaining('PersistedNoteMutationException'),
+        findsNothing,
+      );
 
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(find.text(warning), findsOneWidget);
-    expect(find.byType(SnackBar), findsOneWidget);
-  });
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.text(warning), findsOneWidget);
+      expect(find.byType(SnackBar), findsOneWidget);
+
+      reminderGateway.cancelError = null;
+      await tester.tap(find.widgetWithText(SnackBarAction, 'Retry'));
+      await tester.pumpAndSettle();
+
+      expect(repository.deleteCalls, 1);
+      expect(repository.notes.any((note) => note.id == 5), isFalse);
+      expect(reminderGateway.cancelled, [5, 5]);
+      const success = 'Reminder cancelled.';
+      expect(find.text(success), findsOneWidget);
+      expect(
+        tester.getSemantics(find.text(success)).flagsCollection.isLiveRegion,
+        isTrue,
+      );
+      expect(find.text(warning), findsNothing);
+      expect(find.widgetWithText(SnackBarAction, 'Retry'), findsNothing);
+      expect(find.textContaining('private cancellation details'), findsNothing);
+      expect(find.textContaining('StateError'), findsNothing);
+      expect(find.text('Library'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'failed cancellation retry keeps one retry path and coalesces duplicate taps',
+    (tester) async {
+      // Catches Retry re-running deletion, leaking platform errors, or issuing
+      // overlapping cancellation calls when the action is triggered twice.
+      final repository = _ControlledNoteRepository.seeded(sampleNotes);
+      final reminderGateway = FakeNoteReminderGateway()
+        ..cancelError = StateError('initial private cancellation details');
+      await _pumpLibrary(
+        tester,
+        repository: repository,
+        reminderGateway: reminderGateway,
+      );
+      await _selectTrash(tester);
+      await _openDeleteDialog(tester, 'Discarded draft');
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete forever'));
+      await tester.pumpAndSettle();
+
+      const warning = 'Note deleted, but its reminder could not be cancelled.';
+      expect(find.text(warning), findsOneWidget);
+      final cancelGate = Completer<void>();
+      reminderGateway
+        ..cancelGate = cancelGate
+        ..cancelError = StateError('retry private cancellation details');
+      final action = tester.widget<SnackBarAction>(
+        find.widgetWithText(SnackBarAction, 'Retry'),
+      );
+
+      action.onPressed();
+      action.onPressed();
+      await tester.pump();
+
+      expect(reminderGateway.cancelled, [5, 5]);
+      expect(repository.deleteCalls, 1);
+
+      cancelGate.complete();
+      await tester.pumpAndSettle();
+
+      expect(reminderGateway.cancelled, [5, 5]);
+      expect(repository.deleteCalls, 1);
+      expect(repository.notes.any((note) => note.id == 5), isFalse);
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.text(warning), findsOneWidget);
+      expect(
+        tester.getSemantics(find.text(warning)).flagsCollection.isLiveRegion,
+        isTrue,
+      );
+      expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
+      expect(
+        find.textContaining('retry private cancellation details'),
+        findsNothing,
+      );
+      expect(find.textContaining('StateError'), findsNothing);
+      expect(find.text('Library'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'committed delete releases its tombstone after fresh same-ID data',

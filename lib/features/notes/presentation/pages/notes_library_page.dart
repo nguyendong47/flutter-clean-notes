@@ -29,6 +29,7 @@ class NotesLibraryPage extends ConsumerStatefulWidget {
 class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
   final ScrollController _scrollController = ScrollController();
   final Set<int> _committedDeletedNoteIds = <int>{};
+  final Set<int> _reminderCancellationRetries = <int>{};
 
   LibrarySection _section = LibrarySection.archived;
   bool _deleteDialogOpen = false;
@@ -237,7 +238,9 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
     final originFocus = FocusManager.instance.primaryFocus;
     try {
       final result =
-          await showDialog<({PersistedNoteMutationFailureKind? failureKind})>(
+          await showDialog<
+            ({int noteId, PersistedNoteMutationFailureKind? failureKind})
+          >(
             context: context,
             builder: (context) => _DeleteForeverDialog(
               note: note,
@@ -246,10 +249,10 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
             ),
           );
       if (result != null && mounted) {
-        setState(() => _committedDeletedNoteIds.add(note.id!));
+        setState(() => _committedDeletedNoteIds.add(result.noteId));
         if (result.failureKind ==
             PersistedNoteMutationFailureKind.reminderCancellation) {
-          _showReminderCancellationWarning();
+          _showReminderCancellationWarning(result.noteId);
         }
       }
     } finally {
@@ -264,7 +267,8 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
     }
   }
 
-  void _showReminderCancellationWarning() {
+  void _showReminderCancellationWarning(int noteId) {
+    if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger
       ..removeCurrentSnackBar()
@@ -277,8 +281,36 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
               'Note deleted, but its reminder could not be cancelled.',
             ),
           ),
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: () => unawaited(_retryReminderCancellation(noteId)),
+          ),
         ),
       );
+  }
+
+  Future<void> _retryReminderCancellation(int noteId) async {
+    if (!_reminderCancellationRetries.add(noteId)) return;
+    try {
+      await ref.read(notesProvider.notifier).retryReminderCancellation(noteId);
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            content: Semantics(
+              liveRegion: true,
+              child: const Text('Reminder cancelled.'),
+            ),
+          ),
+        );
+    } catch (_) {
+      if (mounted) _showReminderCancellationWarning(noteId);
+    } finally {
+      _reminderCancellationRetries.remove(noteId);
+    }
   }
 }
 
@@ -316,7 +348,11 @@ class _DeleteForeverDialogState extends State<_DeleteForeverDialog> {
       }
       return;
     }
-    if (mounted) Navigator.of(context).pop((failureKind: failureKind));
+    if (mounted) {
+      Navigator.of(
+        context,
+      ).pop((noteId: widget.note.id!, failureKind: failureKind));
+    }
   }
 
   @override

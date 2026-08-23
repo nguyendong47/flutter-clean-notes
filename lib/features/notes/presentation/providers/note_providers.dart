@@ -208,6 +208,7 @@ NoteStatus _statusForMode(NoteMode mode) {
 @riverpod
 class NotesNotifier extends _$NotesNotifier {
   Future<void> _mutationQueue = Future<void>.value();
+  final Map<int, Future<void>> _reminderCancellationRetries = {};
 
   @override
   FutureOr<List<Note>> build() async {
@@ -478,6 +479,25 @@ class NotesNotifier extends _$NotesNotifier {
       afterCommitFailureKind:
           PersistedNoteMutationFailureKind.reminderCancellation,
     );
+  }
+
+  Future<void> retryReminderCancellation(int id) {
+    final pending = _reminderCancellationRetries[id];
+    if (pending != null) return pending;
+
+    final keepAlive = ref.keepAlive();
+    late final Future<void> retry;
+    retry =
+        Future<void>.sync(
+          () => ref.read(noteReminderGatewayProvider).cancel(id),
+        ).whenComplete(() {
+          if (identical(_reminderCancellationRetries[id], retry)) {
+            _reminderCancellationRetries.remove(id);
+          }
+          keepAlive.close();
+        });
+    _reminderCancellationRetries[id] = retry;
+    return retry;
   }
 
   Future<void> cleanupTrash() {

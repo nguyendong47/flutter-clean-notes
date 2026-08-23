@@ -870,6 +870,43 @@ void main() {
   });
 
   test(
+    'reminder cancellation recovery coalesces overlap and can retry failure',
+    () async {
+      // Catches two recovery calls reaching the platform gateway concurrently,
+      // or a failed attempt permanently blocking later recovery.
+      final repository = InMemoryNoteRepository.seeded(const []);
+      final cancelGate = Completer<void>();
+      final failure = StateError('cancel retry failed');
+      final gateway = FakeNoteReminderGateway()
+        ..cancelGate = cancelGate
+        ..cancelError = failure;
+      final container = _container(repository, gateway);
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+      final notifier = container.read(notesProvider.notifier);
+
+      final first = notifier.retryReminderCancellation(41);
+      final second = notifier.retryReminderCancellation(41);
+      final firstFailure = expectLater(first, throwsA(same(failure)));
+      final secondFailure = expectLater(second, throwsA(same(failure)));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(gateway.cancelled, [41]);
+
+      cancelGate.complete();
+      await Future.wait([firstFailure, secondFailure]);
+      gateway
+        ..cancelGate = null
+        ..cancelError = null;
+
+      await notifier.retryReminderCancellation(41);
+
+      expect(gateway.cancelled, [41, 41]);
+      expect(repository.notes, isEmpty);
+    },
+  );
+
+  test(
     'post-ID gateway failure exposes a defensive persisted snapshot',
     () async {
       final repository = InMemoryNoteRepository.seeded(const []);
