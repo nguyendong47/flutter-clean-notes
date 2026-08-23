@@ -189,7 +189,7 @@ void main() {
       expect(clearSemantics.tooltip, 'Clear search');
       expect(clearSemantics.hasAction(SemanticsAction.tap), isTrue);
       final filterSemantics = tester
-          .getSemantics(find.bySemanticsLabel('Filter search results'))
+          .getSemantics(find.bySemanticsLabel('Search filters, 0 active'))
           .getSemanticsData();
       expect(filterSemantics.hasAction(SemanticsAction.tap), isTrue);
       expect(filterSemantics.flagsCollection.isExpanded, Tristate.isFalse);

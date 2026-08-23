@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,8 +9,11 @@ import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/search_focus_request.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/glass_note_card.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/note_filter_sheet.dart';
+
+const _searchHeaderItemCount = 5;
 
 class NotesSearchPage extends ConsumerStatefulWidget {
   const NotesSearchPage({super.key, this.onOpenNote});
@@ -66,9 +71,18 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
     final tags = ref.watch(homeTagsProvider);
     final selectedTag = ref.watch(selectedTagProvider);
     final sort = ref.watch(sortOrderProvider);
+    final viewState = _resolveSearchViewState(
+      notesState: notesState,
+      query: query,
+      results: results,
+    );
+    final activeFilterCount =
+        (selectedTag == null ? 0 : 1) + (sort == NoteSort.newest ? 0 : 1);
     final duration = mediaQuery.disableAnimations
         ? Duration.zero
         : const Duration(milliseconds: 200);
+    final showingResults = viewState == _SearchViewState.results;
+    final resultCount = showingResults ? results.length : 0;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -76,7 +90,8 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final horizontalInset = _horizontalInset(constraints.maxWidth);
-            return ListView(
+            return ListView.builder(
+              key: const PageStorageKey('notes-search-scroll'),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: EdgeInsets.fromLTRB(
                 horizontalInset,
@@ -84,31 +99,64 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
                 horizontalInset,
                 mediaQuery.viewInsets.bottom + 120,
               ),
-              children: [
-                Text(
-                  'Search',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _buildSearchBar(query),
-                const SizedBox(height: 16),
-                AnimatedSwitcher(
-                  key: const Key('notes-search-switcher'),
-                  duration: duration,
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  child: _buildState(
-                    notesState: notesState,
+              itemCount: _searchHeaderItemCount + resultCount,
+              findChildIndexCallback: (key) {
+                if (!showingResults) return null;
+                final resultIndex = results.indexWhere(
+                  (note) =>
+                      key == ValueKey<String>('search-result-note-${note.id}'),
+                );
+                if (resultIndex == -1) return null;
+                return _searchHeaderItemCount + resultIndex;
+              },
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return Text(
+                    'Search',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  );
+                }
+                if (index == 1 || index == 3) {
+                  return const SizedBox(height: 16);
+                }
+                if (index == 2) {
+                  return _buildSearchBar(query, activeFilterCount);
+                }
+                if (index == 4) {
+                  return _buildState(
+                    viewState: viewState,
                     query: query,
                     results: results,
                     tags: tags,
                     selectedTag: selectedTag,
                     sort: sort,
+                    duration: duration,
+                  );
+                }
+
+                final resultIndex = index - _searchHeaderItemCount;
+                final note = results[resultIndex];
+                return Padding(
+                  key: ValueKey<String>('search-result-note-${note.id}'),
+                  padding: EdgeInsets.only(
+                    bottom: resultIndex == results.length - 1 ? 0 : 12,
                   ),
-                ),
-              ],
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: GlassNoteCard(
+                      note: note,
+                      onOpen: () => _openNote(note),
+                      onTogglePin: () => _togglePin(note),
+                      onArchive: () => _archive(note),
+                      onTrash: () => _trash(note),
+                      onRestore: () => _restore(note),
+                      onDelete: () => _delete(note),
+                    ),
+                  ),
+                );
+              },
             );
           },
         ),
@@ -116,8 +164,9 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
     );
   }
 
-  Widget _buildSearchBar(String query) {
+  Widget _buildSearchBar(String query, int activeFilterCount) {
     final colorScheme = Theme.of(context).colorScheme;
+    final filterLabel = 'Search filters, $activeFilterCount active';
     return GlassSurface(
       borderRadius: const BorderRadius.all(Radius.circular(16)),
       padding: EdgeInsets.zero,
@@ -157,7 +206,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
                 ),
               ),
             Semantics(
-              label: 'Filter search results',
+              label: filterLabel,
               button: true,
               expanded: _filtersOpen,
               onTap: _openFilters,
@@ -168,7 +217,38 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
                 child: IconButton(
                   tooltip: 'Filter search results',
                   onPressed: _openFilters,
-                  icon: const Icon(Icons.tune),
+                  icon: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Icon(Icons.tune),
+                      if (activeFilterCount > 0)
+                        PositionedDirectional(
+                          top: -8,
+                          end: -10,
+                          child: Container(
+                            key: const Key('notes-search-filter-badge'),
+                            constraints: const BoxConstraints(
+                              minWidth: 18,
+                              minHeight: 18,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '$activeFilterCount',
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: colorScheme.onPrimary,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -179,64 +259,66 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
   }
 
   Widget _buildState({
-    required AsyncValue<List<Note>> notesState,
+    required _SearchViewState viewState,
     required String query,
     required List<Note> results,
     required List<String> tags,
     required String? selectedTag,
     required NoteSort sort,
+    required Duration duration,
   }) {
-    if (!notesState.hasValue && notesState.isLoading) {
-      return const _LoadingState(key: ValueKey('loading'));
-    }
-    if (!notesState.hasValue && notesState.hasError) {
-      return _InitialErrorState(
+    final state = switch (viewState) {
+      _SearchViewState.loading => const _LoadingState(key: ValueKey('loading')),
+      _SearchViewState.initialError => _InitialErrorState(
         key: const ValueKey('initial-error'),
         onRetry: _retry,
-      );
-    }
-
-    final notes = notesState.value ?? const <Note>[];
-    final cachedError = notesState.hasError;
-    final state = switch ((
-      notes.isEmpty,
-      query.trim().isEmpty,
-      results.isEmpty,
-    )) {
-      (true, _, _) => const _NoNotesState(key: ValueKey('no-notes')),
-      (false, true, _) => _SearchInvitation(
+      ),
+      _SearchViewState.noNotes => const _NoNotesState(
+        key: ValueKey('no-notes'),
+      ),
+      _SearchViewState.invitation => _SearchInvitation(
         key: const ValueKey('invitation'),
         tags: tags,
         onTagSelected: _searchTag,
       ),
-      (false, false, true) => _NoMatchesState(
-        key: ValueKey('no-match-$query-$selectedTag-$sort'),
+      _SearchViewState.noMatches => _NoMatchesState(
+        key: const ValueKey('no-matches'),
         query: query.trim(),
         hasFilters: selectedTag != null || sort != NoteSort.newest,
         onClear: _clearSearch,
         onResetFilters: _resetFilters,
       ),
-      _ => _SearchResults(
-        key: ValueKey('results-$query-$selectedTag-$sort'),
-        notes: results,
-        onOpen: _openNote,
-        onTogglePin: _togglePin,
-        onArchive: _archive,
-        onTrash: _trash,
-        onRestore: _restore,
-        onDelete: _delete,
+      _SearchViewState.results => const SizedBox.shrink(
+        key: ValueKey('results'),
       ),
+    };
+    final searchStatus = switch (viewState) {
+      _SearchViewState.results => _SearchStatus(
+        label:
+            '${results.length} ${results.length == 1 ? 'result' : 'results'}',
+        visible: true,
+      ),
+      _SearchViewState.noMatches => const _SearchStatus(
+        label: 'No notes match your search',
+        visible: false,
+      ),
+      _ => null,
     };
 
     return Column(
-      key: ValueKey('search-state-$query-$selectedTag-$sort-$cachedError'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (cachedError) ...[
-          const _CachedErrorNotice(),
-          const SizedBox(height: 12),
+        if (searchStatus != null) ...[
+          searchStatus,
+          if (viewState == _SearchViewState.results) const SizedBox(height: 12),
         ],
-        state,
+        AnimatedSwitcher(
+          key: const Key('notes-search-switcher'),
+          duration: duration,
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          child: state,
+        ),
       ],
     );
   }
@@ -308,8 +390,8 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
     try {
       final refresh = ref.refresh(notesProvider.future);
       await refresh;
-    } catch (error) {
-      _showError(error);
+    } catch (_) {
+      _showError('Could not refresh notes. Try again.');
     }
   }
 
@@ -323,49 +405,71 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
     if (id != null) context.push('/note/$id');
   }
 
-  Future<void> _togglePin(Note note) {
-    return _runMutation(() => ref.read(notesProvider.notifier).togglePin(note));
+  Future<void> _togglePin(Note note) async {
+    await _runMutation(() => ref.read(notesProvider.notifier).togglePin(note));
   }
 
-  Future<void> _archive(Note note) {
-    return _runMutation(
+  Future<void> _archive(Note note) async {
+    final succeeded = await _runMutation(
       () => ref.read(notesProvider.notifier).archiveNote(note),
     );
+    if (succeeded) _showUndo(note, 'Note archived');
   }
 
-  Future<void> _trash(Note note) {
-    return _runMutation(() => ref.read(notesProvider.notifier).trashNote(note));
+  Future<void> _trash(Note note) async {
+    final succeeded = await _runMutation(
+      () => ref.read(notesProvider.notifier).trashNote(note),
+    );
+    if (succeeded) _showUndo(note, 'Note moved to trash');
   }
 
-  Future<void> _restore(Note note) {
-    return _runMutation(
+  Future<void> _restore(Note note) async {
+    await _runMutation(
       () => ref.read(notesProvider.notifier).restoreNote(note),
     );
   }
 
-  Future<void> _delete(Note note) {
+  Future<void> _delete(Note note) async {
     final id = note.id;
-    if (id == null) return Future.value();
-    return _runMutation(() => ref.read(notesProvider.notifier).deleteNote(id));
+    if (id == null) return;
+    await _runMutation(() => ref.read(notesProvider.notifier).deleteNote(id));
   }
 
-  Future<void> _runMutation(Future<void> Function() mutation) async {
+  Future<bool> _runMutation(Future<void> Function() mutation) async {
     try {
       await mutation();
-    } catch (error) {
-      _showError(error);
+      return true;
+    } on PersistedNoteMutationException {
+      return true;
+    } catch (_) {
+      _showError('Could not update this note. Try again.');
+      return false;
     }
   }
 
-  void _showError(Object error) {
+  void _showUndo(Note note, String message) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(message),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => unawaited(_restore(note)),
+          ),
+        ),
+      );
+  }
+
+  void _showError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..removeCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: Text('Could not update notes: $error'),
-        ),
+        SnackBar(behavior: SnackBarBehavior.floating, content: Text(message)),
       );
   }
 }
@@ -393,7 +497,7 @@ class _InitialErrorState extends StatelessWidget {
     return _CenteredState(
       icon: Icons.cloud_off_outlined,
       title: 'Could not load notes',
-      body: 'Check your connection and try again.',
+      body: 'Please try again in a moment.',
       action: SizedBox(
         height: 48,
         child: FilledButton(onPressed: onRetry, child: const Text('Try again')),
@@ -530,89 +634,29 @@ class _NoMatchesState extends StatelessWidget {
   }
 }
 
-class _SearchResults extends StatelessWidget {
-  const _SearchResults({
-    required this.notes,
-    required this.onOpen,
-    required this.onTogglePin,
-    required this.onArchive,
-    required this.onTrash,
-    required this.onRestore,
-    required this.onDelete,
-    super.key,
-  });
+class _SearchStatus extends StatelessWidget {
+  const _SearchStatus({required this.label, required this.visible});
 
-  final List<Note> notes;
-  final ValueChanged<Note> onOpen;
-  final Future<void> Function(Note) onTogglePin;
-  final Future<void> Function(Note) onArchive;
-  final Future<void> Function(Note) onTrash;
-  final Future<void> Function(Note) onRestore;
-  final Future<void> Function(Note) onDelete;
+  final String label;
+  final bool visible;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          '${notes.length} ${notes.length == 1 ? 'result' : 'results'}',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 12),
-        for (var index = 0; index < notes.length; index++) ...[
-          if (index > 0) const SizedBox(height: 12),
-          SizedBox(
-            key: ValueKey('search-result-note-${notes[index].id}'),
-            width: double.infinity,
-            child: GlassNoteCard(
-              note: notes[index],
-              onOpen: () => onOpen(notes[index]),
-              onTogglePin: () => onTogglePin(notes[index]),
-              onArchive: () => onArchive(notes[index]),
-              onTrash: () => onTrash(notes[index]),
-              onRestore: () => onRestore(notes[index]),
-              onDelete: () => onDelete(notes[index]),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _CachedErrorNotice extends StatelessWidget {
-  const _CachedErrorNotice();
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Semantics(
+      key: const Key('notes-search-status'),
+      container: true,
       liveRegion: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: colorScheme.errorContainer,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_outline, color: colorScheme.onErrorContainer),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Could not refresh notes. Showing saved notes.',
-                  style: TextStyle(color: colorScheme.onErrorContainer),
-                ),
+      label: label,
+      child: visible
+          ? ExcludeSemantics(
+              child: Text(
+                label,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
-            ],
-          ),
-        ),
-      ),
+            )
+          : const SizedBox.shrink(),
     );
   }
 }
@@ -667,4 +711,32 @@ class _CenteredState extends StatelessWidget {
 double _horizontalInset(double viewportWidth) {
   final gutter = viewportWidth >= 600 ? 24.0 : 16.0;
   return ((viewportWidth - 840) / 2).clamp(gutter, double.infinity).toDouble();
+}
+
+enum _SearchViewState {
+  loading,
+  initialError,
+  noNotes,
+  invitation,
+  noMatches,
+  results,
+}
+
+_SearchViewState _resolveSearchViewState({
+  required AsyncValue<List<Note>> notesState,
+  required String query,
+  required List<Note> results,
+}) {
+  if (!notesState.hasValue && notesState.isLoading) {
+    return _SearchViewState.loading;
+  }
+  if (!notesState.hasValue && notesState.hasError) {
+    return _SearchViewState.initialError;
+  }
+
+  final notes = notesState.value ?? const <Note>[];
+  if (notes.isEmpty) return _SearchViewState.noNotes;
+  if (query.trim().isEmpty) return _SearchViewState.invitation;
+  if (results.isEmpty) return _SearchViewState.noMatches;
+  return _SearchViewState.results;
 }

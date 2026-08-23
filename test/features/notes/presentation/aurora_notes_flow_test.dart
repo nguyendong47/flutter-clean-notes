@@ -77,7 +77,13 @@ void main() {
         find.descendant(of: results, matching: find.byType(Scrollable)).first,
       );
       final result = find.bySemanticsLabel('Open note Aurora result 4');
-      await tester.ensureVisible(result);
+      await tester.scrollUntilVisible(
+        result,
+        200,
+        scrollable: find
+            .descendant(of: results, matching: find.byType(Scrollable))
+            .first,
+      );
       await tester.pumpAndSettle();
       final offset = scrollable.position.pixels;
       expect(offset, greaterThan(0));

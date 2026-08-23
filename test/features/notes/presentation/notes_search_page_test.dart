@@ -7,6 +7,7 @@ import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_search_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/search_focus_request.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/widgets/glass_note_card.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -126,7 +127,7 @@ void main() {
     await tester.tap(find.byKey(const Key('notes-search-filter')));
     await tester.pumpAndSettle();
     final filterSemantics = tester
-        .getSemantics(find.bySemanticsLabel('Filter search results'))
+        .getSemantics(find.bySemanticsLabel('Search filters, 0 active'))
         .getSemanticsData();
     expect(filterSemantics.flagsCollection.isExpanded, Tristate.isTrue);
 
@@ -150,6 +151,19 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Done'));
     await tester.pumpAndSettle();
 
+    final closedFilter = find.bySemanticsLabel('Search filters, 2 active');
+    expect(closedFilter, findsOneWidget);
+    expect(
+      tester.getSemantics(closedFilter).flagsCollection.isExpanded,
+      Tristate.isFalse,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('notes-search-filter-badge')),
+        matching: find.text('2'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Middle project'), findsNothing);
     expect(find.text('Zulu project'), findsOneWidget);
     expect(find.text('Alpha project'), findsOneWidget);
@@ -158,6 +172,61 @@ void main() {
       lessThan(tester.getTopLeft(find.text('Alpha project')).dy),
     );
   });
+
+  testWidgets(
+    'Reset filters restores matching notes in newest order and clears badge',
+    (tester) async {
+      final notes = [
+        _note(1, 'Alpha project', const ['work'], DateTime.utc(2026, 1, 1)),
+        _note(2, 'Zulu project', const ['work'], DateTime.utc(2026, 1, 3)),
+        _note(3, 'Middle project', const [
+          'personal',
+        ], DateTime.utc(2026, 1, 2)),
+        _note(4, 'Blocked thought', const [
+          'blocked',
+        ], DateTime.utc(2026, 1, 4)),
+      ];
+      await _pumpSearch(
+        tester,
+        repository: InMemoryNoteRepository.seeded(notes),
+        size: const Size(600, 1000),
+      );
+      await tester.enterText(
+        find.byKey(const Key('notes-search-field')),
+        'project',
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('notes-search-filter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-tag-blocked')));
+      await tester.tap(find.byKey(const Key('sort-option-titleZA')));
+      await tester.tap(find.widgetWithText(FilledButton, 'Done'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('notes-search-filter-badge')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('No notes match'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Reset filters'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('notes-search-filter-badge')), findsNothing);
+      expect(find.text('Zulu project'), findsOneWidget);
+      expect(find.text('Middle project'), findsOneWidget);
+      expect(find.text('Alpha project'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Zulu project')).dy,
+        lessThan(tester.getTopLeft(find.text('Middle project')).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('Middle project')).dy,
+        lessThan(tester.getTopLeft(find.text('Alpha project')).dy),
+      );
+    },
+  );
 
   testWidgets('tapping a full-width result opens the selected note', (
     tester,
@@ -183,6 +252,291 @@ void main() {
     await tester.pump();
     expect(opened, same(sampleNote));
   });
+
+  testWidgets(
+    'archive and trash wait for persistence then disappear with working Undo',
+    (tester) async {
+      for (final scenario in <({String action, NoteStatus status})>[
+        (action: 'Archive', status: NoteStatus.archived),
+        (action: 'Move to trash', status: NoteStatus.trashed),
+      ]) {
+        final repository = _GatedStatusRepository(sampleNotes);
+        await _pumpSearch(
+          tester,
+          repository: repository,
+          size: const Size(600, 1000),
+        );
+        await tester.enterText(
+          find.byKey(const Key('notes-search-field')),
+          'follow-up',
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byTooltip('More actions for Design follow-up'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(scenario.action).last);
+        await tester.pump();
+
+        expect(find.text('Design follow-up'), findsOneWidget);
+        expect(_statusOf(repository, 2), NoteStatus.active);
+        expect(find.text('Undo'), findsNothing);
+        expect(find.byType(SnackBar), findsNothing);
+
+        repository.release();
+        await tester.pumpAndSettle();
+
+        expect(_statusOf(repository, 2), scenario.status);
+        expect(find.text('Design follow-up'), findsNothing);
+        expect(find.text('Undo'), findsOneWidget);
+        expect(
+          tester.widget<SnackBar>(find.byType(SnackBar)).behavior,
+          SnackBarBehavior.floating,
+        );
+
+        await tester.tap(find.text('Undo'));
+        await tester.pumpAndSettle();
+
+        expect(_statusOf(repository, 2), NoteStatus.active);
+        expect(find.text('Design follow-up'), findsOneWidget);
+      }
+    },
+  );
+
+  testWidgets(
+    'archive and trash failures keep results and show only neutral copy',
+    (tester) async {
+      for (final action in ['Archive', 'Move to trash']) {
+        final repository = _GatedStatusRepository(
+          sampleNotes,
+          failure: StateError('sensitive storage failure'),
+        );
+        await _pumpSearch(
+          tester,
+          repository: repository,
+          size: const Size(600, 1000),
+        );
+        await tester.enterText(
+          find.byKey(const Key('notes-search-field')),
+          'follow-up',
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byTooltip('More actions for Design follow-up'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(action).last);
+        await tester.pump();
+
+        expect(find.text('Design follow-up'), findsOneWidget);
+        expect(find.text('Undo'), findsNothing);
+        repository.release();
+        await tester.pumpAndSettle();
+
+        expect(_statusOf(repository, 2), NoteStatus.active);
+        expect(find.text('Design follow-up'), findsOneWidget);
+        expect(find.text('Undo'), findsNothing);
+        expect(
+          find.text('Could not update this note. Try again.'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('sensitive storage failure'), findsNothing);
+      }
+    },
+  );
+
+  testWidgets(
+    'committed archive with refresh failure still succeeds and Undo restores',
+    (tester) async {
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      await _pumpSearch(
+        tester,
+        repository: repository,
+        size: const Size(600, 1000),
+      );
+      await tester.enterText(
+        find.byKey(const Key('notes-search-field')),
+        'follow-up',
+      );
+      await tester.pumpAndSettle();
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      await tester.tap(find.byTooltip('More actions for Design follow-up'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive').last);
+      await tester.pumpAndSettle();
+
+      expect(_statusOf(repository, 2), NoteStatus.archived);
+      expect(find.text('Note archived'), findsOneWidget);
+      expect(find.text('Undo'), findsOneWidget);
+      expect(find.text('Could not update this note. Try again.'), findsNothing);
+
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      expect(_statusOf(repository, 2), NoteStatus.active);
+      expect(find.text('Design follow-up'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'busy result keeps its card-local progress when sort reorders the list',
+    (tester) async {
+      final notes = [
+        _note(1, 'Alpha project', const ['work'], DateTime.utc(2026, 1, 3)),
+        _note(2, 'Zulu project', const ['work'], DateTime.utc(2026, 1, 1)),
+      ];
+      final repository = _GatedStatusRepository(notes);
+      final container = await _pumpSearch(
+        tester,
+        repository: repository,
+        size: const Size(600, 1000),
+      );
+      await tester.enterText(
+        find.byKey(const Key('notes-search-field')),
+        'project',
+      );
+      await tester.pumpAndSettle();
+
+      const alphaKey = ValueKey('search-result-note-1');
+      const zuluKey = ValueKey('search-result-note-2');
+      final list = tester.widget<ListView>(
+        find.byKey(const PageStorageKey('notes-search-scroll')),
+      );
+      final delegate = list.childrenDelegate as SliverChildBuilderDelegate;
+      expect(delegate.findChildIndexCallback, isNotNull);
+      expect(delegate.findChildIndexCallback!(alphaKey), 5);
+      expect(delegate.findChildIndexCallback!(zuluKey), 6);
+
+      await tester.tap(find.byTooltip('More actions for Alpha project'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive').last);
+      await tester.pump();
+
+      expect(find.byKey(const Key('notes-search-loading')), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(alphaKey),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+
+      container.read(sortOrderProvider.notifier).set(NoteSort.titleZA);
+      await tester.pump();
+
+      final reorderedList = tester.widget<ListView>(
+        find.byKey(const PageStorageKey('notes-search-scroll')),
+      );
+      final reorderedDelegate =
+          reorderedList.childrenDelegate as SliverChildBuilderDelegate;
+      expect(reorderedDelegate.findChildIndexCallback!(zuluKey), 5);
+      expect(reorderedDelegate.findChildIndexCallback!(alphaKey), 6);
+      expect(find.byKey(const Key('notes-search-loading')), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(alphaKey),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(zuluKey),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsNothing,
+      );
+
+      repository.release();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('rapid query changes never retain duplicate result keys', (
+    tester,
+  ) async {
+    final container = await _pumpSearch(
+      tester,
+      repository: InMemoryNoteRepository.seeded(sampleNotes),
+    );
+    final field = find.byKey(const Key('notes-search-field'));
+    const result = Key('search-result-note-1');
+    Key? animatedStateKey() => tester
+        .widget<AnimatedSwitcher>(
+          find.byKey(const Key('notes-search-switcher')),
+        )
+        .child
+        ?.key;
+
+    await tester.enterText(field, 'Aurora');
+    await tester.pumpAndSettle();
+    expect(find.byKey(result), findsOneWidget);
+    expect(animatedStateKey(), const ValueKey('results'));
+
+    await tester.enterText(field, 'design');
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.enterText(field, 'Aurora');
+    await tester.pump(const Duration(milliseconds: 60));
+    container.read(selectedTagProvider.notifier).select('design');
+    container.read(sortOrderProvider.notifier).set(NoteSort.titleZA);
+    await tester.pump(const Duration(milliseconds: 60));
+
+    expect(find.byKey(result), findsOneWidget);
+    expect(animatedStateKey(), const ValueKey('results'));
+  });
+
+  testWidgets('large result sets build only a viewport-bounded card subset', (
+    tester,
+  ) async {
+    final notes = List.generate(
+      250,
+      (index) => _note(
+        index + 1,
+        'Viewport result $index',
+        const ['large'],
+        DateTime.utc(2026, 1, 1).add(Duration(minutes: index)),
+      ),
+    );
+    await _pumpSearch(tester, repository: InMemoryNoteRepository.seeded(notes));
+
+    await tester.enterText(
+      find.byKey(const Key('notes-search-field')),
+      'viewport',
+    );
+    await tester.pumpAndSettle();
+
+    final builtCards = find.byType(GlassNoteCard).evaluate().length;
+    expect(find.text('250 results'), findsOneWidget);
+    expect(builtCards, greaterThan(0));
+    expect(builtCards, lessThan(25));
+  });
+
+  testWidgets(
+    'query and filter changes expose exactly one live result status',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      final container = await _pumpSearch(
+        tester,
+        repository: InMemoryNoteRepository.seeded(sampleNotes),
+      );
+      final field = find.byKey(const Key('notes-search-field'));
+
+      await tester.enterText(field, 'design');
+      await tester.pumpAndSettle();
+      _expectSingleLiveSearchStatus(tester, '2 results');
+      expect(find.text('2 results'), findsOneWidget);
+
+      container.read(selectedTagProvider.notifier).select('design');
+      await tester.pump();
+      _expectSingleLiveSearchStatus(tester, '1 result');
+      expect(find.text('1 result'), findsOneWidget);
+
+      await tester.enterText(field, 'missing phrase');
+      await tester.pump();
+      _expectSingleLiveSearchStatus(tester, 'No notes match your search');
+      expect(find.textContaining('No notes match'), findsOneWidget);
+      semantics.dispose();
+    },
+  );
 
   testWidgets('provider updates synchronize text and preserve selection once', (
     tester,
@@ -240,7 +594,7 @@ void main() {
   });
 
   testWidgets(
-    'keeps chrome stable for loading, initial error, and cached error',
+    'keeps chrome stable for loading, initial error, and pre-write failure',
     (tester) async {
       final deferred = _DeferredNoteRepository(sampleNotes);
       await _pumpSearch(tester, repository: deferred, settle: false);
@@ -257,7 +611,21 @@ void main() {
       await _pumpSearch(tester, repository: failed);
       _expectStableSearchChrome();
       expect(find.text('Could not load notes'), findsOneWidget);
-      expect(find.widgetWithText(FilledButton, 'Try again'), findsOneWidget);
+      expect(find.text('Please try again in a moment.'), findsOneWidget);
+      expect(find.textContaining('connection'), findsNothing);
+      expect(find.textContaining('read failed'), findsNothing);
+      expect(
+        find.text('Could not refresh notes. Showing saved notes.'),
+        findsNothing,
+      );
+      final retry = find.widgetWithText(FilledButton, 'Try again');
+      expect(retry, findsOneWidget);
+
+      await tester.tap(retry);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.text('Could not refresh notes. Try again.'), findsOneWidget);
+      expect(find.textContaining('read failed'), findsNothing);
 
       final cached = InMemoryNoteRepository.seeded(sampleNotes);
       final container = await _pumpSearch(tester, repository: cached);
@@ -477,6 +845,27 @@ void _expectStableSearchChrome() {
   expect(find.byKey(const Key('notes-search-filter')), findsOneWidget);
 }
 
+void _expectSingleLiveSearchStatus(WidgetTester tester, String label) {
+  final status = find.byKey(const Key('notes-search-status'));
+  expect(status, findsOneWidget);
+  final data = tester.getSemantics(status).getSemanticsData();
+  expect(data.label, label);
+  expect(data.flagsCollection.isLiveRegion, isTrue);
+  expect(
+    find.descendant(
+      of: find.byType(NotesSearchPage),
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.liveRegion == true,
+      ),
+    ),
+    findsOneWidget,
+  );
+}
+
+NoteStatus _statusOf(InMemoryNoteRepository repository, int id) {
+  return repository.notes.singleWhere((note) => note.id == id).status;
+}
+
 Note _note(int id, String title, List<String> tags, DateTime createdAt) {
   return Note(
     id: id,
@@ -530,5 +919,21 @@ class _DeferredNoteRepository extends InMemoryNoteRepository {
   Future<List<Note>> getNotesByStatus(NoteStatus status) async {
     await _gate.future;
     return super.getNotesByStatus(status);
+  }
+}
+
+class _GatedStatusRepository extends InMemoryNoteRepository {
+  _GatedStatusRepository(super.notes, {this.failure}) : super.seeded();
+
+  final Object? failure;
+  final _gate = Completer<void>();
+
+  void release() => _gate.complete();
+
+  @override
+  Future<int> setNoteStatus(int id, NoteStatus status) async {
+    await _gate.future;
+    if (failure case final error?) throw error;
+    return super.setNoteStatus(id, status);
   }
 }

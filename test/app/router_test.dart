@@ -103,6 +103,34 @@ void main() {
     expect(_path(harness.router), '/library');
   });
 
+  testWidgets('empty Search create opens a root editor and returns to Search', (
+    tester,
+  ) async {
+    final harness = await _pumpRouter(
+      tester,
+      repository: InMemoryNoteRepository.seeded(const []),
+      initialLocation: '/search',
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Create note'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AddEditNotePage), findsOneWidget);
+    expect(
+      Navigator.of(tester.element(find.byType(AddEditNotePage))),
+      same(rootNavigatorKey.currentState),
+    );
+    expect(_path(harness.router), '/search');
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AddEditNotePage), findsNothing);
+    expect(find.byType(NotesSearchPage), findsOneWidget);
+    expect(find.text('No notes yet'), findsOneWidget);
+    expect(_path(harness.router), '/search');
+  });
+
   testWidgets('note cards open root editors from every shell branch', (
     tester,
   ) async {
