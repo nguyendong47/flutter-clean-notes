@@ -12,6 +12,9 @@ not approved production values.
 | App version | `1.0.0+1` | `pubspec.yaml` | Placeholder until release owner approves a monotonically increasing version/build. |
 | Android application ID | `com.example.flutter_clean_notes` | `android/app/build.gradle.kts` | Template identifier; replace before store submission. |
 | Apple bundle ID | `com.example.flutterCleanNotes` | `ios/Runner.xcodeproj/project.pbxproj` | Template identifier; replace before signing/store submission. |
+| macOS bundle ID | `com.example.flutterCleanNotes` | `macos/Runner/Configs/AppInfo.xcconfig` | Template identifier; replace or record macOS as non-shipping. |
+| Windows identity | Binary `flutter_clean_notes`; company `com.example` | `windows/CMakeLists.txt`, `windows/runner/Runner.rc` | Template metadata; replace or record Windows as non-shipping. |
+| Linux application ID | `com.example.flutter_clean_notes` | `linux/CMakeLists.txt` | Template identifier; replace or record Linux as non-shipping. |
 | Android release signing | Debug signing configuration | `android/app/build.gradle.kts` | Blocking for distribution. |
 | Apple signing team | No development team recorded | Xcode project settings | Blocking for device/archive distribution. |
 | Dependency lock | `pubspec.lock` is ignored and untracked | `.gitignore` | Owner decision required before a reproducible release. |
@@ -59,6 +62,15 @@ submitted artifacts.
 - [ ] **[OWNER: Apple Release]** Select the Apple team, certificates, provisioning,
   capabilities, bundle ID, and App Store Connect record; archive and validate a
   signed build.
+- [ ] **[OWNER: macOS Release]** Approve and replace the macOS bundle ID, product
+  name, copyright, signing, entitlements, and notarization identity, or attach an
+  owner-approved non-shipping rationale to the release record.
+- [ ] **[OWNER: Windows Release]** Approve and replace the Windows binary/product,
+  company, copyright, package/publisher identity, and signing configuration, or
+  attach an owner-approved non-shipping rationale to the release record.
+- [ ] **[OWNER: Linux Release]** Approve and replace the Linux application ID,
+  binary/desktop metadata, package identity, and distribution signing policy, or
+  attach an owner-approved non-shipping rationale to the release record.
 - [ ] **[OWNER: Release]** Install signed release artifacts on clean devices and
   verify upgrade from the last public version without data loss.
 
@@ -77,25 +89,35 @@ submitted artifacts.
 
 ## Notifications and platform permissions
 
-The app schedules reminder notifications with `exactAllowWhileIdle`. The Android
-plugin contributes `POST_NOTIFICATIONS` to the merged manifest, but app code has
-no explicit Android runtime-permission request and no exact-alarm permission is
-declared. Apple initialization uses the plugin's default alert, sound, and badge
-permission requests during app startup. Treat the timing and UX of these prompts,
-and reminder delivery itself, as unapproved until the following gates pass:
+Reminder delivery is blocked from release until every applicable gate below has
+fresh evidence for the signed candidate. These are required outcomes, not claims
+that the current branch or generated manifest already satisfies them.
 
-- [ ] **[OWNER: Android Engineering/Product]** Decide whether exact timing is a
-  core feature and whether `SCHEDULE_EXACT_ALARM` or `USE_EXACT_ALARM` is eligible
-  under the target Android version and current store policy. Implement the chosen
-  fallback for denied/unavailable exact scheduling and inspect the merged release
-  manifest rather than only the source manifest.
-- [ ] **[OWNER: Android Engineering/QA]** Implement and verify Android 13+
-  notification permission UX plus allowed, denied, revoked, reboot, battery, and
-  exact-alarm states on physical devices.
+- [ ] **[OWNER: Android Engineering]** Attach the release merged-manifest excerpt
+  proving it contains `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`,
+  `ScheduledNotificationReceiver`, and `ScheduledNotificationBootReceiver`.
+- [ ] **[OWNER: Android Engineering/Product]** Request notification permission
+  contextually from the reminder flow, not at unrelated app startup. On a fresh
+  install, verify denial leaves note saving usable and a later reminder attempt
+  can grant permission and schedule successfully.
+- [ ] **[OWNER: Android Engineering]** Use `inexactAllowWhileIdle` for reminders.
+  Prove the source and merged release manifest contain neither
+  `SCHEDULE_EXACT_ALARM` nor `USE_EXACT_ALARM`, and confirm no exact-alarm store
+  policy declaration is submitted.
+- [ ] **[OWNER: Android Engineering/QA]** Configure Android snooze actions to
+  launch the app/UI intentionally and verify open plus 5/15/30/60-minute snooze
+  on a physical device. `ActionBroadcastReceiver` and a background callback are
+  not expected for this foreground action design; their absence is not a failure.
+- [ ] **[OWNER: Android Engineering/QA]** On a signed physical-device build,
+  schedule after fresh-install denial/grant, terminate the process, reboot the
+  device, and capture delivery plus open/snooze evidence. Record timing variance
+  expected from inexact scheduling and verify denied/revoked states fail safely.
 - [ ] **[OWNER: Apple Engineering/QA]** Decide whether the current startup-time
   authorization request is acceptable; implement the approved iOS notification
   permission UX and verify denied/revoked states, scheduling, tap/open, cold
   launch, and App Store capability/privacy declarations on physical devices.
+  Apple verification covers tap/open only unless Darwin notification categories
+  are added in a future release; Android snooze expectations do not apply.
 - [ ] **[OWNER: Product/Legal]** Approve lock-screen title/content behavior or
   require redaction/settings before release.
 

@@ -38,8 +38,8 @@ product/release owner and decision instead of silently omitting it.
 
 | Target | Minimum evidence |
 | --- | --- |
-| Android | One supported low/small device and one current large device; physical-device notification, permission, share/import, upgrade, background, and cold-launch evidence. |
-| iOS/iPadOS | One supported iPhone and one iPad size; physical-device notification authorization/delivery/tap, share/import, upgrade, background, and cold-launch evidence. |
+| Android | One supported low/small device and one current large device; physical-device fresh-install notification denial/grant, process-death/reboot delivery, open/snooze, share/import, upgrade, background, and cold-launch evidence. |
+| iOS/iPadOS | One supported iPhone and one iPad size; physical-device notification authorization/delivery and tap/open, share/import, upgrade, background, and cold-launch evidence. Snooze is not expected without Darwin notification categories. |
 | Windows | Signed or release-mode desktop run covering SQLite FFI, file picker/share behavior, resizing, keyboard, restart, and upgrade. |
 | macOS | Signed or release-mode desktop run covering SQLite FFI, notifications, picker/share, resizing, keyboard, restart, and upgrade. |
 | Linux | Release-mode run covering SQLite FFI, notifications where supported, picker/share behavior, resizing, keyboard, restart, and upgrade. |
@@ -110,8 +110,9 @@ reminder schedule/cancel:
 ## Reminders and notifications
 
 On physical Android and Apple devices, test permission not-determined, allowed,
-denied, and later-revoked states. Include any exact-alarm settings required by
-the approved Android policy.
+denied, and later-revoked states. Android reminder evidence must use
+`inexactAllowWhileIdle`; verify the release manifest has no exact-alarm permission
+and the store submission makes no exact-alarm policy declaration.
 
 - Schedule a future reminder; verify time-zone/local-time behavior, displayed
   title/body, lock-screen exposure, sound/priority, and delivery with the app in
@@ -119,11 +120,18 @@ the approved Android policy.
 - Tap the notification from each state. The intended persisted note must open
   exactly once; back navigation and any previous Home/Search/Library origin must
   remain coherent.
-- Exercise 5/15/30/60-minute snooze actions, cancellation after editing/removing
-  a reminder, deletion cancellation, device reboot, time-zone change, and app
-  relaunch.
+- On Android, start from a fresh install, deny permission, confirm note saving
+  remains usable, then grant from a later reminder attempt and schedule. Terminate
+  the process and reboot before delivery; verify open and 5/15/30/60-minute snooze
+  actions intentionally launch the app/UI and produce one coherent navigation
+  result. Record acceptable timing variance from inexact scheduling.
+- On Apple platforms, verify tap/open from foreground, background, and terminated
+  states. Do not record Android snooze as an Apple requirement unless a future
+  release adds and documents Darwin notification categories.
+- Verify cancellation after editing/removing a reminder, deletion cancellation,
+  time-zone change, and app relaunch on each shipping platform.
 - Verify past/equal-time reminders and notes without persisted IDs fail safely.
-- Record platform/version cases where exact delivery or notification actions are
+- Record platform/version cases where scheduled delivery or notification actions are
   unsupported, denied, or degraded; the user-facing behavior must match the
   release decision.
 

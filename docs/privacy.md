@@ -15,7 +15,7 @@
 | Markdown export | Note titles, content, and tags | A generated `notes.md` file is sent to the operating-system share sheet only after the user selects **Export Markdown**. |
 | JSON backup | Note IDs, titles, content, tags, color, creation time, pin state, status, and reminder time | A generated `notes_backup.json` file is sent to the operating-system share sheet only after the user selects **Backup JSON**. |
 | JSON import | The same note fields accepted by the JSON backup format | The user selects one `.json` file through the platform file picker. The app rejects an empty selection and payloads over 10 MB, validates the JSON, then imports the notes in a SQLite transaction. |
-| Reminders | Notification title, body, and payload derived from the note | Scheduling hands data to the platform notification service. The current notification title includes the note title, the body includes note content, and the payload includes ID, title, content, color, creation time, and reminder time. Notification actions can open the note or snooze it. |
+| Reminders | Notification title, body, and payload derived from the note | Scheduling hands data to the platform notification service. The notification title includes the note title, the body includes note content, and the payload includes ID, title, content, color, creation time, and reminder time. Android and Apple code paths handle tap/open. Snooze actions are Android-only; Apple targets have no Darwin snooze categories unless a future release adds them. Permission, delivery, action, process-death, and reboot behavior require device verification. |
 
 The current app source and primary platform configuration contain no app-owned
 HTTP client, remote API, analytics SDK, crash-reporting SDK, or telemetry
@@ -45,8 +45,8 @@ platform backups, and future dependencies remain separate boundaries.
 Reminder notifications may expose a note title and content on the lock screen,
 notification center, connected wearables, or other platform surfaces, depending
 on OS settings and implementation behavior. Permission prompts, preview settings,
-exact-alarm eligibility, and delivery behavior require physical-device evidence;
-see [QA](qa.md#reminders-and-notifications) and
+delivery after process death or reboot, and action behavior require
+physical-device evidence; see [QA](qa.md#reminders-and-notifications) and
 [release readiness](release.md#notifications-and-platform-permissions).
 
 ## Owner decisions

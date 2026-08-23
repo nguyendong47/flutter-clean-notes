@@ -10,7 +10,8 @@ boundary as described in the [technical privacy draft](docs/privacy.md).
 - Markdown editing and preview with formatting controls, colors, tags, and pinning.
 - Responsive Home, Search, Library, and More surfaces with filtering and sorting.
 - Archive, Trash, restore, permanent deletion, and Undo for reversible mutations.
-- Local reminder notifications with open and snooze actions.
+- Reminder scheduling with tap/open handling and Android snooze actions; platform
+  permission, delivery, and relaunch behavior remain release-gated.
 - Text and Markdown export, JSON backup/import, and system/light/dark themes.
 - Accessibility behavior for scaled text, high contrast, and reduced motion.
 
@@ -49,19 +50,20 @@ target platform, then run:
 flutter doctor
 flutter pub get
 flutter devices
-flutter run -d <device-id>
+$deviceId = 'emulator-5554'
+flutter run -d $deviceId
 ```
 
-Use the ID printed by `flutter devices`; omit `-d <device-id>` only when Flutter
-can select the intended target without ambiguity. No external database service
-is required.
+Replace `emulator-5554` with the intended ID printed by `flutter devices`. Omit
+`-d $deviceId` only when Flutter can select that target without ambiguity. No
+external database service is required.
 
 ## Common commands
 
 | Task | Command |
 | --- | --- |
 | Resolve dependencies | `flutter pub get` |
-| Run the app | `flutter run -d <device-id>` |
+| Run the app | `$deviceId = 'emulator-5554'; flutter run -d $deviceId` |
 | Analyze and lint | `flutter analyze` |
 | Run automated tests | `flutter test --concurrency=1` |
 | Regenerate Riverpod code | `dart run build_runner build --delete-conflicting-outputs` |
