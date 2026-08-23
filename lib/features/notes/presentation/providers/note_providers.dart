@@ -206,6 +206,8 @@ NoteStatus _statusForMode(NoteMode mode) {
 
 @riverpod
 class NotesNotifier extends _$NotesNotifier {
+  Future<void> _mutationQueue = Future<void>.value();
+
   @override
   FutureOr<List<Note>> build() async {
     return _fetchAllNotes();
@@ -220,28 +222,36 @@ class NotesNotifier extends _$NotesNotifier {
     return notes;
   }
 
-  Future<void> _mutate(Future<void> Function() operation) async {
-    final previous = state;
-    state = const AsyncLoading<List<Note>>();
-    try {
-      await operation();
-    } catch (error, stackTrace) {
-      state = previous;
-      Error.throwWithStackTrace(error, stackTrace);
-    }
+  Future<void> _mutate(Future<void> Function() operation) {
+    final keepAlive = ref.keepAlive();
+    final result = _mutationQueue.then((_) async {
+      final previous = state;
+      state = const AsyncLoading<List<Note>>();
+      try {
+        await operation();
+      } catch (error, stackTrace) {
+        state = previous;
+        Error.throwWithStackTrace(error, stackTrace);
+      }
 
-    try {
-      state = AsyncData(await _fetchAllNotes());
-    } catch (error, stackTrace) {
-      state = AsyncError<List<Note>>(error, stackTrace);
-      Error.throwWithStackTrace(
-        PersistedNoteMutationException(
-          cause: error,
-          causeStackTrace: stackTrace,
-        ),
-        stackTrace,
-      );
-    }
+      try {
+        state = AsyncData(await _fetchAllNotes());
+      } catch (error, stackTrace) {
+        state = AsyncError<List<Note>>(error, stackTrace);
+        Error.throwWithStackTrace(
+          PersistedNoteMutationException(
+            cause: error,
+            causeStackTrace: stackTrace,
+          ),
+          stackTrace,
+        );
+      }
+    });
+    _mutationQueue = result.then<void>(
+      (_) => keepAlive.close(),
+      onError: (Object _, StackTrace _) => keepAlive.close(),
+    );
+    return result;
   }
 
   Future<void> addNote(Note note) async {

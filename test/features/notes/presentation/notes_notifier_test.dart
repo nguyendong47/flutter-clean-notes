@@ -107,6 +107,134 @@ void main() {
     },
   );
 
+  test(
+    'queued success waits for a failing mutation and refreshes final data',
+    () async {
+      final firstFailure = StateError('first update failed');
+      final firstStep = _QueuedUpdateStep(error: firstFailure);
+      final secondStep = _QueuedUpdateStep();
+      final repository = _SequencedUpdateRepository(sampleNotes, [
+        firstStep,
+        secondStep,
+      ]);
+      final container = ProviderContainer(
+        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+      final initial = await container.read(notesProvider.future);
+      final firstNote = initial[0];
+      final secondNote = initial[1];
+
+      final firstMutation = container
+          .read(notesProvider.notifier)
+          .togglePin(firstNote);
+      final firstResult = expectLater(
+        firstMutation,
+        throwsA(same(firstFailure)),
+      );
+      await firstStep.entered.future;
+
+      final secondMutation = container
+          .read(notesProvider.notifier)
+          .togglePin(secondNote);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(repository.startedIds, [firstNote.id]);
+
+      firstStep.release();
+      await firstResult;
+      await secondStep.entered.future;
+      secondStep.release();
+      await secondMutation;
+
+      final finalState = container.read(notesProvider);
+      expect(finalState, isA<AsyncData<List<Note>>>());
+      expect(finalState.hasError, isFalse);
+      expect(
+        finalState.requireValue
+            .singleWhere((note) => note.id == firstNote.id)
+            .isPinned,
+        firstNote.isPinned,
+      );
+      expect(
+        finalState.requireValue
+            .singleWhere((note) => note.id == secondNote.id)
+            .isPinned,
+        isNot(secondNote.isPinned),
+      );
+      expect(
+        repository.notes
+            .singleWhere((note) => note.id == secondNote.id)
+            .isPinned,
+        isNot(secondNote.isPinned),
+      );
+    },
+  );
+
+  test(
+    'queued failure restores the state from an earlier successful mutation',
+    () async {
+      final secondFailure = StateError('second update failed');
+      final firstStep = _QueuedUpdateStep();
+      final secondStep = _QueuedUpdateStep(error: secondFailure);
+      final repository = _SequencedUpdateRepository(sampleNotes, [
+        firstStep,
+        secondStep,
+      ]);
+      final container = ProviderContainer(
+        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+      final initial = await container.read(notesProvider.future);
+      final firstNote = initial[0];
+      final secondNote = initial[1];
+
+      final firstMutation = container
+          .read(notesProvider.notifier)
+          .togglePin(firstNote);
+      await firstStep.entered.future;
+
+      final secondMutation = container
+          .read(notesProvider.notifier)
+          .togglePin(secondNote);
+      final secondResult = expectLater(
+        secondMutation,
+        throwsA(same(secondFailure)),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(repository.startedIds, [firstNote.id]);
+
+      firstStep.release();
+      await firstMutation;
+      await secondStep.entered.future;
+      secondStep.release();
+      await secondResult;
+
+      final finalState = container.read(notesProvider);
+      expect(finalState, isA<AsyncData<List<Note>>>());
+      expect(finalState.hasError, isFalse);
+      expect(
+        finalState.requireValue
+            .singleWhere((note) => note.id == firstNote.id)
+            .isPinned,
+        isNot(firstNote.isPinned),
+      );
+      expect(
+        finalState.requireValue
+            .singleWhere((note) => note.id == secondNote.id)
+            .isPinned,
+        secondNote.isPinned,
+      );
+      expect(
+        repository.notes
+            .singleWhere((note) => note.id == firstNote.id)
+            .isPinned,
+        isNot(firstNote.isPinned),
+      );
+    },
+  );
+
   test('adds and updates notes then refreshes the all-status state', () async {
     final repository = InMemoryNoteRepository.seeded(sampleNotes);
     final container = ProviderContainer(
@@ -799,6 +927,34 @@ class _GatedUpdateRepository extends InMemoryNoteRepository {
   Future<int> updateNote(Note note) async {
     entered.complete();
     await _gate.future;
+    return super.updateNote(note);
+  }
+}
+
+class _QueuedUpdateStep {
+  _QueuedUpdateStep({this.error});
+
+  final Object? error;
+  final entered = Completer<void>();
+  final _gate = Completer<void>();
+
+  void release() => _gate.complete();
+}
+
+class _SequencedUpdateRepository extends InMemoryNoteRepository {
+  _SequencedUpdateRepository(super.notes, this.steps) : super.seeded();
+
+  final List<_QueuedUpdateStep> steps;
+  final List<int?> startedIds = [];
+  int _nextStep = 0;
+
+  @override
+  Future<int> updateNote(Note note) async {
+    final step = steps[_nextStep++];
+    startedIds.add(note.id);
+    step.entered.complete();
+    await step._gate.future;
+    if (step.error case final error?) throw error;
     return super.updateNote(note);
   }
 }

@@ -669,15 +669,15 @@ void main() {
     );
 
     expect(container.read(selectedTagProvider), 'shared');
-      final state = container.read(notesProvider);
-      expect(state, isA<AsyncData<List<Note>>>());
-      expect(state.hasError, isFalse);
-      expect(state.value, same(before));
-      expect(repository.removeTagCalls, 1);
-      expect(
-        repository.notes.expand((note) => note.tags),
-        everyElement('shared'),
-      );
+    final state = container.read(notesProvider);
+    expect(state, isA<AsyncData<List<Note>>>());
+    expect(state.hasError, isFalse);
+    expect(state.value, same(before));
+    expect(repository.removeTagCalls, 1);
+    expect(
+      repository.notes.expand((note) => note.tags),
+      everyElement('shared'),
+    );
   });
 }
 
