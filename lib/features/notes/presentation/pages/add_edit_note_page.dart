@@ -655,6 +655,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       if (persistedId != null) _persistedId = persistedId;
       _hasPartialSave = true;
       if (!mounted) return;
+      ref.invalidate(notesProvider);
       setState(() {
         _saving = false;
         _saveError = const _EditorSaveError(

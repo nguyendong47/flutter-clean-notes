@@ -184,7 +184,7 @@ void main() {
     expect(find.byType(NotesEmptyState), findsOneWidget);
   });
 
-  testWidgets('cached error keeps notes visible and announces one snackbar', (
+  testWidgets('pre-write failure restores notes without a refresh notice', (
     tester,
   ) async {
     final repository = InMemoryNoteRepository.seeded(sampleNotes);
@@ -199,10 +199,15 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
 
+    final state = container.read(notesProvider);
+    expect(state, isA<AsyncData<List<Note>>>());
+    expect(state.value, same(initial));
+    expect(state.hasError, isFalse);
     _expectStableChrome();
     expect(find.text(sampleNote.title), findsOneWidget);
     expect(find.byType(NotesErrorState), findsNothing);
-    expect(find.textContaining('write failed'), findsOneWidget);
+    expect(find.textContaining('write failed'), findsNothing);
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   testWidgets('archive and trash actions each offer working Undo restoration', (
@@ -247,6 +252,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Archive').last);
     await tester.pumpAndSettle();
+    final beforeUndo = container.read(notesProvider).requireValue;
     final restoreError = StateError('restore failed');
     repository.statusError = restoreError;
 
@@ -256,10 +262,14 @@ void main() {
     await tester.pump();
 
     expect(_statusOf(repository, 2), NoteStatus.archived);
-    expect(container.read(notesProvider).error, same(restoreError));
+    final state = container.read(notesProvider);
+    expect(state, isA<AsyncData<List<Note>>>());
+    expect(state.value, same(beforeUndo));
+    expect(state.hasError, isFalse);
     _expectStableChrome();
     expect(find.text(sampleNote.title), findsOneWidget);
     expect(find.textContaining('restore failed'), findsOneWidget);
+    expect(find.byType(SnackBar), findsOneWidget);
   });
 
   testWidgets('adapts at 320, 375, and tablet widths with scaled text', (

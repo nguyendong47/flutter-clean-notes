@@ -7,6 +7,7 @@ import 'package:flutter_clean_notes/features/notes/domain/repositories/note_repo
 import 'package:flutter_clean_notes/features/notes/domain/usecases/note_usecases.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_filters.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_save_exception.dart';
 
 export 'package:flutter_clean_notes/features/notes/presentation/providers/note_filters.dart'
@@ -220,12 +221,26 @@ class NotesNotifier extends _$NotesNotifier {
   }
 
   Future<void> _mutate(Future<void> Function() operation) async {
+    final previous = state;
+    state = const AsyncLoading<List<Note>>();
     try {
       await operation();
+    } catch (error, stackTrace) {
+      state = previous;
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+
+    try {
       state = AsyncData(await _fetchAllNotes());
     } catch (error, stackTrace) {
       state = AsyncError<List<Note>>(error, stackTrace);
-      rethrow;
+      Error.throwWithStackTrace(
+        PersistedNoteMutationException(
+          cause: error,
+          causeStackTrace: stackTrace,
+        ),
+        stackTrace,
+      );
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_home_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
@@ -44,9 +45,14 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
 
+    final state = container.read(notesProvider);
+    expect(state, isA<AsyncData<List<Note>>>());
+    expect(state.value, same(initial));
+    expect(state.hasError, isFalse);
     expect(find.byType(NotesHomePage), findsOneWidget);
     expect(find.text(sampleNote.title), findsOneWidget);
-    expect(find.textContaining('write failed'), findsOneWidget);
+    expect(find.textContaining('write failed'), findsNothing);
+    expect(find.byType(SnackBar), findsNothing);
   });
 }
 

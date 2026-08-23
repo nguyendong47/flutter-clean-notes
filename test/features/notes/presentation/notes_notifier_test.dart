@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_save_exception.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -84,7 +85,7 @@ void main() {
   );
 
   test(
-    'preserves visible data surfaces an error and rethrows on failure',
+    'operation failure restores previous data and rethrows without an error state',
     () async {
       final repository = InMemoryNoteRepository.seeded(sampleNotes);
       final container = ProviderContainer(
@@ -101,7 +102,8 @@ void main() {
       );
 
       expect(container.read(notesProvider).value, initial);
-      expect(container.read(notesProvider).hasError, isTrue);
+      expect(container.read(notesProvider).isLoading, isFalse);
+      expect(container.read(notesProvider).hasError, isFalse);
     },
   );
 
@@ -246,6 +248,43 @@ void main() {
     },
   );
 
+  test('pending mutation exposes loading with the previous notes', () async {
+    // Mutation caught: leaving notesProvider as plain AsyncData while an
+    // update is committed but its reminder side effect is still pending.
+    final repository = InMemoryNoteRepository.seeded(sampleNotes);
+    final cancelGate = Completer<void>();
+    final gateway = FakeNoteReminderGateway()..cancelGate = cancelGate;
+    final container = _container(repository, gateway);
+    addTearDown(container.dispose);
+    final subscription = container.listen(
+      notesProvider,
+      (_, _) {},
+      fireImmediately: true,
+    );
+    addTearDown(subscription.close);
+    final initial = await container.read(notesProvider.future);
+    final changed = initial.first.copyWith(title: 'Committed while pending');
+
+    final save = container.read(notesProvider.notifier).updateNote(changed);
+    await Future<void>.delayed(Duration.zero);
+
+    final pending = container.read(notesProvider);
+    final committedTitle = repository.notes.first.title;
+    final cancelled = List<int>.of(gateway.cancelled);
+    cancelGate.complete();
+    await save;
+
+    expect(committedTitle, 'Committed while pending');
+    expect(cancelled, [changed.id]);
+    expect(pending.isLoading, isTrue);
+    expect(pending.value, initial);
+    expect(container.read(notesProvider), isA<AsyncData<List<Note>>>());
+    expect(
+      container.read(notesProvider).requireValue.first.title,
+      changed.title,
+    );
+  });
+
   test('update freezes the caller draft before awaiting persistence', () async {
     final sourceTags = <String>['draft'];
     final note = sampleNote.copyWith(tags: sourceTags);
@@ -337,7 +376,8 @@ void main() {
       );
       expect(exception.cause, same(failure));
       expect(exception.causeStackTrace, isNotNull);
-      expect(container.read(notesProvider).hasError, isTrue);
+      expect(container.read(notesProvider).value, isEmpty);
+      expect(container.read(notesProvider).hasError, isFalse);
     },
   );
 
@@ -364,8 +404,38 @@ void main() {
 
     expect(repository.addCalls, 1);
     expect(exception.persistedNote.id, repository.notes.single.id);
-    expect(exception.cause, isA<StateError>());
+    final mutationError = exception.cause as PersistedNoteMutationException;
+    expect(mutationError.cause, isA<StateError>());
+    expect(mutationError.causeStackTrace, isNotNull);
+    expect(container.read(notesProvider).value, isEmpty);
+    expect(container.read(notesProvider).hasError, isTrue);
   });
+
+  test(
+    'refresh failure after a committed mutation keeps cached data and is typed',
+    () async {
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final gateway = FakeNoteReminderGateway();
+      final container = _container(repository, gateway);
+      addTearDown(container.dispose);
+      final initial = await container.read(notesProvider.future);
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      late PersistedNoteMutationException exception;
+      try {
+        await container.read(notesProvider.notifier).togglePin(initial.first);
+        fail('Expected PersistedNoteMutationException');
+      } on PersistedNoteMutationException catch (error) {
+        exception = error;
+      }
+
+      expect(repository.notes.first.isPinned, isFalse);
+      expect(exception.cause, isA<StateError>());
+      expect(exception.causeStackTrace, isNotNull);
+      expect(container.read(notesProvider).value, initial);
+      expect(container.read(notesProvider).hasError, isTrue);
+    },
+  );
 
   test(
     'pre-write failures remain original and never become retry-safe',

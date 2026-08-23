@@ -16,6 +16,7 @@ import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/add_edit_note_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
 
 import '../helpers/fake_note_reminder_gateway.dart';
 import '../helpers/in_memory_note_repository.dart';
@@ -157,6 +158,11 @@ void main() {
       harness.service.handleNotificationResponse(
         _openResponse(harness.service),
       );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('existing-note-loading')), findsOneWidget);
+
+      repository.release();
       await tester.pumpAndSettle();
       expect(
         find.byType(AddEditNotePage, skipOffstage: false),
@@ -169,9 +175,6 @@ void main() {
         draft,
       );
       await tester.pump();
-
-      repository.release();
-      await tester.pumpAndSettle();
 
       expect(_path(harness.router), '/search');
       expect(
@@ -240,6 +243,134 @@ void main() {
       expect(find.byType(AddEditNotePage, skipOffstage: false), findsNothing);
       expect(rootNavigatorKey.currentState!.canPop(), isFalse);
       expect(repository.notes.first.title, 'Partially saved editor A');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'notification editor waits for a committed partial save and cannot revert it',
+    (tester) async {
+      // Mutation caught: resolving editor B from notesProvider's previous value
+      // while editor A's committed update is awaiting a reminder side effect.
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final cancelGate = Completer<void>();
+      final gateway = FakeNoteReminderGateway()
+        ..cancelGate = cancelGate
+        ..cancelError = StateError('notification cancel failed');
+      final harness = await _pumpRouter(
+        tester,
+        initialLocation: '/search',
+        repository: repository,
+        gateway: gateway,
+      );
+      harness.router.push('/note/1');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('editor-title-field')),
+        'Persisted editor A title',
+      );
+      await tester.enterText(
+        find.byKey(const Key('editor-body-field')),
+        'Persisted editor A body',
+      );
+      await tester.tap(find.byKey(const Key('editor-done-button')));
+      await tester.pump();
+
+      expect(repository.notes.first.title, 'Persisted editor A title');
+      expect(repository.notes.first.content, 'Persisted editor A body');
+      expect(gateway.cancelled, [sampleNote.id]);
+
+      harness.service.handleNotificationResponse(
+        _openResponse(harness.service),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final openedAsLoading = find
+          .byKey(const Key('existing-note-loading'))
+          .evaluate()
+          .length;
+      cancelGate.complete();
+      await tester.pumpAndSettle();
+
+      expect(openedAsLoading, 1);
+      expect(
+        find.byType(AddEditNotePage, skipOffstage: false),
+        findsNWidgets(2),
+      );
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('editor-title-field')))
+            .controller!
+            .text,
+        'Persisted editor A title',
+      );
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('editor-body-field')))
+            .controller!
+            .text,
+        'Persisted editor A body',
+      );
+
+      gateway.cancelError = null;
+      await tester.tap(find.byKey(const Key('editor-done-button')));
+      await tester.pumpAndSettle();
+
+      expect(repository.notes.first.title, 'Persisted editor A title');
+      expect(repository.notes.first.content, 'Persisted editor A body');
+      expect(find.byKey(const Key('editor-save-error')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('editor-back-button')));
+      await tester.pumpAndSettle();
+
+      expect(_path(harness.router), '/search');
+      expect(find.byType(AddEditNotePage, skipOffstage: false), findsNothing);
+      expect(rootNavigatorKey.currentState!.canPop(), isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'notification editor rejects cached notes carried by a refresh error',
+    (tester) async {
+      // Mutation caught: resolving an editor from AsyncError's previous value
+      // instead of waiting for a successful retry.
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final harness = await _pumpRouter(
+        tester,
+        initialLocation: '/search',
+        repository: repository,
+      );
+      final note = harness.container.read(notesProvider).requireValue.first;
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      await expectLater(
+        harness.container.read(notesProvider.notifier).togglePin(note),
+        throwsA(isA<PersistedNoteMutationException>()),
+      );
+      expect(harness.container.read(notesProvider).hasError, isTrue);
+      expect(harness.container.read(notesProvider).hasValue, isTrue);
+
+      harness.service.handleNotificationResponse(
+        _openResponse(harness.service),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('existing-note-error')), findsOneWidget);
+      expect(find.byType(AddEditNotePage), findsNothing);
+
+      await tester.tap(find.byKey(const Key('existing-note-retry')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AddEditNotePage), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('editor-title-field')))
+            .controller!
+            .text,
+        sampleNote.title,
+      );
       expect(tester.takeException(), isNull);
     },
   );

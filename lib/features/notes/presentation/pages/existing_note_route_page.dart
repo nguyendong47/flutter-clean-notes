@@ -35,10 +35,12 @@ class _ExistingNoteRoutePageState extends ConsumerState<ExistingNoteRoutePage> {
   Widget build(BuildContext context) {
     final parsedId = int.tryParse(widget.noteId);
     final notes = parsedId == null ? null : ref.watch(notesProvider);
-    if (parsedId != null && _resolvedEditor == null) {
-      final resolved = notes?.value == null
-          ? null
-          : _findNote(notes!.value!, parsedId);
+    final freshNotes =
+        notes is AsyncData<List<Note>> && !notes.isLoading && !notes.hasError
+        ? notes.value
+        : null;
+    if (parsedId != null && _resolvedEditor == null && freshNotes != null) {
+      final resolved = _findNote(freshNotes, parsedId);
       if (resolved != null) {
         _resolvedEditor = AddEditNotePage(
           key: ValueKey('existing-note-editor-$parsedId'),
@@ -54,6 +56,8 @@ class _ExistingNoteRoutePageState extends ConsumerState<ExistingNoteRoutePage> {
     final child = parsedId == null
         ? _notFound()
         : notes!.when(
+            skipLoadingOnRefresh: false,
+            skipLoadingOnReload: false,
             loading: () => _RouteStateScaffold(
               key: const Key('existing-note-loading'),
               title: 'Opening note',

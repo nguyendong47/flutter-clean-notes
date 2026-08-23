@@ -434,51 +434,34 @@ void main() {
     expect(find.text('shared'), findsOneWidget);
   });
 
-  testWidgets('tag manager retains counts when a refresh fails', (
+  testWidgets('tag manager retains counts when a pin update fails', (
     tester,
   ) async {
     final repository = _ControlledRepository.seeded(_tagNotes);
     final harness = await _pumpMore(tester, repository: repository);
     await _openTags(tester);
-    final first = harness.container.read(notesProvider).requireValue.first;
-    repository.updateError = StateError('refresh failed');
+    final before = harness.container.read(notesProvider).requireValue;
+    repository.updateError = StateError('write failed');
 
     await expectLater(
-      harness.container.read(notesProvider.notifier).togglePin(first),
+      harness.container.read(notesProvider.notifier).togglePin(before.first),
       throwsStateError,
     );
     await tester.pump();
 
+    final state = harness.container.read(notesProvider);
+    expect(state, isA<AsyncData<List<Note>>>());
+    expect(state.value, same(before));
+    expect(state.hasError, isFalse);
     expect(
       find.text('Could not refresh tag counts. Showing saved counts.'),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.text('shared'), findsOneWidget);
     expect(find.text('3 notes'), findsOneWidget);
     expect(find.text('No tags yet'), findsNothing);
-    final retry = find.byKey(const Key('tag-retry'));
-    expect(retry, findsOneWidget);
-
-    repository.readGate = Completer<void>();
-    await tester.tap(retry);
-    await tester.pump();
-
-    final refreshing = find.text('Refreshing tag counts…');
-    expect(refreshing, findsOneWidget);
-    expect(find.text('shared'), findsOneWidget);
-    expect(find.text('3 notes'), findsOneWidget);
-    expect(tester.widget<OutlinedButton>(retry).onPressed, isNull);
-    expect(
-      tester.getSemantics(refreshing).flagsCollection.isLiveRegion,
-      isTrue,
-    );
-
-    repository.readGate!.complete();
-    await tester.pumpAndSettle();
-
-    expect(refreshing, findsNothing);
-    expect(find.text('shared'), findsOneWidget);
-    expect(find.text('3 notes'), findsOneWidget);
+    expect(find.byKey(const Key('tag-retry')), findsNothing);
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   testWidgets('tag manager shows empty only after an empty load completes', (

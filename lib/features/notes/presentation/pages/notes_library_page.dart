@@ -174,6 +174,16 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
       await mutation();
       return true;
     } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              behavior: SnackBarBehavior.floating,
+              content: Text('Could not update library. Try again.'),
+            ),
+          );
+      }
       return false;
     }
   }

@@ -262,19 +262,25 @@ void main() {
       final cached = InMemoryNoteRepository.seeded(sampleNotes);
       final container = await _pumpSearch(tester, repository: cached);
       cached.updateError = StateError('write failed');
-      final note = container.read(notesProvider).requireValue.first;
+      final before = container.read(notesProvider).requireValue;
       await expectLater(
-        container.read(notesProvider.notifier).togglePin(note),
+        container.read(notesProvider.notifier).togglePin(before.first),
         throwsStateError,
       );
       await tester.pumpAndSettle();
 
+      final state = container.read(notesProvider);
+      expect(state, isA<AsyncData<List<Note>>>());
+      expect(state.value, same(before));
+      expect(state.hasError, isFalse);
       _expectStableSearchChrome();
       expect(find.text('Search your thoughts'), findsOneWidget);
       expect(
         find.text('Could not refresh notes. Showing saved notes.'),
-        findsOneWidget,
+        findsNothing,
       );
+      expect(find.textContaining('write failed'), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
     },
   );
 

@@ -363,37 +363,39 @@ void main() {
     expect(find.text('No archived notes'), findsOneWidget);
   });
 
-  testWidgets('cached error keeps cards and announces once', (tester) async {
+  testWidgets('failed restore keeps cards and announces once', (tester) async {
     final repository = _ControlledNoteRepository.seeded(sampleNotes)
       ..statusError = StateError('write failed');
-    await _pumpLibrary(tester, repository: repository);
+    final container = await _pumpLibrary(tester, repository: repository);
+    final before = container.read(notesProvider).requireValue;
 
     await _chooseCardAction(tester, 'Archived launch notes', 'Restore');
     await tester.pumpAndSettle();
 
+    final state = container.read(notesProvider);
+    expect(state, isA<AsyncData<List<Note>>>());
+    expect(state.value, same(before));
+    expect(state.hasError, isFalse);
     _expectStableChrome();
     expect(find.text('Archived launch notes'), findsOneWidget);
     expect(
       find.text('Could not update library. Showing saved notes.'),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       tester
-          .getSemantics(
-            find.text('Could not update library. Showing saved notes.'),
-          )
+          .getSemantics(find.text('Could not update library. Try again.'))
           .flagsCollection
           .isLiveRegion,
       isTrue,
     );
-    expect(find.byType(SnackBar), findsNothing);
+    expect(find.text('Could not update library. Try again.'), findsOneWidget);
+    expect(find.byType(SnackBar), findsOneWidget);
 
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
-    expect(
-      find.text('Could not update library. Showing saved notes.'),
-      findsOneWidget,
-    );
+    expect(find.text('Could not update library. Try again.'), findsOneWidget);
+    expect(find.byType(SnackBar), findsOneWidget);
   });
 
   testWidgets('Trash selection and content survive notesProvider refresh', (
