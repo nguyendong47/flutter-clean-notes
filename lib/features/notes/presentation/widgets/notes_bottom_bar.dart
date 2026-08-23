@@ -16,6 +16,10 @@ class NotesBottomBar extends StatefulWidget {
   static const double expandedRegionHeight = 132;
   static const double expandedSurfaceHeight = 112;
 
+  static bool usesJumboLayout(TextScaler textScaler) {
+    return textScaler.scale(12) > 24;
+  }
+
   final int currentIndex;
   final ValueChanged<int> onDestinationSelected;
   final VoidCallback onCreate;
@@ -45,6 +49,9 @@ class _NotesBottomBarState extends State<NotesBottomBar> {
     final mediaQuery = MediaQuery.of(context);
     final horizontalInset = mediaQuery.size.width >= 600 ? 24.0 : 16.0;
     final useExpandedLayout = mediaQuery.textScaler.scale(12) > 15.6;
+    final useJumboLayout = NotesBottomBar.usesJumboLayout(
+      mediaQuery.textScaler,
+    );
     final motionDuration = mediaQuery.disableAnimations
         ? Duration.zero
         : const Duration(milliseconds: 180);
@@ -60,38 +67,70 @@ class _NotesBottomBarState extends State<NotesBottomBar> {
         heightFactor: 1,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 600),
-          child: SizedBox(
-            key: const Key('notes-bottom-bar-region'),
-            width: double.infinity,
-            height: regionHeight,
-            child: Stack(
-              children: [
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: useExpandedLayout
-                      ? NotesBottomBar.expandedSurfaceHeight
-                      : 72,
-                  child: const GlassSurface(
-                    key: Key('notes-bottom-bar-surface'),
-                    borderRadius: BorderRadius.all(Radius.circular(28)),
-                    blur: 18,
-                    opacity: 0.82,
-                    padding: EdgeInsets.zero,
-                    child: SizedBox.expand(),
+          child: useJumboLayout
+              ? _buildJumboLayout(motionDuration)
+              : SizedBox(
+                  key: const Key('notes-bottom-bar-region'),
+                  width: double.infinity,
+                  height: regionHeight,
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: useExpandedLayout
+                            ? NotesBottomBar.expandedSurfaceHeight
+                            : 72,
+                        child: const GlassSurface(
+                          key: Key('notes-bottom-bar-surface'),
+                          borderRadius: BorderRadius.all(Radius.circular(28)),
+                          blur: 18,
+                          opacity: 0.82,
+                          padding: EdgeInsets.zero,
+                          child: SizedBox.expand(),
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: FocusTraversalGroup(
+                          policy: OrderedTraversalPolicy(),
+                          child: useExpandedLayout
+                              ? _buildExpandedLayout(motionDuration)
+                              : _buildCompactLayout(motionDuration),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Positioned.fill(
-                  child: FocusTraversalGroup(
-                    policy: OrderedTraversalPolicy(),
-                    child: useExpandedLayout
-                        ? _buildExpandedLayout(motionDuration)
-                        : _buildCompactLayout(motionDuration),
-                  ),
-                ),
-              ],
-            ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildJumboLayout(Duration motionDuration) {
+    return SizedBox(
+      key: const Key('notes-bottom-bar-region'),
+      width: double.infinity,
+      child: GlassSurface(
+        key: const Key('notes-bottom-bar-surface'),
+        borderRadius: const BorderRadius.all(Radius.circular(28)),
+        blur: 18,
+        opacity: 0.82,
+        padding: const EdgeInsets.all(12),
+        child: FocusTraversalGroup(
+          policy: OrderedTraversalPolicy(),
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _destination(0, jumbo: true, motionDuration: motionDuration),
+              _destination(1, jumbo: true, motionDuration: motionDuration),
+              _createButton(),
+              _destination(2, jumbo: true, motionDuration: motionDuration),
+              _moreButton(jumbo: true, motionDuration: motionDuration),
+            ],
           ),
         ),
       ),
@@ -191,6 +230,7 @@ class _NotesBottomBarState extends State<NotesBottomBar> {
     int index, {
     required Duration motionDuration,
     bool expanded = false,
+    bool jumbo = false,
   }) {
     const labels = ['Notes tab', 'Search tab', 'Library tab'];
     const visibleLabels = ['Notes', 'Search', 'Library'];
@@ -206,6 +246,7 @@ class _NotesBottomBarState extends State<NotesBottomBar> {
       icon: icons[index],
       selected: widget.currentIndex == index,
       expanded: expanded,
+      jumbo: jumbo,
       motionDuration: motionDuration,
       focusNode: _focusNodes[focusIndex],
       traversalOrder: focusIndex.toDouble(),
@@ -220,6 +261,7 @@ class _NotesBottomBarState extends State<NotesBottomBar> {
   Widget _moreButton({
     required Duration motionDuration,
     bool expanded = false,
+    bool jumbo = false,
   }) {
     return _DestinationButton(
       label: 'More actions',
@@ -227,6 +269,7 @@ class _NotesBottomBarState extends State<NotesBottomBar> {
       icon: Icons.more_horiz_rounded,
       selected: null,
       expanded: expanded,
+      jumbo: jumbo,
       motionDuration: motionDuration,
       focusNode: _focusNodes[4],
       traversalOrder: 4,
@@ -301,6 +344,7 @@ class _DestinationButton extends StatelessWidget {
     required this.icon,
     required this.selected,
     required this.expanded,
+    required this.jumbo,
     required this.motionDuration,
     required this.focusNode,
     required this.traversalOrder,
@@ -312,6 +356,7 @@ class _DestinationButton extends StatelessWidget {
   final IconData icon;
   final bool? selected;
   final bool expanded;
+  final bool jumbo;
   final Duration motionDuration;
   final FocusNode focusNode;
   final double traversalOrder;
@@ -355,8 +400,18 @@ class _DestinationButton extends StatelessWidget {
                   ),
                   duration: motionDuration,
                   curve: Curves.easeOutCubic,
-                  width: expanded ? 104 : 48,
-                  height: 48,
+                  width: jumbo
+                      ? null
+                      : expanded
+                      ? 104
+                      : 48,
+                  height: jumbo ? null : 48,
+                  constraints: jumbo
+                      ? const BoxConstraints(minWidth: 48, minHeight: 48)
+                      : null,
+                  padding: jumbo
+                      ? const EdgeInsets.symmetric(horizontal: 4, vertical: 8)
+                      : null,
                   decoration: BoxDecoration(
                     color: isSelected
                         ? colorScheme.secondaryContainer.withValues(alpha: 0.88)
@@ -371,7 +426,13 @@ class _DestinationButton extends StatelessWidget {
                   ),
                   child: child,
                 ),
-                child: expanded
+                child: jumbo
+                    ? _JumboDestinationContent(
+                        visibleLabel: visibleLabel,
+                        foreground: foreground,
+                        selected: isSelected,
+                      )
+                    : expanded
                     ? _ExpandedDestinationContent(
                         icon: icon,
                         visibleLabel: visibleLabel,
@@ -391,6 +452,29 @@ class _DestinationButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _JumboDestinationContent extends StatelessWidget {
+  const _JumboDestinationContent({
+    required this.visibleLabel,
+    required this.foreground,
+    required this.selected,
+  });
+
+  final String visibleLabel;
+  final Color foreground;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      visibleLabel,
+      maxLines: 1,
+      softWrap: false,
+      textAlign: TextAlign.center,
+      style: _labelStyle(context, foreground, selected),
     );
   }
 }

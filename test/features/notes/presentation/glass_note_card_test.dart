@@ -41,6 +41,58 @@ void main() {
     expect(find.byTooltip('More actions for Untitled note'), findsOneWidget);
   });
 
+  testWidgets('same-title cards expose ordered metadata in semantic values', (
+    tester,
+  ) async {
+    final notes = [
+      _note(
+        title: 'Shared plan',
+        content: 'First preview',
+        tags: const ['work', 'design', 'hidden'],
+        isPinned: true,
+      ),
+      Note(
+        id: 43,
+        title: 'Shared plan',
+        content: 'Second preview',
+        color: 0xFF2DB9A8,
+        createdAt: DateTime.utc(2026, 8, 19, 11),
+        tags: const ['personal'],
+      ),
+    ];
+    await _pumpCards(tester, notes);
+
+    final openCards = find.bySemanticsLabel('Open note Shared plan');
+    expect(openCards, findsNWidgets(2));
+    expect(
+      tester.getSemantics(openCards.at(0)).value,
+      'First preview. Tags work, design, 1 more. Pinned. '
+      'Created Aug 17, 2026. Reminder Aug 18, 9:00 AM',
+    );
+    expect(
+      tester.getSemantics(openCards.at(1)).value,
+      'Second preview. Tags personal. Created Aug 19, 2026',
+    );
+    expect(find.byTooltip('More actions for Shared plan'), findsNWidgets(2));
+  });
+
+  testWidgets('preview truncation preserves an emoji ZWJ grapheme', (
+    tester,
+  ) async {
+    final prefix = List.filled(178, 'a').join();
+    const family = '👨‍👩‍👧‍👦';
+    final expectedPreview = '$prefix$family…';
+    await _pumpCard(tester, note: _note(content: '$prefix$family-continues'));
+
+    expect(find.text(expectedPreview), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(find.bySemanticsLabel('Open note Aurora design'))
+          .value,
+      contains(expectedPreview),
+    );
+  });
+
   testWidgets('keeps card geometry stable while every mutation future runs', (
     tester,
   ) async {
@@ -181,6 +233,46 @@ Future<void> _pumpCard(
 }
 
 Future<void> _complete() async {}
+
+Future<void> _pumpCards(WidgetTester tester, List<Note> notes) async {
+  tester.view.physicalSize = const Size(360, 900);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: AuroraTheme.light(),
+      home: MediaQuery(
+        data: const MediaQueryData(size: Size(360, 900)),
+        child: Scaffold(
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                for (final note in notes)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: GlassNoteCard(
+                      key: ValueKey('semantic-note-${note.id}'),
+                      note: note,
+                      onOpen: () {},
+                      onTogglePin: _complete,
+                      onArchive: _complete,
+                      onTrash: _complete,
+                      onRestore: _complete,
+                      onDelete: _complete,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
 
 Note _note({
   String title = 'Aurora design',

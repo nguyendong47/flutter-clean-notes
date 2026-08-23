@@ -12,8 +12,11 @@ class NotesShellPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final useJumboLayout = NotesBottomBar.usesJumboLayout(
+      MediaQuery.textScalerOf(context),
+    );
     return Scaffold(
-      extendBody: true,
+      extendBody: !useJumboLayout,
       body: navigationShell,
       bottomNavigationBar: NotesBottomBar(
         currentIndex: navigationShell.currentIndex,

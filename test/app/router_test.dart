@@ -142,6 +142,56 @@ void main() {
     expect(_path(harness.router), '/library');
   });
 
+  testWidgets(
+    'card menu is a root modal that dismisses before shell navigation',
+    (tester) async {
+      // Mutations caught: omitting useRootNavigator, letting the shell receive
+      // a barrier tap, or retaining the popup route with its Home branch.
+      final harness = await _pumpRouter(
+        tester,
+        repository: InMemoryNoteRepository.seeded(sampleNotes),
+      );
+      final originalUri = harness.router.routeInformationProvider.value.uri;
+      final searchCenter = tester.getCenter(
+        find.bySemanticsLabel('Search tab').hitTestable(),
+      );
+
+      await tester.tap(find.byTooltip('More actions for Aurora design'));
+      await tester.pumpAndSettle();
+
+      final archiveAction = find.text('Archive');
+      expect(archiveAction, findsOneWidget);
+      expect(
+        Navigator.of(tester.element(archiveAction)),
+        same(rootNavigatorKey.currentState),
+      );
+      expect(harness.router.routeInformationProvider.value.uri, originalUri);
+      for (final label in const [
+        'Notes tab',
+        'Search tab',
+        'Create new note',
+        'Library tab',
+        'More actions',
+      ]) {
+        expect(find.bySemanticsLabel(label).hitTestable(), findsNothing);
+      }
+
+      await tester.tapAt(searchCenter);
+      await tester.pumpAndSettle();
+      expect(archiveAction, findsNothing);
+      expect(_path(harness.router), '/');
+      expect(rootNavigatorKey.currentState!.canPop(), isFalse);
+
+      await tester.tap(find.bySemanticsLabel('Search tab'));
+      await tester.pumpAndSettle();
+      expect(_path(harness.router), '/search');
+      await tester.tap(find.bySemanticsLabel('Notes tab'));
+      await tester.pumpAndSettle();
+      expect(_path(harness.router), '/');
+      expect(archiveAction, findsNothing);
+    },
+  );
+
   testWidgets('Library empty action returns to the preserved Notes branch', (
     tester,
   ) async {
@@ -841,7 +891,7 @@ void main() {
     (path: '/search', label: 'Search'),
     (path: '/library', label: 'Library'),
   ]) {
-    for (final textScale in [1.0, 2.0]) {
+    for (final textScale in [1.0, 2.0, 3.0]) {
       testWidgets(
         '${routeCase.label} content clears the safe-area shell at ${textScale}x',
         (tester) async {
@@ -855,6 +905,17 @@ void main() {
           );
 
           if (routeCase.path == '/search') {
+            final searchList = find.descendant(
+              of: find.byType(NotesSearchPage),
+              matching: find.byType(ListView),
+            );
+            await tester.scrollUntilVisible(
+              find.byKey(const Key('notes-search-field')),
+              120,
+              scrollable: find
+                  .descendant(of: searchList, matching: find.byType(Scrollable))
+                  .first,
+            );
             await tester.enterText(
               find.byKey(const Key('notes-search-field')),
               'clearance',
@@ -888,7 +949,14 @@ void main() {
             _ => find.widgetWithText(FilledButton, 'Browse notes'),
           };
 
-          expect(regionRect.height, textScale > 1.5 ? greaterThan(92) : 92);
+          expect(
+            regionRect.height,
+            textScale == 3
+                ? greaterThan(NotesBottomBar.expandedRegionHeight)
+                : textScale > 1.5
+                ? greaterThan(92)
+                : 92,
+          );
           expect(fullBarRect.height - regionRect.height, 34);
           expect(target, findsOneWidget);
           expect(

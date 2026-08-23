@@ -258,6 +258,111 @@ void main() {
     });
   }
 
+  testWidgets(
+    'jumbo 3x text derives bar height and keeps labels in disjoint targets',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      var selectedIndex = -1;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AuroraTheme.light(),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(3)),
+            child: child!,
+          ),
+          home: Scaffold(
+            bottomNavigationBar: NotesBottomBar(
+              currentIndex: 1,
+              onDestinationSelected: (index) => selectedIndex = index,
+              onCreate: () {},
+              onMore: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      final regionRect = tester.getRect(
+        find.byKey(const Key('notes-bottom-bar-region')),
+      );
+      final surfaceRect = tester.getRect(
+        find.byKey(const Key('notes-bottom-bar-surface')),
+      );
+      expect(
+        regionRect.height,
+        greaterThan(NotesBottomBar.expandedRegionHeight),
+      );
+      expect(
+        surfaceRect.height,
+        greaterThan(NotesBottomBar.expandedSurfaceHeight),
+      );
+
+      const labels = <String, String>{
+        'Notes tab': 'Notes',
+        'Search tab': 'Search',
+        'Library tab': 'Library',
+        'More actions': 'More',
+      };
+      final targetRects = <Rect>[];
+      for (final entry in labels.entries) {
+        final target = find.bySemanticsLabel(entry.key);
+        final visibleLabel = find.text(entry.value);
+        final targetRect = tester.getRect(target);
+        final labelRect = tester.getRect(visibleLabel);
+        final paragraph = tester.renderObject<RenderParagraph>(visibleLabel);
+        expect(targetRect.width, greaterThanOrEqualTo(48), reason: entry.key);
+        expect(targetRect.height, greaterThanOrEqualTo(48), reason: entry.key);
+        expect(
+          targetRect.contains(labelRect.topLeft),
+          isTrue,
+          reason: entry.key,
+        );
+        expect(
+          targetRect.contains(labelRect.bottomRight),
+          isTrue,
+          reason: entry.key,
+        );
+        expect(paragraph.didExceedMaxLines, isFalse, reason: entry.key);
+        targetRects.add(targetRect);
+      }
+      targetRects.add(tester.getRect(find.bySemanticsLabel('Create new note')));
+      for (var first = 0; first < targetRects.length; first++) {
+        for (var second = first + 1; second < targetRects.length; second++) {
+          expect(
+            _distanceBetween(targetRects[first], targetRects[second]),
+            greaterThanOrEqualTo(8),
+          );
+        }
+      }
+
+      expect(
+        tester
+            .getSemantics(find.bySemanticsLabel('Notes tab'))
+            .flagsCollection
+            .isSelected,
+        Tristate.isFalse,
+      );
+      expect(
+        tester
+            .getSemantics(find.bySemanticsLabel('Search tab'))
+            .flagsCollection
+            .isSelected,
+        Tristate.isTrue,
+      );
+      await tester.tap(find.bySemanticsLabel('Library tab'));
+      await tester.pump();
+      expect(selectedIndex, 2);
+      semantics.dispose();
+    },
+  );
+
   for (final textScale in [1.5, 2.0]) {
     testWidgets(
       'expanded ${textScale}x layout raises Create 20 pixels above glass',

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:characters/characters.dart' as chars;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -57,6 +58,13 @@ class _GlassNoteCardState extends State<GlassNoteCard> {
     final noteTint = Color(widget.note.color).withValues(alpha: tintAlpha);
     final title = _displayTitle(widget.note);
     final openLabel = 'Open note $title';
+    final preview = _notePreview(widget.note.content);
+    final semanticValue = _noteSemanticValue(
+      widget.note,
+      preview,
+      _dateFormat,
+      _reminderFormat,
+    );
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -81,6 +89,7 @@ class _GlassNoteCardState extends State<GlassNoteCard> {
                   excludeFromSemantics: true,
                   child: Semantics(
                     label: openLabel,
+                    value: semanticValue,
                     button: true,
                     enabled: !_busy,
                     onTap: _busy ? null : widget.onOpen,
@@ -93,6 +102,7 @@ class _GlassNoteCardState extends State<GlassNoteCard> {
                           child: _CardContent(
                             note: widget.note,
                             title: title,
+                            preview: preview,
                             dateFormat: _dateFormat,
                             reminderFormat: _reminderFormat,
                           ),
@@ -116,6 +126,7 @@ class _GlassNoteCardState extends State<GlassNoteCard> {
                           dimension: 48,
                           child: PopupMenuButton<_NoteAction>(
                             tooltip: 'More actions for $title',
+                            useRootNavigator: true,
                             padding: EdgeInsets.zero,
                             icon: const Icon(Icons.more_horiz),
                             onSelected: (action) =>
@@ -191,12 +202,14 @@ class _CardContent extends StatelessWidget {
   const _CardContent({
     required this.note,
     required this.title,
+    required this.preview,
     required this.dateFormat,
     required this.reminderFormat,
   });
 
   final Note note;
   final String title;
+  final String preview;
   final DateFormat dateFormat;
   final DateFormat reminderFormat;
 
@@ -204,7 +217,6 @@ class _CardContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final preview = _truncate(note.content.trim());
     final visibleTags = note.tags.take(2).toList(growable: false);
     final hiddenTagCount = note.tags.length - visibleTags.length;
 
@@ -271,12 +283,6 @@ class _CardContent extends StatelessWidget {
       ],
     );
   }
-
-  String _truncate(String value) {
-    const limit = 180;
-    if (value.length <= limit) return value;
-    return '${value.substring(0, limit - 1).trimRight()}…';
-  }
 }
 
 class _NoteTag extends StatelessWidget {
@@ -333,6 +339,34 @@ class _Metadata extends StatelessWidget {
 }
 
 enum _NoteAction { togglePin, archive, trash, restore, delete }
+
+String _notePreview(String content) {
+  const limit = 180;
+  final value = content.trim();
+  final graphemes = chars.Characters(value);
+  if (graphemes.length <= limit) return value;
+  return '${graphemes.take(limit - 1).toString().trimRight()}…';
+}
+
+String _noteSemanticValue(
+  Note note,
+  String preview,
+  DateFormat dateFormat,
+  DateFormat reminderFormat,
+) {
+  final visibleTags = note.tags.take(2).toList(growable: false);
+  final hiddenTagCount = note.tags.length - visibleTags.length;
+  return [
+    if (preview.isNotEmpty) preview,
+    if (visibleTags.isNotEmpty)
+      'Tags ${visibleTags.join(', ')}'
+          '${hiddenTagCount > 0 ? ', $hiddenTagCount more' : ''}',
+    if (note.isPinned) 'Pinned',
+    'Created ${dateFormat.format(note.createdAt)}',
+    if (note.reminder case final reminder?)
+      'Reminder ${reminderFormat.format(reminder)}',
+  ].join('. ');
+}
 
 String _displayTitle(Note note) {
   final title = note.title.trim();
