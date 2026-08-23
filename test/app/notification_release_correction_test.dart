@@ -380,8 +380,7 @@ void main() {
         },
       );
 
-      service.handleNotificationResponse(snoozeResponse(2147483648));
-      await pumpEventQueue();
+      await service.handleNotificationResponse(snoozeResponse(2147483648));
 
       expect(permissionRequests, 0);
       expect(plugin.scheduleCalls, isEmpty);
@@ -439,55 +438,58 @@ void main() {
       });
     }
 
-    for (final platform in <TargetPlatform>[
-      TargetPlatform.android,
-      TargetPlatform.iOS,
-      TargetPlatform.macOS,
-    ]) {
-      test('${platform.name} null permission result is denied', () async {
-        debugDefaultTargetPlatformOverride = platform;
-        final plugin = _PermissionAwarePlugin();
-        late final int Function() permissionRequestCount;
-        List<_DarwinPermissionCall>? darwinCalls;
-        switch (platform) {
-          case TargetPlatform.android:
-            final android = _AndroidPermissionPlugin(null);
-            plugin.platformImplementations[AndroidFlutterLocalNotificationsPlugin] =
-                android;
-            permissionRequestCount = () => android.requestCalls;
-          case TargetPlatform.iOS:
-            final ios = _IOSPermissionPlugin(null);
-            plugin.platformImplementations[IOSFlutterLocalNotificationsPlugin] =
-                ios;
-            darwinCalls = ios.calls;
-            permissionRequestCount = () => ios.calls.length;
-          case TargetPlatform.macOS:
-            final macOS = _MacOSPermissionPlugin(null);
-            plugin.platformImplementations[MacOSFlutterLocalNotificationsPlugin] =
-                macOS;
-            darwinCalls = macOS.calls;
-            permissionRequestCount = () => macOS.calls.length;
-          case _:
-            throw StateError('Unexpected target platform: $platform');
-        }
-        final service = NotificationService(plugin: plugin, now: () => now);
+    for (final permissionResult in <bool?>[false, null]) {
+      for (final platform in <TargetPlatform>[
+        TargetPlatform.android,
+        TargetPlatform.iOS,
+        TargetPlatform.macOS,
+      ]) {
+        final resultLabel = permissionResult == null ? 'null' : 'false';
+        test('${platform.name} $resultLabel permission result is denied', () async {
+          debugDefaultTargetPlatformOverride = platform;
+          final plugin = _PermissionAwarePlugin();
+          late final int Function() permissionRequestCount;
+          List<_DarwinPermissionCall>? darwinCalls;
+          switch (platform) {
+            case TargetPlatform.android:
+              final android = _AndroidPermissionPlugin(permissionResult);
+              plugin.platformImplementations[AndroidFlutterLocalNotificationsPlugin] =
+                  android;
+              permissionRequestCount = () => android.requestCalls;
+            case TargetPlatform.iOS:
+              final ios = _IOSPermissionPlugin(permissionResult);
+              plugin.platformImplementations[IOSFlutterLocalNotificationsPlugin] =
+                  ios;
+              darwinCalls = ios.calls;
+              permissionRequestCount = () => ios.calls.length;
+            case TargetPlatform.macOS:
+              final macOS = _MacOSPermissionPlugin(permissionResult);
+              plugin.platformImplementations[MacOSFlutterLocalNotificationsPlugin] =
+                  macOS;
+              darwinCalls = macOS.calls;
+              permissionRequestCount = () => macOS.calls.length;
+            case _:
+              throw StateError('Unexpected target platform: $platform');
+          }
+          final service = NotificationService(plugin: plugin, now: () => now);
 
-        await expectLater(
-          service.scheduleReminder(noteWithId(1)),
-          throwsA(isA<NotificationPermissionDeniedException>()),
-        );
+          await expectLater(
+            service.scheduleReminder(noteWithId(1)),
+            throwsA(isA<NotificationPermissionDeniedException>()),
+          );
 
-        expect(permissionRequestCount(), 1);
-        if (darwinCalls case final calls?) {
-          final call = calls.single;
-          expect(call.alert, isTrue);
-          expect(call.badge, isTrue);
-          expect(call.sound, isTrue);
-          expect(call.provisional, isFalse);
-          expect(call.critical, isFalse);
-        }
-        expect(plugin.scheduleCalls, isEmpty);
-      });
+          expect(permissionRequestCount(), 1);
+          if (darwinCalls case final calls?) {
+            final call = calls.single;
+            expect(call.alert, isTrue);
+            expect(call.badge, isTrue);
+            expect(call.sound, isTrue);
+            expect(call.provisional, isFalse);
+            expect(call.critical, isFalse);
+          }
+          expect(plugin.scheduleCalls, isEmpty);
+        });
+      }
     }
   });
 }

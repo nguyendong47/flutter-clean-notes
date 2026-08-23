@@ -483,8 +483,7 @@ void main() {
             payload: payload,
           );
 
-          notificationService.handleNotificationResponse(response);
-          await pumpEventQueue();
+          await notificationService.handleNotificationResponse(response);
 
           expect(fakePlugin.zonedScheduleCalls.length, equals(1));
           final call = fakePlugin.zonedScheduleCalls.first;
@@ -503,8 +502,7 @@ void main() {
               '1|Legacy private title|Legacy private body|4280391411|2030-01-15T10:15:00.000Z|2030-01-15T11:15:00.000Z',
         );
 
-        notificationService.handleNotificationResponse(response);
-        await pumpEventQueue();
+        await notificationService.handleNotificationResponse(response);
 
         expect(fakePlugin.zonedScheduleCalls, hasLength(1));
         final call = fakePlugin.zonedScheduleCalls.single;
@@ -529,7 +527,7 @@ void main() {
         ];
 
         for (final payload in invalidPayloads) {
-          notificationService.handleNotificationResponse(
+          await notificationService.handleNotificationResponse(
             NotificationResponse(
               notificationResponseType:
                   NotificationResponseType.selectedNotificationAction,
@@ -538,8 +536,6 @@ void main() {
             ),
           );
         }
-        await pumpEventQueue();
-
         expect(permissionRequests, 0);
         expect(fakePlugin.zonedScheduleCalls, isEmpty);
       });
