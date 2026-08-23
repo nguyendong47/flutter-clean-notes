@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Folded note outline. Transparent fill keeps the status icon a mask. -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M5,3.5 L14,3.5 L19,8.5 L19,20.5 L5,20.5 Z M14,3.5 L14,8.5 L19,8.5"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8" />
+    <!-- N mark stays legible at the 24dp notification size. -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M8,16 L8,10 L15.5,16 L15.5,10"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8" />
+    <!-- Small sparkle echoes the Clean Notes launcher identity. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M20.5,1.5 L21.2,3.3 L22.5,4 L21.2,4.7 L20.5,6.5 L19.8,4.7 L18.5,4 L19.8,3.3 Z" />
+</vector>

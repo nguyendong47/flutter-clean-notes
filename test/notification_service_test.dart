@@ -158,7 +158,7 @@ void main() {
             expect(settings, isNotNull);
             expect(
               settings!.android?.defaultIcon,
-              equals('@mipmap/ic_launcher'),
+              equals('ic_stat_clean_notes'),
             );
             expect(settings.iOS, isNotNull);
             expect(settings.macOS, isNotNull);
