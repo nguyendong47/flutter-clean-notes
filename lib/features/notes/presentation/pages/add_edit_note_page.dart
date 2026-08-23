@@ -246,14 +246,20 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
           final verticalPadding = constraints.maxHeight < 160
               ? 8.0
               : horizontalPadding;
+          final padding = EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: verticalPadding,
+          );
+          if (_previewMode) {
+            return SizedBox(
+              key: const Key('editor-preview'),
+              width: double.infinity,
+              child: Padding(padding: padding, child: _buildPreview()),
+            );
+          }
           return Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: horizontalPadding,
-              vertical: verticalPadding,
-            ),
-            child: _previewMode
-                ? _buildPreview()
-                : constraints.maxHeight < 260 && constraints.maxWidth >= 480
+            padding: padding,
+            child: constraints.maxHeight < 260 && constraints.maxWidth >= 480
                 ? _buildLandscapeEditor()
                 : _buildEditor(),
           );
@@ -406,7 +412,6 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
     final title = _titleController.text.trim();
     final content = _contentController.text;
     return SingleChildScrollView(
-      key: const Key('editor-preview'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

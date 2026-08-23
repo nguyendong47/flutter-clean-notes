@@ -480,6 +480,30 @@ void main() {
   );
 
   testWidgets(
+    'Preview fills the editor surface and keeps top controls visible',
+    (tester) async {
+      await _pumpEditor(
+        tester,
+        note: sampleNote,
+        size: const Size(390, 844),
+        disableAnimations: true,
+      );
+
+      await tester.tap(find.byKey(const Key('editor-preview-toggle')));
+      await tester.pumpAndSettle();
+
+      final surface = tester.getRect(find.byKey(const Key('editor-surface')));
+      final preview = tester.getRect(find.byKey(const Key('editor-preview')));
+      final topBar = tester.getRect(find.byKey(const Key('editor-top-bar')));
+      expect(preview.width, greaterThanOrEqualTo(surface.width - 0.1));
+      expect(preview.width, greaterThanOrEqualTo(350));
+      expect(topBar.width, greaterThanOrEqualTo(350));
+      expect(topBar.top, greaterThanOrEqualTo(0));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'note links navigate and missing targets provide useful feedback',
     (tester) async {
       final source = sampleNote.copyWith(
