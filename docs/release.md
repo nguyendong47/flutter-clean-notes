@@ -9,6 +9,8 @@ not approved production values.
 
 | Setting | Checked-in value | Source | Status |
 | --- | --- | --- | --- |
+| User-facing product name | `Clean Notes` | Flutter app title and platform display metadata | Selected consistently in source; store-name availability and owner approval remain external gates. |
+| Launcher identity | Aurora folded-note mark | `assets/branding/`, `pubspec.yaml`, and generated platform catalogs | Versioned for all configured targets; final device/store rendering evidence remains required. |
 | App version | `1.0.0+1` | `pubspec.yaml` | Placeholder until release owner approves a monotonically increasing version/build. |
 | Android application ID | `com.example.flutter_clean_notes` | `android/app/build.gradle.kts` | Template identifier; replace before store submission. |
 | Apple bundle ID | `com.example.flutterCleanNotes` | `ios/Runner.xcodeproj/project.pbxproj` | Template identifier; replace before signing/store submission. |
@@ -55,7 +57,13 @@ submitted artifacts.
 ## Identity, signing, and versioning
 
 - [ ] **[OWNER: Product/Release]** Approve the app/store name and unique Android
-  and Apple identifiers; update associated services, tests, and store records.
+  and Apple identifiers; `Clean Notes` is the checked-in display name, but store
+  availability and ownership are not implied. Update associated services, tests,
+  and store records.
+- [ ] **[OWNER: Product/Design/QA]** Approve the launcher and display identity on
+  every shipping platform using [the branding contract](branding.md). Keep
+  `flutter_launcher_icons` pinned to `0.14.4`; if icons are regenerated, review
+  all outputs and restore the documented iOS project settings before signing.
 - [ ] **[OWNER: Release]** Set the marketing version and monotonically increasing
   build number in `pubspec.yaml`; confirm generated Android/iOS metadata matches.
 - [ ] **[OWNER: Release/Security]** Configure an Android upload/release key outside
@@ -80,7 +88,9 @@ submitted artifacts.
 
 - [ ] **[OWNER: Product/Marketing]** Approve name, short/long descriptions,
   category, keywords, icon, screenshots, support URL, and release notes for every
-  locale and form factor being submitted.
+  locale and form factor being submitted. The support and privacy destinations
+  must be active and owner-approved; keep submission blocked instead of shipping
+  placeholder or unreachable URLs.
 - [ ] **[OWNER: Product/Legal]** Complete content/age ratings, export-compliance
   answers, regional availability, terms, and support commitments.
 - [ ] **[OWNER: Product/Legal]** Convert the
@@ -125,6 +135,33 @@ that the current branch or generated manifest already satisfies them.
   are added in a future release; Android snooze expectations do not apply.
 - [ ] **[OWNER: Product/Legal]** Approve the generic lock-screen reminder copy,
   private-visibility behavior, actions, and platform override disclosure.
+- [ ] **[OWNER: Release/Engineering]** Confirm whether any beta, sideload, or
+  public build ever scheduled reminders. For a true first release, clear old
+  internal QA installs. Otherwise, prove upgrade behavior with pending reminders
+  and ship a reviewed migration or cleanup outcome; the current code parses a
+  delivered legacy payload but does not migrate pending legacy schedules.
+
+## Android backup and native compatibility
+
+- [ ] **[OWNER: Android Engineering/QA]** Inspect the signed candidate's merged
+  manifest and packaged data-extraction rules. `allowBackup` and legacy full
+  backup must be disabled; both cloud-backup and device-transfer sections must
+  exclude every supported storage domain with no includes.
+- [ ] **[OWNER: Android QA]** On API 30 or lower and API 31+, prove clearing or
+  uninstalling does not restore private notes through managed cloud backup, then
+  recover synthetic notes through the public JSON export/import flow.
+- [ ] **[OWNER: Android QA]** Test an Android 12+ physical OEM
+  device-to-device transfer source/destination pair. Explicit exclusions mitigate
+  the platform/OEM caveat but do not replace physical evidence.
+- [ ] **[OWNER: Product/Support]** Approve clear user guidance: Android managed
+  backup is disabled, manual JSON is the app-supported recovery path, and clearing
+  storage, uninstalling, or losing the device can lose notes without a retained
+  export.
+- [ ] **[OWNER: Android Engineering/QA]** Run the current official 16 KB page-size
+  compatibility check over every native library in the exact signed artifact.
+  Prove ELF and ZIP alignment and exercise the candidate on a 16 KB page-size
+  device or official equivalent environment; record tools, versions, logs, and
+  artifact hash.
 
 ## Dependencies, SBOM, and lockfile
 
@@ -137,6 +174,10 @@ that the current branch or generated manifest already satisfies them.
 - [ ] **[OWNER: Security/Engineering]** Review direct and transitive licenses,
   advisories, end-of-life dependencies, and platform plugin permissions. Record
   accepted risks with expiry and owner.
+- [ ] **[OWNER: Engineering]** Confirm the removed EOL
+  `sqlite3_flutter_libs` shim remains absent from the lockfile and packaged
+  artifacts. Verify SQLite FFI on each shipping desktop target through
+  `sqflite_common_ffi` and its current native asset path.
 
 ## Rollback and recovery
 
@@ -146,7 +187,8 @@ that the current branch or generated manifest already satisfies them.
   1, 2, 3, and 4 to current version 5. There is no documented downgrade migration;
   treat rollback to a binary expecting an older schema as unsafe until tested.
 - [ ] **[OWNER: Product/Support]** Document user backup guidance, known import
-  limitations, incident communication, support intake, and recovery steps.
+  limitations, Android's manual-JSON recovery model, incident communication,
+  support intake, and recovery steps.
 - [ ] **[OWNER: Release]** Define stop-rollout criteria and store-console actions:
   pause staged rollout, halt submission, or submit a fixed higher build. The app
   has no documented remote kill switch or server-side rollback path.

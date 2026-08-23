@@ -1,9 +1,15 @@
-# Flutter Clean Notes
+# Clean Notes
 
-Flutter Clean Notes is a local-first note-taking app with a responsive Aurora
+Clean Notes is a local-first note-taking app with a responsive Aurora
 Glass interface. Notes use a local SQLite database as their primary app store;
 user-initiated sharing, backup import, and reminder notifications cross the app
 boundary as described in the [technical privacy draft](docs/privacy.md).
+
+`Clean Notes` is the user-facing product name. The repository, Dart package,
+and current template platform identifiers intentionally retain
+`flutter_clean_notes` until release owners approve production identifiers. See
+the [branding guide](docs/branding.md) for the identity contract and launcher
+asset provenance.
 
 ## Features
 
@@ -74,6 +80,7 @@ resulting diff, and commit the corresponding `.g.dart` changes.
 
 ## Readiness documentation
 
+- [Branding](docs/branding.md) - product name, palette, launcher sources, and regeneration guardrails.
 - [Privacy and data flow](docs/privacy.md) — technical disclosure and owner decisions.
 - [Release readiness](docs/release.md) — store, signing, policy, and rollback gates.
 - [QA matrix](docs/qa.md) — repeatable automated, device, accessibility, and upgrade checks.

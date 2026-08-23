@@ -46,7 +46,7 @@ product/release owner and decision instead of silently omitting it.
 
 | Target | Minimum evidence |
 | --- | --- |
-| Android | One supported low/small device and one current large device; physical-device fresh-install notification denial/grant, process-death/reboot delivery, open/snooze, share/import, upgrade, background, and cold-launch evidence. |
+| Android | One supported low/small device and one current large device; physical-device fresh-install notification denial/grant, process-death/reboot delivery, open/snooze, share/import, upgrade, background, and cold-launch evidence. Include an Android 12+ OEM source/destination pair for device-to-device backup exclusion and a 16 KB page-size device or official equivalent environment for the final release artifact. |
 | iOS/iPadOS | One supported iPhone and one iPad size; physical-device notification authorization/delivery and tap/open, share/import, upgrade, background, and cold-launch evidence. Snooze is not expected without Darwin notification categories. |
 | Windows | Signed or release-mode desktop run covering SQLite FFI, file picker/share behavior, resizing, keyboard, restart, and upgrade. |
 | macOS | Signed or release-mode desktop run covering SQLite FFI, notifications, picker/share, resizing, keyboard, restart, and upgrade. |
@@ -67,6 +67,22 @@ Run the full critical path once at default settings and once at the most
 constrained combination: compact/landscape, 2.0x text, high contrast, and reduced
 motion. Pairwise coverage may be used for the remaining combinations only when
 the release record shows which pair covers each value.
+
+## Branding and launcher identity
+
+Use the identity and asset contract in [branding.md](branding.md). On every
+shipping target, verify the launcher/home-screen icon, task switcher, app window,
+notification source, install/uninstall surfaces, and system settings all show the
+approved `Clean Notes` name and Aurora mark. Inspect 32 px and 48 px renderings,
+Android legacy and adaptive masks, iOS/iPadOS catalog sizes, web regular and
+maskable icons, Windows ICO sizes, and macOS catalog sizes. Confirm there is no
+clipping, unintended outer rounded-square plate, alpha halo, stale Flutter icon,
+or stale `Aurora Notes`/template name.
+
+Regenerate icons only through the pinned configuration, then review the full
+binary/catalog diff and the iOS project-setting warning in the branding guide.
+The second generator run must be byte-stable after any necessary iOS setting
+restoration.
 
 ## Surface matrix
 
@@ -115,6 +131,22 @@ reminder schedule/cancel:
   exactly 10 MB, and over 10 MB. No partial import may remain after a failed row.
 - Treat exported files as sensitive test evidence; use synthetic notes and remove
   device/cloud copies when the test record is complete.
+- On Android API 30 or lower and API 31+, create notes, export a JSON backup,
+  clear storage or uninstall, reinstall, and verify no app-private notes return
+  through managed cloud backup. Import the retained JSON and prove the expected
+  copies recover through the public UI.
+- On an Android 12+ physical OEM source/destination pair, exercise the vendor's
+  device-to-device migration. Verify the app's databases, preferences, files,
+  and device-protected domains do not transfer. Record the devices, OS builds,
+  transfer method, and evidence because manifest/rule inspection alone cannot
+  guarantee OEM behavior.
+- Inspect the merged release manifest and packaged data-extraction rules: backup
+  must be disabled and both cloud-backup and device-transfer sections must
+  exclude every Android storage domain without includes. Treat any missing rule
+  or automatically restored note as a release blocker.
+- Inspect platform temporary/cache storage where tooling permits after Markdown
+  and JSON sharing. Record any materialized share copies and their OS/plugin
+  cleanup behavior; the app currently has no explicit cleanup job for them.
 
 ## Reminders and notifications
 
@@ -143,6 +175,30 @@ and the store submission makes no exact-alarm policy declaration.
 - Record platform/version cases where scheduled delivery or notification actions are
   unsupported, denied, or degraded; the user-facing behavior must match the
   release decision.
+- First-release evidence may start from clean internal QA installs. If any prior
+  beta, sideload, or public build reached users, add an upgrade case with its
+  pending scheduled reminders. Verify legacy delivered payloads still open the
+  intended note, and block release until pending schedules have a reviewed
+  migration or cleanup outcome; the current code does not migrate them.
+
+## Android release artifact
+
+Build the exact signed candidate AAB and inspect its merged manifest, resources,
+launcher assets, ABIs, and native libraries rather than relying only on source
+files. Record target/min SDK values, permissions, receivers, backup attributes,
+data-extraction rules, signing identity, artifact SHA-256, and inspection-tool
+versions.
+
+Run the current official Android 16 KB page-size compatibility check against
+every packaged native library, then install and exercise the candidate on a 16 KB
+page-size device or official equivalent environment. Both ELF segment alignment
+and APK/AAB ZIP alignment must pass; a successful ordinary emulator launch is
+not equivalent evidence. Recheck after any dependency or toolchain change.
+
+The resolved dependency inventory must not contain the removed EOL
+`sqlite3_flutter_libs` shim. Prove desktop SQLite FFI still opens and persists on
+each shipping desktop target through `sqflite_common_ffi` and its current native
+asset path.
 
 ## Database upgrades v1-v5
 
