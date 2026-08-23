@@ -270,6 +270,7 @@ void main() {
       ),
       repository: repository,
       gateway: gateway,
+      now: () => DateTime.utc(2026, 8, 23, 12),
     );
 
     await tester.tap(find.byKey(const Key('editor-done-button')));
@@ -454,6 +455,7 @@ void main() {
           ),
           repository: repository,
           gateway: gateway,
+          now: () => DateTime.utc(2026, 8, 23, 12),
         );
 
         await tester.tap(find.byKey(const Key('editor-done-button')));

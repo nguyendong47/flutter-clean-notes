@@ -551,6 +551,34 @@ void main() {
     },
   );
 
+  test('update rejects a changed reminder before the injected time', () async {
+    final now = DateTime.utc(2030, 1, 15, 10, 15);
+    final original = sampleNote.copyWith(
+      reminder: DateTime.utc(2030, 1, 16, 10, 15),
+    );
+    final repository = _RecordingNoteRepository([original], <String>[]);
+    final gateway = FakeNoteReminderGateway();
+    final container = _container(repository, gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    await expectLater(
+      _updateNoteAt(
+        container.read(notesProvider.notifier),
+        original.copyWith(
+          title: 'Invalid past change',
+          reminder: now.subtract(const Duration(minutes: 1)),
+        ),
+        () => now,
+      ),
+      throwsA(isA<InvalidNoteReminderException>()),
+    );
+
+    expect(repository.updateCalls, 0);
+    expect(repository.notes.single, original);
+    expect(gateway.events, isEmpty);
+  });
+
   test('update preserves an unchanged expired stored reminder', () async {
     final now = DateTime.utc(2030, 1, 15, 10, 15);
     final expired = DateTime.utc(2029, 12, 31, 23, 59);

@@ -266,6 +266,50 @@ void main() {
     expect(result.value, isNull);
   });
 
+  testWidgets('changed reminder before now is announced inline', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final now = DateTime(2030, 1, 15, 10, 15);
+    final result = ValueNotifier<NoteMetadataValue?>(null);
+    addTearDown(result.dispose);
+    await _openSheet(
+      tester,
+      initial: NoteMetadataValue(
+        color: Colors.white,
+        tags: const [],
+        reminder: DateTime(2030, 1, 16, 11),
+      ),
+      result: result,
+      now: () => now,
+    );
+
+    await tester.tap(find.byKey(const Key('metadata-reminder-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('15'));
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Switch to text input mode'));
+    await tester.pumpAndSettle();
+    final timeFields = find.descendant(
+      of: find.byType(TimePickerDialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(timeFields.at(0), '10');
+    await tester.enterText(timeFields.at(1), '14');
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    final error = find.byKey(const Key('metadata-reminder-error'));
+    expect(error, findsOneWidget);
+    final errorSemantics = tester.getSemantics(error);
+    expect(errorSemantics.label, 'Choose a reminder time in the future');
+    expect(errorSemantics.flagsCollection.isLiveRegion, isTrue);
+    expect(find.byKey(const Key('metadata-sheet')), findsOneWidget);
+    expect(result.value, isNull);
+    semantics.dispose();
+  });
+
   testWidgets('Apply rechecks a selected reminder against an advanced clock', (
     tester,
   ) async {
