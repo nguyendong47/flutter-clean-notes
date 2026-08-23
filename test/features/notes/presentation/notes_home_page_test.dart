@@ -238,8 +238,8 @@ void main() {
         expect(find.text('Design follow-up'), findsOneWidget, reason: action);
         expect(
           find.text(
-            'Could not update this note. Your saved note is unchanged. '
-            'Try again.',
+            'Could not update this note. Check the note list before trying '
+            'again.',
           ),
           findsOneWidget,
           reason: action,
@@ -248,6 +248,46 @@ void main() {
         expect(find.textContaining('notes.db'), findsNothing, reason: action);
         expect(find.text('Undo'), findsNothing, reason: action);
       }
+    },
+  );
+
+  testWidgets(
+    'missing archive target shows one failure without Undo or refresh feedback',
+    (tester) async {
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final container = await _pumpHome(
+        tester,
+        repository: repository,
+        size: const Size(800, 1100),
+      );
+      final cachedNotes = container.read(notesProvider).requireValue;
+      await repository.deleteNote(2);
+      final refreshCalls = repository.getCalls;
+
+      await tester.tap(find.byTooltip('More actions for Design follow-up'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive').last);
+      await tester.pumpAndSettle();
+
+      final state = container.read(notesProvider);
+      expect(state, isA<AsyncData<List<Note>>>());
+      expect(
+        state.requireValue.map((note) => note.id),
+        cachedNotes.where((note) => note.id != 2).map((note) => note.id),
+      );
+      expect(repository.getCalls, refreshCalls);
+      expect(repository.notes.any((note) => note.id == 2), isFalse);
+      expect(find.text('Design follow-up'), findsNothing);
+      expect(
+        find.text(
+          'Could not update this note. Check the note list before trying '
+          'again.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.textContaining('Could not refresh notes'), findsNothing);
+      expect(find.text('Undo'), findsNothing);
     },
   );
 
@@ -380,7 +420,7 @@ void main() {
     expect(find.text(sampleNote.title), findsOneWidget);
     expect(
       find.text(
-        'Could not update this note. Your saved note is unchanged. Try again.',
+        'Could not update this note. Check the note list before trying again.',
       ),
       findsOneWidget,
     );

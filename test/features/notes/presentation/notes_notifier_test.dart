@@ -31,6 +31,139 @@ void main() {
         .setMockMethodCallHandler(_notificationsChannel, null);
   });
 
+  final missingTargetMutations =
+      <
+        ({
+          String name,
+          Future<void> Function(NotesNotifier notifier, Note note) run,
+        })
+      >[
+        (name: 'togglePin', run: (notifier, note) => notifier.togglePin(note)),
+        (
+          name: 'archiveNote',
+          run: (notifier, note) => notifier.archiveNote(note),
+        ),
+        (name: 'trashNote', run: (notifier, note) => notifier.trashNote(note)),
+        (
+          name: 'restoreNote',
+          run: (notifier, note) => notifier.restoreNote(note),
+        ),
+      ];
+
+  for (final mutation in missingTargetMutations) {
+    test(
+      '${mutation.name} rejects a stale note without refreshing cached data',
+      () async {
+        final repository = InMemoryNoteRepository.seeded(sampleNotes);
+        final container = ProviderContainer(
+          overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        );
+        addTearDown(container.dispose);
+        final initial = await container.read(notesProvider.future);
+        final staleNote = initial.first;
+        await repository.deleteNote(staleNote.id!);
+        final persistedNotes = repository.notes;
+        final refreshCalls = repository.getCalls;
+
+        await expectLater(
+          mutation.run(container.read(notesProvider.notifier), staleNote),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'The note no longer exists.',
+            ),
+          ),
+        );
+
+        final failedState = container.read(notesProvider);
+        expect(failedState, isA<AsyncData<List<Note>>>());
+        expect(
+          failedState.requireValue.map((note) => note.id),
+          initial
+              .where((note) => note.id != staleNote.id)
+              .map((note) => note.id),
+        );
+        expect(failedState.hasError, isFalse);
+        expect(repository.notes, persistedNotes);
+        expect(repository.getCalls, refreshCalls);
+      },
+    );
+  }
+
+  test(
+    'deleteNote rejects a missing note before cancelling its reminder',
+    () async {
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final gateway = FakeNoteReminderGateway();
+      final container = _container(repository, gateway);
+      addTearDown(container.dispose);
+      final initial = await container.read(notesProvider.future);
+      final staleNote = initial.first;
+      await repository.deleteNote(staleNote.id!);
+      final persistedNotes = repository.notes;
+      final refreshCalls = repository.getCalls;
+
+      await expectLater(
+        container.read(notesProvider.notifier).deleteNote(staleNote.id!),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'The note no longer exists.',
+          ),
+        ),
+      );
+
+      final failedState = container.read(notesProvider);
+      expect(failedState, isA<AsyncData<List<Note>>>());
+      expect(
+        failedState.requireValue.map((note) => note.id),
+        initial.where((note) => note.id != staleNote.id).map((note) => note.id),
+      );
+      expect(failedState.hasError, isFalse);
+      expect(repository.notes, persistedNotes);
+      expect(repository.getCalls, refreshCalls);
+      expect(gateway.events, isEmpty);
+    },
+  );
+
+  test(
+    'missing-row eviction precedes the next queued mutation rollback',
+    () async {
+      final secondFailure = StateError('second write failed');
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final container = ProviderContainer(
+        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+      final initial = await container.read(notesProvider.future);
+      final staleNote = initial.first;
+      final secondNote = initial[1];
+      await repository.deleteNote(staleNote.id!);
+      repository.updateError = secondFailure;
+      final refreshCalls = repository.getCalls;
+
+      final staleMutation = container
+          .read(notesProvider.notifier)
+          .archiveNote(staleNote);
+      final secondMutation = container
+          .read(notesProvider.notifier)
+          .togglePin(secondNote);
+
+      await expectLater(staleMutation, throwsStateError);
+      await expectLater(secondMutation, throwsA(same(secondFailure)));
+
+      final finalState = container.read(notesProvider);
+      expect(finalState, isA<AsyncData<List<Note>>>());
+      expect(
+        finalState.requireValue.map((note) => note.id),
+        initial.where((note) => note.id != staleNote.id).map((note) => note.id),
+      );
+      expect(repository.getCalls, refreshCalls);
+    },
+  );
+
   test('loads active archived and trashed notes together', () async {
     final repository = InMemoryNoteRepository.seeded(sampleNotes);
     final container = ProviderContainer(
@@ -703,6 +836,33 @@ void main() {
 
     expect(events.take(2), ['delete:1', 'cancel:1']);
     expect(repository.notes, isEmpty);
+    expect(gateway.cancelled, [sampleNote.id]);
+    expect(gateway.scheduled, isEmpty);
+  });
+
+  test('delete cancellation failure is typed after the row commits', () async {
+    final failure = StateError('cancel failed');
+    final repository = InMemoryNoteRepository.seeded([sampleNote]);
+    final gateway = FakeNoteReminderGateway()..cancelError = failure;
+    final container = _container(repository, gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    late PersistedNoteMutationException exception;
+    try {
+      await container.read(notesProvider.notifier).deleteNote(sampleNote.id!);
+      fail('Expected PersistedNoteMutationException');
+    } on PersistedNoteMutationException catch (error) {
+      exception = error;
+    }
+
+    expect(exception.cause, same(failure));
+    expect(exception.causeStackTrace, isNotNull);
+    expect(repository.notes, isEmpty);
+    expect(gateway.cancelled, [sampleNote.id]);
+    expect(gateway.scheduled, isEmpty);
+    expect(container.read(notesProvider), isA<AsyncData<List<Note>>>());
+    expect(container.read(notesProvider).requireValue, isEmpty);
   });
 
   test(
@@ -1080,6 +1240,36 @@ void main() {
       51,
       52,
     ]);
+  });
+
+  test('cleanup accepts a zero-row no-op', () async {
+    final repository = InMemoryNoteRepository.seeded(const []);
+    final container = ProviderContainer(
+      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    await container.read(notesProvider.notifier).cleanupTrash();
+
+    expect(repository.notes, isEmpty);
+    expect(container.read(notesProvider), isA<AsyncData<List<Note>>>());
+    expect(container.read(notesProvider).requireValue, isEmpty);
+  });
+
+  test('removeTag accepts a zero-row no-op', () async {
+    final repository = InMemoryNoteRepository.seeded([sampleNote]);
+    final container = ProviderContainer(
+      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
+    final initial = await container.read(notesProvider.future);
+
+    await container.read(notesProvider.notifier).removeTag('missing tag');
+
+    expect(repository.notes, initial);
+    expect(container.read(notesProvider), isA<AsyncData<List<Note>>>());
+    expect(container.read(notesProvider).requireValue, initial);
   });
 }
 

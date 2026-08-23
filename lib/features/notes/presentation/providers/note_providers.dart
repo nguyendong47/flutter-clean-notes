@@ -385,17 +385,64 @@ class NotesNotifier extends _$NotesNotifier {
     }
   }
 
+  Future<void> _mutateOneExistingNote(
+    int? noteId,
+    Future<int> Function() operation, {
+    Future<void> Function()? afterCommit,
+  }) {
+    StateError? missingNoteError;
+    PersistedNoteMutationException? afterCommitError;
+    final keepAlive = ref.keepAlive();
+    final mutation = _mutate(() async {
+      final affectedRows = await operation();
+      if (affectedRows != 1) {
+        final error = StateError('The note no longer exists.');
+        missingNoteError = error;
+        throw error;
+      }
+      try {
+        await afterCommit?.call();
+      } catch (error, stackTrace) {
+        final persistedError = PersistedNoteMutationException(
+          cause: error,
+          causeStackTrace: stackTrace,
+        );
+        afterCommitError = persistedError;
+        Error.throwWithStackTrace(persistedError, stackTrace);
+      }
+    });
+    final result = mutation.onError((Object error, StackTrace stackTrace) {
+      final removeMissingNote = identical(error, missingNoteError);
+      final removeCommittedNote = identical(error, afterCommitError);
+      if ((removeMissingNote || removeCommittedNote) && noteId != null) {
+        final cachedNotes = state.value;
+        if (cachedNotes != null) {
+          state = AsyncData([
+            for (final note in cachedNotes)
+              if (note.id != noteId) note,
+          ]);
+        }
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    });
+    _mutationQueue = result.then<void>(
+      (_) => keepAlive.close(),
+      onError: (Object _, StackTrace _) => keepAlive.close(),
+    );
+    return result;
+  }
+
   Future<void> togglePin(Note note) {
-    return _mutate(() async {
-      await ref.read(updateNoteUsecaseProvider)(
+    return _mutateOneExistingNote(note.id, () {
+      return ref.read(updateNoteUsecaseProvider)(
         note.copyWith(isPinned: !note.isPinned),
       );
     });
   }
 
   Future<void> archiveNote(Note note) {
-    return _mutate(() async {
-      await ref.read(setNoteStatusUsecaseProvider)(
+    return _mutateOneExistingNote(note.id, () {
+      return ref.read(setNoteStatusUsecaseProvider)(
         note.id!,
         NoteStatus.archived,
       );
@@ -403,8 +450,8 @@ class NotesNotifier extends _$NotesNotifier {
   }
 
   Future<void> trashNote(Note note) {
-    return _mutate(() async {
-      await ref.read(setNoteStatusUsecaseProvider)(
+    return _mutateOneExistingNote(note.id, () {
+      return ref.read(setNoteStatusUsecaseProvider)(
         note.id!,
         NoteStatus.trashed,
       );
@@ -412,16 +459,20 @@ class NotesNotifier extends _$NotesNotifier {
   }
 
   Future<void> restoreNote(Note note) {
-    return _mutate(() async {
-      await ref.read(setNoteStatusUsecaseProvider)(note.id!, NoteStatus.active);
+    return _mutateOneExistingNote(note.id, () {
+      return ref.read(setNoteStatusUsecaseProvider)(
+        note.id!,
+        NoteStatus.active,
+      );
     });
   }
 
   Future<void> deleteNote(int id) {
-    return _mutate(() async {
-      await ref.read(deleteNoteUsecaseProvider)(id);
-      await ref.read(noteReminderGatewayProvider).cancel(id);
-    });
+    return _mutateOneExistingNote(
+      id,
+      () => ref.read(deleteNoteUsecaseProvider)(id),
+      afterCommit: () => ref.read(noteReminderGatewayProvider).cancel(id),
+    );
   }
 
   Future<void> cleanupTrash() {

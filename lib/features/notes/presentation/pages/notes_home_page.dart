@@ -268,8 +268,8 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
         const SnackBar(
           behavior: SnackBarBehavior.floating,
           content: Text(
-            'Could not update this note. Your saved note is unchanged. '
-            'Try again.',
+            'Could not update this note. Check the note list before trying '
+            'again.',
           ),
         ),
       );
