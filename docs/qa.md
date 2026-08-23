@@ -32,9 +32,12 @@ flutter test test/notification_service_test.dart test/app/notification_routing_t
 
 Passing widget/unit tests does not replace physical-device, native share-sheet,
 notification permission, signing, database-file upgrade, or store-build evidence.
-Run the Android smoke test twice without clearing app data between runs; both runs
-must pass and the test-created note must be absent afterward. Replace the sample
-device ID with the intended Android device printed by `flutter devices`.
+Run the Android smoke test twice as separate fresh-install runs; the Flutter test
+runner uninstalls the test app after each run. Each run must pass and verify before
+exit that its test-created note was permanently removed through the public Trash,
+then **Delete forever** flow. These runs do not prove retained-state behavior
+between invocations. Replace the sample device ID with the intended Android device
+printed by `flutter devices`.
 
 ## Devices and configurations
 
