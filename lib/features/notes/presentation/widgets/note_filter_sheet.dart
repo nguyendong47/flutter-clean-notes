@@ -109,35 +109,71 @@ class NoteFilterSheet extends ConsumerWidget {
                           ref.read(sortOrderProvider.notifier).set(order),
                     ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 48,
-                          child: OutlinedButton(
-                            onPressed: () {
-                              ref
-                                  .read(selectedTagProvider.notifier)
-                                  .select(null);
-                              ref
-                                  .read(sortOrderProvider.notifier)
-                                  .set(NoteSort.newest);
-                            },
-                            child: const Text('Clear filters'),
-                          ),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final labelStyle =
+                          Theme.of(context).textTheme.labelLarge ??
+                          const TextStyle();
+                      double minimumButtonWidth(String label) {
+                        final painter = TextPainter(
+                          text: TextSpan(text: label, style: labelStyle),
+                          textDirection: Directionality.of(context),
+                          textScaler: mediaQuery.textScaler,
+                          maxLines: 1,
+                        )..layout();
+                        final measuredWidth = painter.width;
+                        painter.dispose();
+                        return (measuredWidth + 48)
+                            .clamp(120.0, double.infinity)
+                            .toDouble();
+                      }
+
+                      final stackActions =
+                          constraints.maxWidth <
+                          minimumButtonWidth('Clear filters') +
+                              minimumButtonWidth('Done') +
+                              12;
+                      final clearButton = ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        child: OutlinedButton(
+                          onPressed: () {
+                            ref.read(selectedTagProvider.notifier).select(null);
+                            ref
+                                .read(sortOrderProvider.notifier)
+                                .set(NoteSort.newest);
+                          },
+                          child: const Text('Clear filters'),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: SizedBox(
-                          height: 48,
-                          child: FilledButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Done'),
-                          ),
+                      );
+                      final doneButton = ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        child: FilledButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Done'),
                         ),
-                      ),
-                    ],
+                      );
+
+                      if (stackActions) {
+                        return Column(
+                          key: const Key('note-filter-actions-stacked'),
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            clearButton,
+                            const SizedBox(height: 12),
+                            doneButton,
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        key: const Key('note-filter-actions-inline'),
+                        children: [
+                          Expanded(child: clearButton),
+                          const SizedBox(width: 12),
+                          Expanded(child: doneButton),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),

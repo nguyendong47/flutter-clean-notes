@@ -278,21 +278,72 @@ class _NotesBottomBarState extends State<NotesBottomBar> {
   }
 
   Widget _createButton() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final mediaQuery = MediaQuery.of(context);
+    final focusNode = _focusNodes[2];
+    final motionDuration = mediaQuery.disableAnimations
+        ? Duration.zero
+        : const Duration(milliseconds: 180);
+
     return FocusTraversalOrder(
       order: const NumericFocusOrder(2),
       child: Semantics(
         container: true,
         button: true,
         label: 'Create new note',
-        onTap: () => _activate(_focusNodes[2], widget.onCreate),
+        onTap: () => _activate(focusNode, widget.onCreate),
         child: ExcludeSemantics(
-          child: FloatingActionButton(
-            key: const Key('notes-bottom-bar-create-control'),
-            heroTag: 'notes-shell-create',
-            tooltip: 'Create new note',
-            focusNode: _focusNodes[2],
-            onPressed: () => _activate(_focusNodes[2], widget.onCreate),
-            child: const Icon(Icons.add_rounded, size: 28),
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              shadowColor: colorScheme.primary.withValues(alpha: 0.24),
+            ),
+            child: ListenableBuilder(
+              listenable: focusNode,
+              builder: (context, child) => Stack(
+                alignment: Alignment.center,
+                children: [
+                  child!,
+                  IgnorePointer(
+                    child: AnimatedContainer(
+                      key: const Key('notes-bottom-bar-create-focus-indicator'),
+                      width: 56,
+                      height: 56,
+                      duration: motionDuration,
+                      curve: Curves.easeOutCubic,
+                      decoration: ShapeDecoration(
+                        shape: CircleBorder(
+                          side: BorderSide(
+                            color: focusNode.hasFocus
+                                ? colorScheme.onPrimary
+                                : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              child: FloatingActionButton(
+                key: const Key('notes-bottom-bar-create-control'),
+                heroTag: 'notes-shell-create',
+                tooltip: 'Create new note',
+                focusNode: focusNode,
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                focusColor: colorScheme.onPrimary.withValues(alpha: 0.16),
+                hoverColor: colorScheme.onPrimary.withValues(alpha: 0.10),
+                splashColor: colorScheme.onPrimary.withValues(alpha: 0.18),
+                elevation: 2,
+                focusElevation: 2,
+                hoverElevation: 3,
+                highlightElevation: 1,
+                disabledElevation: 0,
+                shape: const CircleBorder(),
+                onPressed: () => _activate(focusNode, widget.onCreate),
+                child: const Icon(Icons.add_rounded, size: 28),
+              ),
+            ),
           ),
         ),
       ),

@@ -956,6 +956,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('note-filter-sheet')), findsNothing);
   });
+
+  for (final textScale in [2.0, 3.0]) {
+    testWidgets(
+      'filter footer stacks full-width actions at 320 with ${textScale}x text and keyboard',
+      (tester) async {
+        // Mutation caught: returning to a fixed-height horizontal footer clips
+        // enlarged labels and can leave the Done action behind the keyboard.
+        await _pumpSearch(
+          tester,
+          repository: InMemoryNoteRepository.seeded(sampleNotes),
+          size: const Size(320, 640),
+          textScaler: TextScaler.linear(textScale),
+          themeMode: ThemeMode.dark,
+          viewInsets: const EdgeInsets.only(bottom: 200),
+        );
+
+        await tester.tap(find.byKey(const Key('notes-search-filter')));
+        await tester.pumpAndSettle();
+
+        final clear = find.widgetWithText(OutlinedButton, 'Clear filters');
+        final done = find.widgetWithText(FilledButton, 'Done');
+        await tester.ensureVisible(done);
+        await tester.pumpAndSettle();
+
+        final clearRect = tester.getRect(clear);
+        final doneRect = tester.getRect(done);
+        expect(clearRect.width, moreOrLessEquals(doneRect.width));
+        expect(clearRect.height, greaterThanOrEqualTo(48));
+        expect(doneRect.height, greaterThanOrEqualTo(48));
+        expect(clearRect.bottom + 8, lessThanOrEqualTo(doneRect.top));
+        expect(clearRect.overlaps(doneRect), isFalse);
+        expect(
+          clearRect.contains(tester.getRect(find.text('Clear filters')).center),
+          isTrue,
+        );
+        expect(
+          doneRect.contains(tester.getRect(find.text('Done')).center),
+          isTrue,
+        );
+        expect(doneRect.bottom, lessThanOrEqualTo(440.1));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }
 
 Future<ProviderContainer> _pumpSearch(

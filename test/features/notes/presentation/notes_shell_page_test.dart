@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'dart:ui' show Tristate;
+import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -159,6 +159,104 @@ void main() {
     expect(surfaceRect.left, greaterThanOrEqualTo(24));
     expect(620 - surfaceRect.right, greaterThanOrEqualTo(24));
   });
+
+  for (final theme in <ThemeData>[AuroraTheme.light(), AuroraTheme.dark()]) {
+    testWidgets(
+      'Create FAB uses restrained Aurora elevation and a contrasting keyboard focus indicator in ${theme.brightness.name} mode',
+      (tester) async {
+        // Mutation caught: inheriting the stock black FAB shadow/focus elevation
+        // recreates the heavy ring, while removing the replacement outline
+        // leaves keyboard users without a visible focus state.
+        final previousStrategy = FocusManager.instance.highlightStrategy;
+        FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.alwaysTraditional;
+        addTearDown(
+          () => FocusManager.instance.highlightStrategy = previousStrategy,
+        );
+        final semantics = tester.ensureSemantics();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: Scaffold(
+              bottomNavigationBar: NotesBottomBar(
+                currentIndex: 0,
+                onDestinationSelected: (_) {},
+                onCreate: () {},
+                onMore: () {},
+              ),
+            ),
+          ),
+        );
+
+        final control = find.byKey(
+          const Key('notes-bottom-bar-create-control'),
+        );
+        final button = tester.widget<FloatingActionButton>(control);
+        final colorScheme = Theme.of(
+          tester.element(find.byType(NotesBottomBar)),
+        ).colorScheme;
+        expect(button.backgroundColor, colorScheme.primary);
+        expect(button.foregroundColor, colorScheme.onPrimary);
+        expect(
+          _contrastRatio(button.backgroundColor!, button.foregroundColor!),
+          greaterThanOrEqualTo(4.5),
+        );
+        final buttonMaterial = tester.widget<Material>(
+          find.descendant(
+            of: control,
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Material && widget.type == MaterialType.button,
+            ),
+          ),
+        );
+        expect(buttonMaterial.shadowColor, isNot(anyOf(isNull, Colors.black)));
+        expect(button.elevation, lessThanOrEqualTo(2));
+        expect(button.focusElevation, lessThanOrEqualTo(2));
+        expect(button.hoverElevation, lessThanOrEqualTo(3));
+        expect(button.highlightElevation, lessThanOrEqualTo(2));
+        expect(button.disabledElevation, 0);
+        expect(button.focusColor, isNot(anyOf(isNull, Colors.transparent)));
+        expect(button.hoverColor, isNot(anyOf(isNull, Colors.transparent)));
+        expect(button.shape, isA<CircleBorder>());
+
+        final indicator = find.byKey(
+          const Key('notes-bottom-bar-create-focus-indicator'),
+        );
+        final idleDecoration =
+            tester.widget<AnimatedContainer>(indicator).decoration!
+                as ShapeDecoration;
+        expect((idleDecoration.shape as CircleBorder).side.color.a, 0);
+
+        tester.widget<FloatingActionButton>(control).focusNode!.requestFocus();
+        await tester.pumpAndSettle();
+
+        final focusedDecoration =
+            tester.widget<AnimatedContainer>(indicator).decoration!
+                as ShapeDecoration;
+        final focusedSide = (focusedDecoration.shape as CircleBorder).side;
+        expect(focusedSide.width, greaterThanOrEqualTo(2));
+        expect(focusedSide.color.a, 1);
+        expect(
+          _contrastRatio(focusedSide.color, button.backgroundColor!),
+          greaterThanOrEqualTo(3),
+        );
+        expect(
+          tester.widget<FloatingActionButton>(control).focusNode!.hasFocus,
+          isTrue,
+        );
+        expect(
+          tester
+              .getSemantics(find.bySemanticsLabel('Create new note'))
+              .getSemanticsData()
+              .hasAction(SemanticsAction.tap),
+          isTrue,
+        );
+        semantics.dispose();
+      },
+    );
+  }
 
   for (final textScale in [1.5, 2.0]) {
     testWidgets('labels visibly scale at ${textScale}x without clipping', (
@@ -671,4 +769,10 @@ double _distanceBetween(Rect first, Rect second) {
     math.max(first.top - second.bottom, second.top - first.bottom),
   );
   return math.sqrt(horizontal * horizontal + vertical * vertical);
+}
+
+double _contrastRatio(Color first, Color second) {
+  final lighter = math.max(first.computeLuminance(), second.computeLuminance());
+  final darker = math.min(first.computeLuminance(), second.computeLuminance());
+  return (lighter + 0.05) / (darker + 0.05);
 }
