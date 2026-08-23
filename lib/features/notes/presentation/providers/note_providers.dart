@@ -1,12 +1,13 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/features/notes/data/datasources/local_note_datasource.dart';
 import 'package:flutter_clean_notes/features/notes/data/repositories/note_repository_impl.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/domain/repositories/note_repository.dart';
 import 'package:flutter_clean_notes/features/notes/domain/usecases/note_usecases.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_filters.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_save_exception.dart';
 
 export 'package:flutter_clean_notes/features/notes/presentation/providers/note_filters.dart'
     show NoteSort;
@@ -222,25 +223,68 @@ class NotesNotifier extends _$NotesNotifier {
     }
   }
 
-  Future<void> addNote(Note note) {
-    return _mutate(() async {
-      final id = await ref.read(addNoteUsecaseProvider)(note);
-      if (note.reminder != null) {
-        await NotificationService().scheduleReminder(note.copyWith(id: id));
+  Future<void> addNote(Note note) async {
+    final requestedNote = _persistedSnapshot(note);
+    Note? persistedNote;
+    try {
+      await _mutate(() async {
+        final id = await ref.read(addNoteUsecaseProvider)(requestedNote);
+        persistedNote = requestedNote.copyWith(id: id);
+        if (requestedNote.reminder != null) {
+          await ref.read(noteReminderGatewayProvider).schedule(persistedNote!);
+        }
+      });
+    } catch (error, stackTrace) {
+      final checkpoint = persistedNote;
+      if (checkpoint != null) {
+        Error.throwWithStackTrace(
+          PersistedNoteSaveException(
+            persistedNote: checkpoint,
+            cause: error,
+            causeStackTrace: stackTrace,
+          ),
+          stackTrace,
+        );
       }
-    });
+      Error.throwWithStackTrace(error, stackTrace);
+    }
   }
 
-  Future<void> updateNote(Note note) {
-    return _mutate(() async {
-      await ref.read(updateNoteUsecaseProvider)(note);
-      if (note.id != null) {
-        await NotificationService().cancelReminder(note.id!);
-        if (note.reminder != null) {
-          await NotificationService().scheduleReminder(note);
+  Future<void> updateNote(Note note) async {
+    final requestedNote = _persistedSnapshot(note);
+    Note? persistedNote;
+    try {
+      await _mutate(() async {
+        final updated = await ref.read(updateNoteUsecaseProvider)(
+          requestedNote,
+        );
+        if (updated != 1) {
+          throw StateError('The note no longer exists.');
         }
+        persistedNote = requestedNote;
+        final id = requestedNote.id;
+        if (id != null) {
+          final gateway = ref.read(noteReminderGatewayProvider);
+          await gateway.cancel(id);
+          if (requestedNote.reminder != null) {
+            await gateway.schedule(persistedNote!);
+          }
+        }
+      });
+    } catch (error, stackTrace) {
+      final checkpoint = persistedNote;
+      if (checkpoint != null) {
+        Error.throwWithStackTrace(
+          PersistedNoteSaveException(
+            persistedNote: checkpoint,
+            cause: error,
+            causeStackTrace: stackTrace,
+          ),
+          stackTrace,
+        );
       }
-    });
+      Error.throwWithStackTrace(error, stackTrace);
+    }
   }
 
   Future<void> importBackup(List<Note> notes) {
@@ -325,7 +369,7 @@ class NotesNotifier extends _$NotesNotifier {
   Future<void> deleteNote(int id) {
     return _mutate(() async {
       await ref.read(deleteNoteUsecaseProvider)(id);
-      await NotificationService().cancelReminder(id);
+      await ref.read(noteReminderGatewayProvider).cancel(id);
     });
   }
 
@@ -334,4 +378,8 @@ class NotesNotifier extends _$NotesNotifier {
       await ref.read(cleanupTrashUsecaseProvider)();
     });
   }
+}
+
+Note _persistedSnapshot(Note note) {
+  return note.copyWith(tags: List<String>.unmodifiable(note.tags));
 }

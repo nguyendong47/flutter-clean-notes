@@ -18,10 +18,12 @@ import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_home
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_library_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_search_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/search_focus_request.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/library_segmented_control.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_bottom_bar.dart';
+import '../helpers/fake_note_reminder_gateway.dart';
 import '../helpers/in_memory_note_repository.dart';
 import '../helpers/note_fixtures.dart';
 
@@ -231,6 +233,113 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       errorHarness.container.dispose();
+    },
+  );
+
+  for (final state in ['loading', 'error', 'not-found']) {
+    testWidgets('compact unresolved $state route fits at 2x text', (
+      tester,
+    ) async {
+      late final InMemoryNoteRepository repository;
+      _DeferredNoteRepository? deferred;
+      var settle = true;
+      var location = '/note/1';
+      switch (state) {
+        case 'loading':
+          deferred = _DeferredNoteRepository(sampleNotes);
+          repository = deferred;
+          settle = false;
+        case 'error':
+          repository = InMemoryNoteRepository.seeded(sampleNotes)
+            ..getError = StateError('load failed');
+        case 'not-found':
+          repository = InMemoryNoteRepository.seeded(sampleNotes);
+          location = '/note/404';
+      }
+      await _pumpRouter(
+        tester,
+        repository: repository,
+        initialLocation: location,
+        settle: settle,
+        size: const Size(640, 320),
+        textScaler: const TextScaler.linear(2),
+        viewPadding: const EdgeInsets.only(top: 20, bottom: 16),
+      );
+      if (!settle) await tester.pump();
+
+      expect(find.byKey(Key('existing-note-$state')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      deferred?.release();
+      if (deferred != null) await tester.pumpAndSettle();
+    });
+  }
+
+  testWidgets(
+    'resolved editor retains draft and preview scroll through loading and error',
+    (tester) async {
+      final longDraft = List.generate(
+        80,
+        (index) => 'Unsaved routed draft line $index',
+      ).join('\n\n');
+      final repository = _RefreshControlledRepository([
+        sampleNote.copyWith(content: 'Persisted route content'),
+        ...sampleNotes.skip(1),
+      ]);
+      final harness = await _pumpRouter(
+        tester,
+        repository: repository,
+        initialLocation: '/note/1',
+      );
+      await tester.enterText(
+        find.byKey(const Key('editor-body-field')),
+        longDraft,
+      );
+      await tester.tap(find.byKey(const Key('editor-preview-toggle')));
+      await tester.pump();
+      final previewScrollable = find.descendant(
+        of: find.byKey(const Key('editor-preview')),
+        matching: find.byType(Scrollable),
+      );
+      final previewPosition = tester
+          .state<ScrollableState>(previewScrollable)
+          .position;
+      previewPosition.jumpTo(previewPosition.maxScrollExtent / 2);
+      await tester.pump();
+      final retainedOffset = previewPosition.pixels;
+      expect(retainedOffset, greaterThan(0));
+
+      repository.holdRefresh();
+      harness.container.invalidate(notesProvider);
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(AddEditNotePage), findsOneWidget);
+      expect(find.byKey(const Key('existing-note-loading')), findsNothing);
+      expect(
+        tester.state<ScrollableState>(previewScrollable).position.pixels,
+        moreOrLessEquals(retainedOffset),
+      );
+
+      repository.getError = StateError('later refresh failed');
+      repository.releaseRefresh();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AddEditNotePage), findsOneWidget);
+      expect(find.byKey(const Key('existing-note-error')), findsNothing);
+      expect(
+        tester.state<ScrollableState>(previewScrollable).position.pixels,
+        moreOrLessEquals(retainedOffset),
+      );
+      await tester.tap(find.byKey(const Key('editor-preview-toggle')));
+      await tester.pump();
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('editor-body-field')))
+            .controller
+            ?.text,
+        longDraft,
+      );
     },
   );
 
@@ -485,17 +594,102 @@ void main() {
     expect(_path(harness.router), '/');
   });
 
-  testWidgets('direct editor save falls back to Notes', (tester) async {
+  testWidgets('direct editor Done falls back to Notes', (tester) async {
     final harness = await _pumpRouter(
       tester,
       repository: InMemoryNoteRepository.seeded(sampleNotes),
       initialLocation: '/note/1',
     );
 
-    await tester.tap(find.byIcon(Icons.save));
+    await tester.tap(find.byKey(const Key('editor-done-button')));
     await tester.pumpAndSettle();
     expect(_path(harness.router), '/');
   });
+
+  for (final routeCase in const <({String origin, bool direct})>[
+    (origin: '/', direct: true),
+    (origin: '/search', direct: false),
+  ]) {
+    testWidgets(
+      '${routeCase.direct ? 'direct' : 'pushed'} editor blocks system pop until save finishes',
+      (tester) async {
+        final repository = _DeferredUpdateRepository(sampleNotes);
+        final harness = await _pumpRouter(
+          tester,
+          repository: repository,
+          initialLocation: routeCase.direct ? '/note/1' : routeCase.origin,
+        );
+        if (!routeCase.direct) {
+          harness.router.push('/note/1');
+          await tester.pumpAndSettle();
+        }
+
+        await tester.tap(find.byKey(const Key('editor-done-button')));
+        await repository.entered.future;
+        await tester.pump();
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+
+        expect(
+          _path(harness.router),
+          routeCase.direct ? '/note/1' : routeCase.origin,
+        );
+        expect(find.byType(AddEditNotePage), findsOneWidget);
+
+        repository.release();
+        await tester.pumpAndSettle();
+        expect(_path(harness.router), routeCase.origin);
+        expect(find.byType(AddEditNotePage), findsNothing);
+      },
+    );
+  }
+
+  testWidgets(
+    'pushed partial save defers one pop and refetches the persisted note',
+    (tester) async {
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final gateway = FakeNoteReminderGateway()
+        ..scheduleError = StateError('notification failed');
+      final harness = await _pumpRouter(
+        tester,
+        repository: repository,
+        initialLocation: '/search',
+        gateway: gateway,
+      );
+      harness.router.push('/note/1');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('editor-title-field')),
+        'Persisted before pushed close',
+      );
+
+      await tester.tap(find.byKey(const Key('editor-done-button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('editor-save-error')), findsOneWidget);
+      expect(repository.notes, hasLength(sampleNotes.length));
+      expect(repository.notes.first.title, 'Persisted before pushed close');
+
+      await tester.tap(find.byKey(const Key('editor-back-button')));
+      expect(
+        find.byType(AddEditNotePage),
+        findsOneWidget,
+        reason: 'A partial-save pushed route closes from the post-frame branch',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AddEditNotePage), findsNothing);
+      expect(find.byType(NotesSearchPage), findsOneWidget);
+      expect(_path(harness.router), '/search');
+      expect(rootNavigatorKey.currentState!.canPop(), isFalse);
+      expect(harness.container.read(notesProvider).hasError, isFalse);
+      expect(harness.container.read(notesProvider).value, hasLength(5));
+      expect(
+        harness.container.read(notesProvider).value!.first.title,
+        'Persisted before pushed close',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('keyboard activation preserves selected destination focus', (
     tester,
@@ -761,6 +955,7 @@ typedef _RouterHarness = ({
 Future<_RouterHarness> _pumpRouter(
   WidgetTester tester, {
   required InMemoryNoteRepository repository,
+  FakeNoteReminderGateway? gateway,
   String initialLocation = '/',
   bool settle = true,
   bool manageTeardown = true,
@@ -782,6 +977,9 @@ Future<_RouterHarness> _pumpRouter(
     overrides: [
       noteRepositoryProvider.overrideWithValue(repository),
       notificationServiceProvider.overrideWithValue(notificationService),
+      noteReminderGatewayProvider.overrideWithValue(
+        gateway ?? FakeNoteReminderGateway(),
+      ),
     ],
   );
   final router = container.read(routerProvider);
@@ -801,7 +999,10 @@ Future<_RouterHarness> _pumpRouter(
           return MediaQuery(
             data: MediaQuery.of(context).copyWith(
               textScaler: textScaler,
-              padding: EdgeInsets.only(bottom: bottomPadding),
+              padding: EdgeInsets.only(
+                top: viewPadding.top,
+                bottom: bottomPadding,
+              ),
               viewPadding: viewPadding,
               viewInsets: viewInsets,
             ),
@@ -908,5 +1109,38 @@ class _DeferredNoteRepository extends InMemoryNoteRepository {
   Future<List<Note>> getNotesByStatus(NoteStatus status) async {
     await _gate.future;
     return super.getNotesByStatus(status);
+  }
+}
+
+class _RefreshControlledRepository extends InMemoryNoteRepository {
+  _RefreshControlledRepository(super.notes) : super.seeded();
+
+  Completer<void>? _refreshGate;
+
+  void holdRefresh() => _refreshGate = Completer<void>();
+
+  void releaseRefresh() => _refreshGate?.complete();
+
+  @override
+  Future<List<Note>> getNotesByStatus(NoteStatus status) async {
+    final gate = _refreshGate;
+    if (gate != null) await gate.future;
+    return super.getNotesByStatus(status);
+  }
+}
+
+class _DeferredUpdateRepository extends InMemoryNoteRepository {
+  _DeferredUpdateRepository(super.notes) : super.seeded();
+
+  final entered = Completer<void>();
+  final _gate = Completer<void>();
+
+  void release() => _gate.complete();
+
+  @override
+  Future<int> updateNote(Note note) async {
+    if (!entered.isCompleted) entered.complete();
+    await _gate.future;
+    return super.updateNote(note);
   }
 }

@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_save_exception.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../helpers/fake_note_reminder_gateway.dart';
 import '../../../helpers/in_memory_note_repository.dart';
 import '../../../helpers/note_fixtures.dart';
 
@@ -134,6 +139,331 @@ void main() {
       hasLength(sampleNotes.length + 1),
     );
   });
+
+  test('add schedules a reminder with the repository allocated ID', () async {
+    final repository = InMemoryNoteRepository.seeded(const []);
+    final gateway = FakeNoteReminderGateway();
+    final container = _container(repository, gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+    final reminder = DateTime.now().add(const Duration(days: 1));
+
+    await container
+        .read(notesProvider.notifier)
+        .addNote(
+          Note(
+            title: 'Allocated reminder',
+            content: '',
+            color: 0,
+            createdAt: DateTime.utc(2026, 8, 23),
+            reminder: reminder,
+          ),
+        );
+
+    expect(repository.addCalls, 1);
+    expect(gateway.scheduled, hasLength(1));
+    expect(gateway.scheduled.single.id, repository.notes.single.id);
+    expect(gateway.scheduled.single.reminder, reminder);
+  });
+
+  test('add freezes the caller draft before awaiting persistence', () async {
+    final repository = _GatedAddRepository();
+    final gateway = FakeNoteReminderGateway();
+    final container = _container(repository, gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+    final sourceTags = <String>['draft'];
+    final save = container
+        .read(notesProvider.notifier)
+        .addNote(
+          Note(
+            title: 'Frozen draft',
+            content: '',
+            color: 0,
+            createdAt: DateTime.utc(2026, 8, 23),
+            tags: sourceTags,
+            reminder: DateTime.utc(2026, 8, 24),
+          ),
+        );
+    await repository.entered.future;
+
+    sourceTags.add('late mutation');
+    repository.release();
+    await save;
+
+    expect(repository.notes.single.tags, ['draft']);
+    expect(gateway.scheduled.single.tags, ['draft']);
+    expect(
+      () => gateway.scheduled.single.tags.add('inside'),
+      throwsUnsupportedError,
+    );
+  });
+
+  test('add without a reminder performs no notification side effect', () async {
+    final repository = InMemoryNoteRepository.seeded(const []);
+    final gateway = FakeNoteReminderGateway();
+    final container = _container(repository, gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    await container
+        .read(notesProvider.notifier)
+        .addNote(
+          Note(
+            title: 'Quiet note',
+            content: '',
+            color: 0,
+            createdAt: DateTime.utc(2026, 8, 23),
+          ),
+        );
+
+    expect(gateway.scheduled, isEmpty);
+    expect(gateway.cancelled, isEmpty);
+  });
+
+  test(
+    'update commits before cancelling and scheduling its reminder',
+    () async {
+      final events = <String>[];
+      final note = sampleNote.copyWith(
+        reminder: DateTime.now().add(const Duration(days: 2)),
+      );
+      final repository = _RecordingNoteRepository([note], events);
+      final gateway = FakeNoteReminderGateway(eventLog: events);
+      final container = _container(repository, gateway);
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+      events.clear();
+      final changed = note.copyWith(
+        title: 'Changed',
+        reminder: DateTime.now().add(const Duration(days: 3)),
+      );
+
+      await container.read(notesProvider.notifier).updateNote(changed);
+
+      expect(events.take(3), ['update:1', 'cancel:1', 'schedule:1']);
+      expect(gateway.scheduled.single.title, 'Changed');
+    },
+  );
+
+  test('update freezes the caller draft before awaiting persistence', () async {
+    final sourceTags = <String>['draft'];
+    final note = sampleNote.copyWith(tags: sourceTags);
+    final repository = _GatedUpdateRepository([note]);
+    final gateway = FakeNoteReminderGateway();
+    final container = _container(repository, gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    final save = container.read(notesProvider.notifier).updateNote(note);
+    await repository.entered.future;
+    sourceTags.add('late mutation');
+    repository.release();
+    await save;
+
+    expect(repository.notes.single.tags, ['draft']);
+    expect(gateway.scheduled.single.tags, ['draft']);
+    expect(
+      () => gateway.scheduled.single.tags.add('inside'),
+      throwsUnsupportedError,
+    );
+  });
+
+  test(
+    'clearing a reminder cancels only and remains null after refresh',
+    () async {
+      final repository = InMemoryNoteRepository.seeded([sampleNote]);
+      final gateway = FakeNoteReminderGateway();
+      final container = _container(repository, gateway);
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+
+      await container
+          .read(notesProvider.notifier)
+          .updateNote(sampleNote.copyWith(reminder: null));
+
+      expect(gateway.cancelled, [sampleNote.id]);
+      expect(gateway.scheduled, isEmpty);
+      expect(repository.notes.single.reminder, isNull);
+      expect(container.read(notesProvider).value?.single.reminder, isNull);
+    },
+  );
+
+  test('delete commits before cancelling its notification', () async {
+    final events = <String>[];
+    final repository = _RecordingNoteRepository([sampleNote], events);
+    final gateway = FakeNoteReminderGateway(eventLog: events);
+    final container = _container(repository, gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+    events.clear();
+
+    await container.read(notesProvider.notifier).deleteNote(sampleNote.id!);
+
+    expect(events.take(2), ['delete:1', 'cancel:1']);
+    expect(repository.notes, isEmpty);
+  });
+
+  test(
+    'post-ID gateway failure exposes a defensive persisted snapshot',
+    () async {
+      final repository = InMemoryNoteRepository.seeded(const []);
+      final failure = StateError('schedule failed');
+      final gateway = FakeNoteReminderGateway()..scheduleError = failure;
+      final container = _container(repository, gateway);
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+      final tags = <String>['draft'];
+      final note = Note(
+        title: 'Persisted first',
+        content: 'Exact draft',
+        color: 7,
+        createdAt: DateTime.utc(2026, 8, 23),
+        tags: tags,
+        reminder: DateTime.now().add(const Duration(days: 1)),
+      );
+
+      final exception = await _persistedFailure(
+        container.read(notesProvider.notifier).addNote(note),
+      );
+      tags.add('outside');
+
+      expect(exception.persistedNote.id, repository.notes.single.id);
+      expect(exception.persistedNote.title, 'Persisted first');
+      expect(exception.persistedNote.tags, ['draft']);
+      expect(
+        () => exception.persistedNote.tags.add('inside'),
+        throwsUnsupportedError,
+      );
+      expect(exception.cause, same(failure));
+      expect(exception.causeStackTrace, isNotNull);
+      expect(container.read(notesProvider).hasError, isTrue);
+    },
+  );
+
+  test('refresh failure after an insert is also typed as persisted', () async {
+    final repository = InMemoryNoteRepository.seeded(const []);
+    final gateway = FakeNoteReminderGateway();
+    final container = _container(repository, gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+    repository.getErrorAtCall = repository.getCalls + 1;
+
+    final exception = await _persistedFailure(
+      container
+          .read(notesProvider.notifier)
+          .addNote(
+            Note(
+              title: 'Refresh later',
+              content: '',
+              color: 0,
+              createdAt: DateTime.utc(2026, 8, 23),
+            ),
+          ),
+    );
+
+    expect(repository.addCalls, 1);
+    expect(exception.persistedNote.id, repository.notes.single.id);
+    expect(exception.cause, isA<StateError>());
+  });
+
+  test(
+    'pre-write failures remain original and never become retry-safe',
+    () async {
+      final failure = StateError('insert failed');
+      final repository = InMemoryNoteRepository.seeded(const [])
+        ..addError = failure;
+      final gateway = FakeNoteReminderGateway();
+      final container = _container(repository, gateway);
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+
+      await expectLater(
+        container
+            .read(notesProvider.notifier)
+            .addNote(
+              Note(
+                title: 'Never inserted',
+                content: '',
+                color: 0,
+                createdAt: DateTime.utc(2026, 8, 23),
+              ),
+            ),
+        throwsA(same(failure)),
+      );
+
+      expect(repository.notes, isEmpty);
+      expect(gateway.events, isEmpty);
+    },
+  );
+
+  test('zero-row update fails before reminder side effects', () async {
+    final repository = InMemoryNoteRepository.seeded(const []);
+    final gateway = FakeNoteReminderGateway();
+    final container = _container(repository, gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    await expectLater(
+      container
+          .read(notesProvider.notifier)
+          .updateNote(
+            Note(
+              id: 404,
+              title: 'Missing',
+              content: '',
+              color: 0,
+              createdAt: DateTime.utc(2026, 8, 23),
+            ),
+          ),
+      throwsStateError,
+    );
+
+    expect(gateway.events, isEmpty);
+  });
+
+  test(
+    'retry after post-ID failure updates one insert instead of adding again',
+    () async {
+      final repository = _RecordingNoteRepository(const [], <String>[]);
+      final gateway = FakeNoteReminderGateway()
+        ..scheduleError = StateError('schedule once');
+      final container = _container(repository, gateway);
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+
+      final exception = await _persistedFailure(
+        container
+            .read(notesProvider.notifier)
+            .addNote(
+              Note(
+                title: 'One insert',
+                content: 'Draft',
+                color: 0,
+                createdAt: DateTime.utc(2026, 8, 23),
+                reminder: DateTime.now().add(const Duration(days: 1)),
+              ),
+            ),
+      );
+      gateway.scheduleError = null;
+      await container
+          .read(notesProvider.notifier)
+          .updateNote(
+            exception.persistedNote.copyWith(content: 'Latest draft'),
+          );
+
+      expect(repository.addCalls, 1);
+      expect(repository.updateCalls, 1);
+      expect(repository.notes, hasLength(1));
+      expect(repository.notes.single.id, exception.persistedNote.id);
+      expect(repository.notes.single.content, 'Latest draft');
+      expect(gateway.events, [
+        'schedule:${exception.persistedNote.id}',
+        'cancel:${exception.persistedNote.id}',
+        'schedule:${exception.persistedNote.id}',
+      ]);
+    },
+  );
 
   test('togglePin persists the inverse pin state', () async {
     final repository = InMemoryNoteRepository.seeded(sampleNotes);
@@ -317,6 +647,90 @@ void main() {
       52,
     ]);
   });
+}
+
+ProviderContainer _container(
+  InMemoryNoteRepository repository,
+  FakeNoteReminderGateway gateway,
+) {
+  return ProviderContainer(
+    overrides: [
+      noteRepositoryProvider.overrideWithValue(repository),
+      noteReminderGatewayProvider.overrideWithValue(gateway),
+    ],
+  );
+}
+
+Future<PersistedNoteSaveException> _persistedFailure(
+  Future<void> future,
+) async {
+  try {
+    await future;
+  } on PersistedNoteSaveException catch (error) {
+    return error;
+  }
+  throw TestFailure('Expected PersistedNoteSaveException');
+}
+
+class _RecordingNoteRepository extends InMemoryNoteRepository {
+  _RecordingNoteRepository(super.notes, this.events) : super.seeded();
+
+  final List<String> events;
+  int updateCalls = 0;
+
+  @override
+  Future<int> addNote(Note note) async {
+    final id = await super.addNote(note);
+    events.add('add:$id');
+    return id;
+  }
+
+  @override
+  Future<int> updateNote(Note note) async {
+    final result = await super.updateNote(note);
+    updateCalls += 1;
+    events.add('update:${note.id}');
+    return result;
+  }
+
+  @override
+  Future<int> deleteNote(int id) async {
+    final result = await super.deleteNote(id);
+    events.add('delete:$id');
+    return result;
+  }
+}
+
+class _GatedAddRepository extends InMemoryNoteRepository {
+  _GatedAddRepository() : super.seeded(const []);
+
+  final entered = Completer<void>();
+  final _gate = Completer<void>();
+
+  void release() => _gate.complete();
+
+  @override
+  Future<int> addNote(Note note) async {
+    entered.complete();
+    await _gate.future;
+    return super.addNote(note);
+  }
+}
+
+class _GatedUpdateRepository extends InMemoryNoteRepository {
+  _GatedUpdateRepository(super.notes) : super.seeded();
+
+  final entered = Completer<void>();
+  final _gate = Completer<void>();
+
+  void release() => _gate.complete();
+
+  @override
+  Future<int> updateNote(Note note) async {
+    entered.complete();
+    await _gate.future;
+    return super.updateNote(note);
+  }
 }
 
 NoteStatus _statusOf(InMemoryNoteRepository repository, int id) {
