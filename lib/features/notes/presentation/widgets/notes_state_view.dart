@@ -134,13 +134,13 @@ class NotesErrorState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.cloud_off_outlined,
+              Icons.error_outline_rounded,
               size: 36,
               color: Theme.of(context).colorScheme.error,
             ),
             const SizedBox(height: 12),
             Text(
-              'Your notes are out of reach',
+              'Could not load notes',
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
@@ -148,7 +148,7 @@ class NotesErrorState extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Check the connection and try loading them again.',
+              'Try again. Your saved notes are unchanged.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,

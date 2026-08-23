@@ -23,7 +23,8 @@ void main() {
     expect(find.byKey(const Key('notes-home-search')), findsOneWidget);
     expect(find.text(sampleNote.title), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
-    expect(find.byTooltip('Toggle theme'), findsNothing);
+    expect(find.byKey(const Key('notes-home-theme-toggle')), findsOneWidget);
+    expect(find.byTooltip('Use dark theme'), findsOneWidget);
   });
 
   testWidgets('keeps cached notes visible when a mutation fails', (
@@ -46,7 +47,11 @@ void main() {
 
     expect(find.byType(NotesHomePage), findsOneWidget);
     expect(find.text(sampleNote.title), findsOneWidget);
-    expect(find.textContaining('write failed'), findsOneWidget);
+    expect(find.textContaining('write failed'), findsNothing);
+    expect(
+      find.text('Could not update notes. Your saved notes are unchanged.'),
+      findsOneWidget,
+    );
   });
 }
 

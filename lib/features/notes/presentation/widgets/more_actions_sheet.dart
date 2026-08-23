@@ -18,7 +18,7 @@ class MoreActionsSheet extends ConsumerStatefulWidget {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      isDismissible: false,
+      isDismissible: true,
       enableDrag: false,
       backgroundColor: Colors.transparent,
       barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.54),
@@ -469,6 +469,12 @@ class _ActionRow extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final effectiveEnabled = enabled && onPressed != null;
+    final dimmed = !effectiveEnabled && !loading;
+    final surfaceColor = selected == true
+        ? colorScheme.primaryContainer.withValues(alpha: dimmed ? 0.28 : 0.7)
+        : colorScheme.surfaceContainerHighest.withValues(
+            alpha: dimmed ? 0.16 : 0.42,
+          );
     return Builder(
       builder: (rowContext) {
         void activate() {
@@ -488,67 +494,68 @@ class _ActionRow extends StatelessWidget {
           onTap: effectiveEnabled ? activate : null,
           excludeSemantics: true,
           child: Material(
-            color: selected == true
-                ? colorScheme.primaryContainer.withValues(alpha: 0.7)
-                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.42),
+            color: surfaceColor,
             borderRadius: BorderRadius.circular(18),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               focusNode: focusNode,
               onTap: effectiveEnabled ? activate : null,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 56),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      ExcludeSemantics(
-                        child: SizedBox.square(
-                          dimension: 44,
-                          child: Center(child: Icon(icon, size: 24)),
+              child: Opacity(
+                opacity: dimmed ? 0.48 : 1,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 56),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        ExcludeSemantics(
+                          child: SizedBox.square(
+                            dimension: 44,
+                            child: Center(child: Icon(icon, size: 24)),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              label,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                label,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 2),
-                            _ActionRowStatus(
-                              description: description,
-                              status: status,
-                              statusIsError: statusIsError,
-                              reserveDescription: reserveDescriptionForStatus,
-                            ),
-                          ],
+                              const SizedBox(height: 2),
+                              _ActionRowStatus(
+                                description: description,
+                                status: status,
+                                statusIsError: statusIsError,
+                                reserveDescription: reserveDescriptionForStatus,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox.square(
-                        dimension: 44,
-                        child: Center(
-                          child: loading
-                              ? const SizedBox.square(
-                                  dimension: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : trailing ?? const Icon(Icons.chevron_right),
+                        const SizedBox(width: 8),
+                        SizedBox.square(
+                          dimension: 44,
+                          child: Center(
+                            child: loading
+                                ? const SizedBox.square(
+                                    dimension: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : trailing ?? const Icon(Icons.chevron_right),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

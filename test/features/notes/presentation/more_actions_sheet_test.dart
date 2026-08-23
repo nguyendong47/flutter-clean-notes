@@ -112,6 +112,23 @@ void main() {
     expect(find.byType(SafeArea), findsWidgets);
   });
 
+  testWidgets('idle More and Tag routes dismiss from the scrim in order', (
+    tester,
+  ) async {
+    await _pumpMore(tester, notes: _tagNotes);
+    await _openTags(tester);
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TagManagerSheet), findsNothing);
+    expect(find.byType(MoreActionsSheet), findsOneWidget);
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+    expect(find.byType(MoreActionsSheet), findsNothing);
+  });
+
   testWidgets('awaits theme persistence and reports rollback inline', (
     tester,
   ) async {
@@ -181,6 +198,35 @@ void main() {
     expect(loadingSemantics.hasAction(SemanticsAction.tap), isFalse);
     expect(find.bySemanticsLabel(RegExp(r'^Export text$')), findsOneWidget);
     expect(tester.getSize(exportRow), sizeBefore);
+
+    final inactiveRow = find.byKey(const Key('more-row-backup-json'));
+    final activeOpacity = find.descendant(
+      of: exportRow,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Opacity && widget.opacity == 1,
+      ),
+    );
+    final inactiveOpacity = find.descendant(
+      of: inactiveRow,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Opacity && widget.opacity < 0.6,
+      ),
+    );
+    expect(activeOpacity, findsOneWidget);
+    expect(inactiveOpacity, findsOneWidget);
+    expect(tester.widget<Opacity>(activeOpacity).opacity, 1);
+    expect(tester.widget<Opacity>(inactiveOpacity).opacity, lessThan(0.6));
+    final activeSurface = tester.widget<Material>(
+      find.descendant(of: exportRow, matching: find.byType(Material)).first,
+    );
+    final inactiveSurface = tester.widget<Material>(
+      find.descendant(of: inactiveRow, matching: find.byType(Material)).first,
+    );
+    expect(inactiveSurface.color!.a, lessThan(activeSurface.color!.a));
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    expect(find.byType(MoreActionsSheet), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await tester.pump();
@@ -472,6 +518,10 @@ void main() {
       tester.getSemantics(refreshing).flagsCollection.isLiveRegion,
       isTrue,
     );
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    expect(find.byType(TagManagerSheet), findsOneWidget);
 
     repository.readGate!.complete();
     await tester.pumpAndSettle();

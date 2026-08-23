@@ -30,7 +30,11 @@ class NotesCollection extends StatelessWidget {
       builder: (context, constraints) {
         final viewportWidth = constraints.crossAxisExtent;
         final horizontalInset = _horizontalInset(viewportWidth);
-        final columnCount = viewportWidth < 360 ? 1 : 2;
+        final columnCount = viewportWidth < 360
+            ? 1
+            : viewportWidth < 700
+            ? 2
+            : 3;
 
         return SliverPadding(
           padding: EdgeInsets.symmetric(horizontal: horizontalInset),

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/widgets/aurora_background.dart';
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
@@ -233,20 +234,31 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
       ..showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text('Could not update notes: $error'),
+          content: const Text(
+            'Could not update notes. Your saved notes are unchanged.',
+          ),
         ),
       );
   }
 }
 
-class _HomeHeader extends StatelessWidget {
+class _HomeHeader extends ConsumerStatefulWidget {
   const _HomeHeader({required this.date, super.key});
 
   final String date;
 
   @override
+  ConsumerState<_HomeHeader> createState() => _HomeHeaderState();
+}
+
+class _HomeHeaderState extends ConsumerState<_HomeHeader> {
+  bool _themeBusy = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final toggleLabel = dark ? 'Use light theme' : 'Use dark theme';
     final hour = DateTime.now().hour;
     final greeting = hour < 12
         ? 'Good morning'
@@ -254,24 +266,81 @@ class _HomeHeader extends StatelessWidget {
         ? 'Good afternoon'
         : 'Good evening';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          greeting,
-          style: theme.textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w700,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                greeting,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                widget.date,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          date,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+        const SizedBox(width: 12),
+        Semantics(
+          button: true,
+          enabled: !_themeBusy,
+          label: toggleLabel,
+          excludeSemantics: true,
+          child: SizedBox.square(
+            key: const Key('notes-home-theme-toggle'),
+            dimension: 48,
+            child: IconButton(
+              tooltip: toggleLabel,
+              onPressed: _themeBusy ? null : () => unawaited(_toggleTheme()),
+              icon: _themeBusy
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      dark
+                          ? Icons.light_mode_outlined
+                          : Icons.dark_mode_outlined,
+                    ),
+            ),
           ),
         ),
       ],
     );
+  }
+
+  Future<void> _toggleTheme() async {
+    if (_themeBusy) return;
+    final mode = Theme.of(context).brightness == Brightness.dark
+        ? ThemeMode.light
+        : ThemeMode.dark;
+    setState(() => _themeBusy = true);
+    try {
+      await ref.read(appThemeProvider.notifier).setMode(mode);
+    } catch (_) {
+      if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              behavior: SnackBarBehavior.floating,
+              content: Text('Theme stays unchanged. Try again.'),
+            ),
+          );
+      }
+    } finally {
+      if (mounted) setState(() => _themeBusy = false);
+    }
   }
 }
 
