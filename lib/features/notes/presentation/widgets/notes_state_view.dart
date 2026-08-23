@@ -62,9 +62,14 @@ class NotesSkeleton extends StatelessWidget {
 }
 
 class NotesEmptyState extends StatelessWidget {
-  const NotesEmptyState({required this.onCreate, super.key});
+  const NotesEmptyState({
+    required this.onCreate,
+    super.key,
+    this.title = 'Create your first note',
+  });
 
   final VoidCallback onCreate;
+  final String title;
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +88,7 @@ class NotesEmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Create your first note',
+              title,
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,

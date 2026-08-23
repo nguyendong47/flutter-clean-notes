@@ -295,6 +295,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
     setState(() => _filtersOpen = true);
     await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,

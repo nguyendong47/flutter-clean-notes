@@ -99,7 +99,12 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
               else if (!hasVisibleData && notesState.hasError)
                 NotesErrorState(onRetry: () => unawaited(_refresh()))
               else if (homeNotes.isEmpty)
-                NotesEmptyState(onCreate: _createNote)
+                NotesEmptyState(
+                  onCreate: _createNote,
+                  title: notesState.requireValue.isEmpty
+                      ? 'Create your first note'
+                      : 'No active notes',
+                )
               else
                 NotesCollection(
                   key: const Key('notes-collection'),

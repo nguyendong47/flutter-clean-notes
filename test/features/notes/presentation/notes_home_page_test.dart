@@ -151,6 +151,21 @@ void main() {
     expect(created, isTrue);
   });
 
+  testWidgets('active-empty state does not claim the notebook is empty', (
+    tester,
+  ) async {
+    await _pumpHome(
+      tester,
+      repository: InMemoryNoteRepository.seeded([
+        sampleNote.copyWith(status: NoteStatus.archived),
+        sampleNotes.last,
+      ]),
+    );
+
+    expect(find.text('No active notes'), findsOneWidget);
+    expect(find.textContaining('Create your first note'), findsNothing);
+  });
+
   testWidgets('initial error retains chrome and a 48 pixel retry action', (
     tester,
   ) async {
