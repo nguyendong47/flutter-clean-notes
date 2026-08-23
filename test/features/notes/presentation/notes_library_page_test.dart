@@ -6,12 +6,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_library_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/library_segmented_control.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_state_view.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../helpers/fake_note_reminder_gateway.dart';
 import '../../../helpers/in_memory_note_repository.dart';
 import '../../../helpers/note_fixtures.dart';
 
@@ -418,6 +420,54 @@ void main() {
     expect(find.text('Discarded draft'), findsNothing);
   });
 
+  testWidgets('committed delete warns once when reminder cancellation fails', (
+    tester,
+  ) async {
+    final repository = _ControlledNoteRepository.seeded(sampleNotes);
+    final reminderGateway = FakeNoteReminderGateway()
+      ..cancelError = StateError('private cancellation details');
+    await _pumpLibrary(
+      tester,
+      repository: repository,
+      reminderGateway: reminderGateway,
+    );
+    await _selectTrash(tester);
+    await _openDeleteDialog(tester, 'Discarded draft');
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete forever'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    _expectPermanentlyDeletedNoteUnavailable(
+      repository,
+      id: 5,
+      title: 'Discarded draft',
+    );
+    expect(reminderGateway.cancelled, [5]);
+    const warning = 'Note deleted, but its reminder could not be cancelled.';
+    expect(find.text(warning), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text(warning)).flagsCollection.isLiveRegion,
+      isTrue,
+    );
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(
+      find.text('Could not update library. Showing saved notes.'),
+      findsNothing,
+    );
+    expect(
+      find.text('Could not delete “Discarded draft”. Try again.'),
+      findsNothing,
+    );
+    expect(find.textContaining('private cancellation details'), findsNothing);
+    expect(find.textContaining('StateError'), findsNothing);
+    expect(find.textContaining('PersistedNoteMutationException'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text(warning), findsOneWidget);
+    expect(find.byType(SnackBar), findsOneWidget);
+  });
+
   testWidgets(
     'committed delete releases its tombstone after fresh same-ID data',
     (tester) async {
@@ -697,6 +747,7 @@ Future<ProviderContainer> _pumpLibrary(
   ThemeMode themeMode = ThemeMode.light,
   ValueChanged<Note>? onOpenNote,
   VoidCallback? onShowNotes,
+  FakeNoteReminderGateway? reminderGateway,
   bool settle = true,
 }) async {
   tester.view.physicalSize = size;
@@ -707,7 +758,11 @@ Future<ProviderContainer> _pumpLibrary(
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        noteRepositoryProvider.overrideWithValue(repository),
+        if (reminderGateway != null)
+          noteReminderGatewayProvider.overrideWithValue(reminderGateway),
+      ],
       child: MaterialApp(
         theme: AuroraTheme.light(),
         darkTheme: AuroraTheme.dark(),
@@ -744,6 +799,10 @@ void _expectSingleCachedRefreshNotice(WidgetTester tester) {
 
 void _expectNoCommittedMutationFailureUi() {
   expect(find.text('Could not update library. Try again.'), findsNothing);
+  expect(
+    find.text('Note deleted, but its reminder could not be cancelled.'),
+    findsNothing,
+  );
   expect(find.textContaining('PersistedNoteMutationException'), findsNothing);
   expect(find.textContaining('note refresh'), findsNothing);
   expect(find.textContaining('StateError'), findsNothing);

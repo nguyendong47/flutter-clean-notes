@@ -236,15 +236,21 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
   Future<void> _showDeleteDialog(Note note) async {
     final originFocus = FocusManager.instance.primaryFocus;
     try {
-      final deleted = await showDialog<bool>(
-        context: context,
-        builder: (context) => _DeleteForeverDialog(
-          note: note,
-          onDelete: () => ref.read(notesProvider.notifier).deleteNote(note.id!),
-        ),
-      );
-      if (deleted == true && mounted) {
+      final result =
+          await showDialog<({PersistedNoteMutationFailureKind? failureKind})>(
+            context: context,
+            builder: (context) => _DeleteForeverDialog(
+              note: note,
+              onDelete: () =>
+                  ref.read(notesProvider.notifier).deleteNote(note.id!),
+            ),
+          );
+      if (result != null && mounted) {
         setState(() => _committedDeletedNoteIds.add(note.id!));
+        if (result.failureKind ==
+            PersistedNoteMutationFailureKind.reminderCancellation) {
+          _showReminderCancellationWarning();
+        }
       }
     } finally {
       _deleteDialogOpen = false;
@@ -256,6 +262,23 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
         });
       }
     }
+  }
+
+  void _showReminderCancellationWarning() {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..removeCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Semantics(
+            liveRegion: true,
+            child: const Text(
+              'Note deleted, but its reminder could not be cancelled.',
+            ),
+          ),
+        ),
+      );
   }
 }
 
@@ -279,10 +302,11 @@ class _DeleteForeverDialogState extends State<_DeleteForeverDialog> {
       _busy = true;
       _failed = false;
     });
+    PersistedNoteMutationFailureKind? failureKind;
     try {
       await widget.onDelete();
-    } on PersistedNoteMutationException {
-      // The delete committed; only the follow-up refresh failed.
+    } on PersistedNoteMutationException catch (error) {
+      failureKind = error.kind;
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -292,7 +316,7 @@ class _DeleteForeverDialogState extends State<_DeleteForeverDialog> {
       }
       return;
     }
-    if (mounted) Navigator.of(context).pop(true);
+    if (mounted) Navigator.of(context).pop((failureKind: failureKind));
   }
 
   @override

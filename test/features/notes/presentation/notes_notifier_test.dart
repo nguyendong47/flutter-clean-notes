@@ -856,6 +856,10 @@ void main() {
       exception = error;
     }
 
+    expect(
+      exception.kind,
+      PersistedNoteMutationFailureKind.reminderCancellation,
+    );
     expect(exception.cause, same(failure));
     expect(exception.causeStackTrace, isNotNull);
     expect(repository.notes, isEmpty);
@@ -952,6 +956,7 @@ void main() {
       }
 
       expect(repository.notes.first.isPinned, isFalse);
+      expect(exception.kind, PersistedNoteMutationFailureKind.refresh);
       expect(exception.cause, isA<StateError>());
       expect(exception.causeStackTrace, isNotNull);
       expect(container.read(notesProvider).value, initial);

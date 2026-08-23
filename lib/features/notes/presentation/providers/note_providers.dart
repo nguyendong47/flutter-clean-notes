@@ -389,6 +389,8 @@ class NotesNotifier extends _$NotesNotifier {
     int? noteId,
     Future<int> Function() operation, {
     Future<void> Function()? afterCommit,
+    PersistedNoteMutationFailureKind afterCommitFailureKind =
+        PersistedNoteMutationFailureKind.refresh,
   }) {
     StateError? missingNoteError;
     PersistedNoteMutationException? afterCommitError;
@@ -406,6 +408,7 @@ class NotesNotifier extends _$NotesNotifier {
         final persistedError = PersistedNoteMutationException(
           cause: error,
           causeStackTrace: stackTrace,
+          kind: afterCommitFailureKind,
         );
         afterCommitError = persistedError;
         Error.throwWithStackTrace(persistedError, stackTrace);
@@ -472,6 +475,8 @@ class NotesNotifier extends _$NotesNotifier {
       id,
       () => ref.read(deleteNoteUsecaseProvider)(id),
       afterCommit: () => ref.read(noteReminderGatewayProvider).cancel(id),
+      afterCommitFailureKind:
+          PersistedNoteMutationFailureKind.reminderCancellation,
     );
   }
 
