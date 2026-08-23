@@ -13,7 +13,8 @@ class NotesBottomBar extends StatefulWidget {
   });
 
   static const double regionHeight = 92;
-  static const double expandedRegionHeight = 108;
+  static const double expandedRegionHeight = 132;
+  static const double expandedSurfaceHeight = 112;
 
   final int currentIndex;
   final ValueChanged<int> onDestinationSelected;
@@ -69,7 +70,9 @@ class _NotesBottomBarState extends State<NotesBottomBar> {
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  height: useExpandedLayout ? regionHeight : 72,
+                  height: useExpandedLayout
+                      ? NotesBottomBar.expandedSurfaceHeight
+                      : 72,
                   child: const GlassSurface(
                     key: Key('notes-bottom-bar-surface'),
                     borderRadius: BorderRadius.all(Radius.circular(28)),
@@ -129,47 +132,53 @@ class _NotesBottomBarState extends State<NotesBottomBar> {
   }
 
   Widget _buildExpandedLayout(Duration motionDuration) {
-    return Center(
+    return Align(
+      alignment: Alignment.topCenter,
       child: SizedBox(
         width: 288,
         height: NotesBottomBar.expandedRegionHeight,
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 104,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _destination(
-                    0,
-                    expanded: true,
-                    motionDuration: motionDuration,
-                  ),
-                  const SizedBox(height: 4),
-                  _destination(
-                    1,
-                    expanded: true,
-                    motionDuration: motionDuration,
-                  ),
-                ],
+            Padding(
+              padding: const EdgeInsets.only(top: 24),
+              child: SizedBox(
+                width: 104,
+                child: Column(
+                  children: [
+                    _destination(
+                      0,
+                      expanded: true,
+                      motionDuration: motionDuration,
+                    ),
+                    const SizedBox(height: 8),
+                    _destination(
+                      1,
+                      expanded: true,
+                      motionDuration: motionDuration,
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 12),
             _createButton(),
             const SizedBox(width: 12),
-            SizedBox(
-              width: 104,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _destination(
-                    2,
-                    expanded: true,
-                    motionDuration: motionDuration,
-                  ),
-                  const SizedBox(height: 4),
-                  _moreButton(expanded: true, motionDuration: motionDuration),
-                ],
+            Padding(
+              padding: const EdgeInsets.only(top: 24),
+              child: SizedBox(
+                width: 104,
+                child: Column(
+                  children: [
+                    _destination(
+                      2,
+                      expanded: true,
+                      motionDuration: motionDuration,
+                    ),
+                    const SizedBox(height: 8),
+                    _moreButton(expanded: true, motionDuration: motionDuration),
+                  ],
+                ),
               ),
             ),
           ],

@@ -21,6 +21,7 @@ import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_sear
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/search_focus_request.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/library_segmented_control.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_bottom_bar.dart';
 import '../helpers/in_memory_note_repository.dart';
 import '../helpers/note_fixtures.dart';
 
@@ -597,6 +598,116 @@ void main() {
     expect(list.padding!.resolve(TextDirection.ltr).bottom, 120);
   });
 
+  for (final routeCase in const <({String path, String label})>[
+    (path: '/', label: 'Notes'),
+    (path: '/search', label: 'Search'),
+    (path: '/library', label: 'Library'),
+  ]) {
+    for (final textScale in [1.0, 2.0]) {
+      testWidgets(
+        '${routeCase.label} content clears the safe-area shell at ${textScale}x',
+        (tester) async {
+          await _pumpRouter(
+            tester,
+            repository: InMemoryNoteRepository.seeded(_clearanceNotes),
+            initialLocation: routeCase.path,
+            size: const Size(320, 640),
+            textScaler: TextScaler.linear(textScale),
+            viewPadding: const EdgeInsets.only(bottom: 34),
+          );
+
+          if (routeCase.path == '/search') {
+            await tester.enterText(
+              find.byKey(const Key('notes-search-field')),
+              'clearance',
+            );
+            await tester.pumpAndSettle();
+          }
+
+          final scrollView = switch (routeCase.path) {
+            '/' => find.descendant(
+              of: find.byType(NotesHomePage),
+              matching: find.byType(CustomScrollView),
+            ),
+            '/search' => find.descendant(
+              of: find.byType(NotesSearchPage),
+              matching: find.byType(ListView),
+            ),
+            _ => find.descendant(
+              of: find.byType(NotesLibraryPage),
+              matching: find.byType(CustomScrollView),
+            ),
+          };
+          await _jumpToEnd(tester, scrollView);
+
+          final regionRect = tester.getRect(
+            find.byKey(const Key('notes-bottom-bar-region')),
+          );
+          final fullBarRect = tester.getRect(find.byType(NotesBottomBar));
+          final target = switch (routeCase.path) {
+            '/' => find.byKey(const ValueKey('note-card-115')),
+            '/search' => find.byKey(const ValueKey('search-result-note-115')),
+            _ => find.widgetWithText(FilledButton, 'Browse notes'),
+          };
+
+          expect(regionRect.height, textScale > 1.5 ? greaterThan(92) : 92);
+          expect(fullBarRect.height - regionRect.height, 34);
+          expect(target, findsOneWidget);
+          expect(
+            tester.getRect(target).bottom,
+            lessThanOrEqualTo(regionRect.top),
+            reason: '${routeCase.label} content must stop above the bar region',
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets('expanded Search content clears keyboard with bottom safe area', (
+    tester,
+  ) async {
+    await _pumpRouter(
+      tester,
+      repository: InMemoryNoteRepository.seeded(_clearanceNotes),
+      initialLocation: '/search',
+      size: const Size(320, 640),
+      textScaler: const TextScaler.linear(2),
+      viewPadding: const EdgeInsets.only(bottom: 34),
+      viewInsets: const EdgeInsets.only(bottom: 240),
+    );
+    await tester.enterText(
+      find.byKey(const Key('notes-search-field')),
+      'clearance',
+    );
+    await tester.pumpAndSettle();
+    final scrollView = find.descendant(
+      of: find.byType(NotesSearchPage),
+      matching: find.byType(ListView),
+    );
+    await _jumpToEnd(tester, scrollView);
+
+    final pageRect = tester.getRect(find.byType(NotesSearchPage));
+    final regionRect = tester.getRect(
+      find.byKey(const Key('notes-bottom-bar-region')),
+    );
+    final fullBarRect = tester.getRect(find.byType(NotesBottomBar));
+    final lastResult = find.byKey(const ValueKey('search-result-note-115'));
+    final obstructionTop = pageRect.bottom < regionRect.top
+        ? pageRect.bottom
+        : regionRect.top;
+
+    expect(pageRect.height, 400);
+    expect(regionRect.height, greaterThan(92));
+    expect(fullBarRect.height - regionRect.height, 12);
+    expect(lastResult, findsOneWidget);
+    expect(
+      tester.getRect(lastResult).bottom,
+      lessThanOrEqualTo(obstructionTop),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   for (final theme in <ThemeData>[AuroraTheme.light(), AuroraTheme.dark()]) {
     testWidgets(
       'compact ${theme.brightness.name} shell reserves 112 pixels and does not overflow',
@@ -655,6 +766,8 @@ Future<_RouterHarness> _pumpRouter(
   bool manageTeardown = true,
   Size size = const Size(375, 812),
   ThemeData? theme,
+  TextScaler textScaler = TextScaler.noScaling,
+  EdgeInsets viewPadding = EdgeInsets.zero,
   EdgeInsets viewInsets = EdgeInsets.zero,
 }) async {
   tester.view.physicalSize = size;
@@ -681,10 +794,20 @@ Future<_RouterHarness> _pumpRouter(
         debugShowCheckedModeBanner: false,
         theme: theme ?? AuroraTheme.light(),
         darkTheme: AuroraTheme.dark(),
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(viewInsets: viewInsets),
-          child: child!,
-        ),
+        builder: (context, child) {
+          final bottomPadding = (viewPadding.bottom - viewInsets.bottom)
+              .clamp(0.0, double.infinity)
+              .toDouble();
+          return MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: textScaler,
+              padding: EdgeInsets.only(bottom: bottomPadding),
+              viewPadding: viewPadding,
+              viewInsets: viewInsets,
+            ),
+            child: child!,
+          );
+        },
         routerConfig: router,
       ),
     ),
@@ -705,6 +828,34 @@ Future<_RouterHarness> _pumpRouter(
 }
 
 String _path(GoRouter router) => router.routeInformationProvider.value.uri.path;
+
+Future<void> _jumpToEnd(WidgetTester tester, Finder scrollView) async {
+  final scrollable = find.descendant(
+    of: scrollView,
+    matching: find.byType(Scrollable),
+  );
+  final position = tester.state<ScrollableState>(scrollable.first).position;
+  for (var attempt = 0; attempt < 12; attempt++) {
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    if ((position.maxScrollExtent - position.pixels).abs() < 0.5) return;
+  }
+  throw TestFailure('Scroll extent did not settle at its end');
+}
+
+final _clearanceNotes = List<Note>.unmodifiable(
+  List.generate(
+    16,
+    (index) => Note(
+      id: 100 + index,
+      title: 'Clearance note $index',
+      content: 'Enough content to verify the composed shell viewport.',
+      color: 0xFF6757D9,
+      createdAt: DateTime.utc(2026, 8, 23).subtract(Duration(minutes: index)),
+      tags: const ['clearance'],
+    ),
+  ),
+);
 
 void _expectRootEditor(WidgetTester tester) {
   expect(find.byType(AddEditNotePage), findsOneWidget);

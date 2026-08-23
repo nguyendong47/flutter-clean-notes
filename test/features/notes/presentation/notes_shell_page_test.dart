@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
@@ -233,7 +234,74 @@ void main() {
         );
         expect(paragraph.didExceedMaxLines, isFalse, reason: label);
       }
+
+      const targetKeys = [
+        Key('notes-bottom-bar-notes-control'),
+        Key('notes-bottom-bar-search-control'),
+        Key('notes-bottom-bar-create-control'),
+        Key('notes-bottom-bar-library-control'),
+        Key('notes-bottom-bar-more-control'),
+      ];
+      final targetRects = [
+        for (final key in targetKeys) tester.getRect(find.byKey(key)),
+      ];
+      for (var first = 0; first < targetRects.length; first++) {
+        for (var second = first + 1; second < targetRects.length; second++) {
+          expect(
+            _distanceBetween(targetRects[first], targetRects[second]),
+            greaterThanOrEqualTo(8),
+            reason:
+                '${targetKeys[first]} and ${targetKeys[second]} need 8 pixels between targets',
+          );
+        }
+      }
     });
+  }
+
+  for (final textScale in [1.5, 2.0]) {
+    testWidgets(
+      'expanded ${textScale}x layout raises Create 20 pixels above glass',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AuroraTheme.light(),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(textScale)),
+              child: child!,
+            ),
+            home: Scaffold(
+              bottomNavigationBar: NotesBottomBar(
+                currentIndex: 0,
+                onDestinationSelected: (_) {},
+                onCreate: () {},
+                onMore: () {},
+              ),
+            ),
+          ),
+        );
+
+        final regionRect = tester.getRect(
+          find.byKey(const Key('notes-bottom-bar-region')),
+        );
+        final surfaceRect = tester.getRect(
+          find.byKey(const Key('notes-bottom-bar-surface')),
+        );
+        final createRect = tester.getRect(
+          find.byKey(const Key('notes-bottom-bar-create-control')),
+        );
+
+        expect(regionRect.height, 132);
+        expect(surfaceRect.height, 112);
+        expect(surfaceRect.top - createRect.top, 20);
+      },
+    );
   }
 
   testWidgets('reduced motion disables bottom bar selection animations', (
@@ -486,4 +554,16 @@ void main() {
       expect(targetRect.height, greaterThanOrEqualTo(48), reason: label);
     }
   });
+}
+
+double _distanceBetween(Rect first, Rect second) {
+  final horizontal = math.max(
+    0,
+    math.max(first.left - second.right, second.left - first.right),
+  );
+  final vertical = math.max(
+    0,
+    math.max(first.top - second.bottom, second.top - first.bottom),
+  );
+  return math.sqrt(horizontal * horizontal + vertical * vertical);
 }
