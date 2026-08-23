@@ -407,6 +407,7 @@ void main() {
           },
         ]);
       final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final originalIds = sampleNotes.map((note) => note.id).toSet();
       final container = _container(gateway: gateway, repository: repository);
       addTearDown(container.dispose);
       await container.read(notesProvider.future);
@@ -440,9 +441,19 @@ void main() {
         NotesTransferResult.failed,
       );
       expect(repository.notes, hasLength(beforeMalformed));
+      expect(repository.notes, hasLength(sampleNotes.length + 2));
+      expect(repository.notes.map((note) => note.id), containsAll(originalIds));
       expect(
         repository.notes.map((note) => note.title),
         containsAll(['Legacy backup note', 'Current backup note']),
+      );
+      expect(
+        repository.notes.where((note) => note.title == 'Legacy backup note'),
+        hasLength(1),
+      );
+      expect(
+        repository.notes.where((note) => note.title == 'Current backup note'),
+        hasLength(1),
       );
     },
   );

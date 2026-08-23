@@ -480,11 +480,11 @@ void main() {
   );
 
   testWidgets(
-    'Preview fills the editor surface and keeps top controls visible',
+    'short Preview paints full-width editor and top surfaces inside gutters',
     (tester) async {
       await _pumpEditor(
         tester,
-        note: sampleNote,
+        note: sampleNote.copyWith(title: 'Short', content: 'Tiny note.'),
         size: const Size(390, 844),
         disableAnimations: true,
       );
@@ -492,13 +492,34 @@ void main() {
       await tester.tap(find.byKey(const Key('editor-preview-toggle')));
       await tester.pumpAndSettle();
 
-      final surface = tester.getRect(find.byKey(const Key('editor-surface')));
+      final surfaceFinder = find.byKey(const Key('editor-surface'));
+      final topBarFinder = find.byKey(const Key('editor-top-bar'));
+      final paintedSurface = tester.getRect(
+        find
+            .descendant(of: surfaceFinder, matching: find.byType(DecoratedBox))
+            .first,
+      );
+      final paintedTopBar = tester.getRect(
+        find
+            .descendant(of: topBarFinder, matching: find.byType(DecoratedBox))
+            .first,
+      );
       final preview = tester.getRect(find.byKey(const Key('editor-preview')));
-      final topBar = tester.getRect(find.byKey(const Key('editor-top-bar')));
-      expect(preview.width, greaterThanOrEqualTo(surface.width - 0.1));
-      expect(preview.width, greaterThanOrEqualTo(350));
-      expect(topBar.width, greaterThanOrEqualTo(350));
-      expect(topBar.top, greaterThanOrEqualTo(0));
+      for (final rect in [paintedSurface, paintedTopBar]) {
+        expect(rect.left, moreOrLessEquals(16, epsilon: 0.1));
+        expect(rect.right, moreOrLessEquals(374, epsilon: 0.1));
+        expect(rect.width, moreOrLessEquals(358, epsilon: 0.1));
+      }
+      expect(preview.left, moreOrLessEquals(paintedSurface.left, epsilon: 0.1));
+      expect(
+        preview.right,
+        moreOrLessEquals(paintedSurface.right, epsilon: 0.1),
+      );
+      expect(
+        preview.width,
+        moreOrLessEquals(paintedSurface.width, epsilon: 0.1),
+      );
+      expect(paintedTopBar.top, greaterThanOrEqualTo(0));
       expect(tester.takeException(), isNull);
     },
   );

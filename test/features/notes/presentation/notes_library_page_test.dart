@@ -159,6 +159,31 @@ void main() {
     expect(find.text('Archived launch notes'), findsOneWidget);
   });
 
+  testWidgets(
+    'archive-to-trash stays visible and busy until persistence completes',
+    (tester) async {
+      final repository = _ControlledNoteRepository.seeded(sampleNotes)
+        ..statusGate = Completer<void>();
+      await _pumpLibrary(tester, repository: repository);
+
+      await _chooseCardAction(tester, 'Archived launch notes', 'Move to trash');
+
+      expect(find.text('Archived launch notes'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(repository.statusCalls, 1);
+      expect(_statusOf(repository, 4), NoteStatus.archived);
+      expect(find.text('Undo'), findsNothing);
+
+      repository.statusGate!.complete();
+      await tester.pumpAndSettle();
+
+      expect(repository.statusCalls, 1);
+      expect(_statusOf(repository, 4), NoteStatus.trashed);
+      expect(find.text('Archived launch notes'), findsNothing);
+      expect(find.text('Undo'), findsOneWidget);
+    },
+  );
+
   testWidgets('trash restore Undo returns the note to Trash', (tester) async {
     final repository = _ControlledNoteRepository.seeded(sampleNotes);
     await _pumpLibrary(tester, repository: repository);
@@ -369,6 +394,36 @@ void main() {
       find.text('Could not update library. Showing saved notes.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Trash selection and content survive notesProvider refresh', (
+    tester,
+  ) async {
+    final repository = _ControlledNoteRepository.seeded(sampleNotes);
+    final container = await _pumpLibrary(tester, repository: repository);
+    await _selectTrash(tester);
+
+    expect(
+      tester.getSemantics(find.text('Trash')).flagsCollection.isSelected,
+      Tristate.isTrue,
+    );
+    expect(find.text('Discarded draft'), findsOneWidget);
+
+    container.invalidate(notesProvider);
+    await container.read(notesProvider.future);
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<LibrarySegmentedControl>(find.byType(LibrarySegmentedControl))
+          .selected,
+      LibrarySection.trash,
+    );
+    expect(
+      tester.getSemantics(find.text('Trash')).flagsCollection.isSelected,
+      Tristate.isTrue,
+    );
+    expect(find.text('Discarded draft'), findsOneWidget);
   });
 
   testWidgets('fits 320 pixels at text scale 1.5 in both Aurora themes', (

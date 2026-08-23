@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -12,10 +13,11 @@ import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/app/router.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/add_edit_note_page.dart';
-import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_search_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_home_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_search_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
+import 'package:flutter_clean_notes/main.dart';
 import '../../../helpers/fake_note_reminder_gateway.dart';
 import '../../../helpers/in_memory_note_repository.dart';
 import '../../../helpers/note_fixtures.dart';
@@ -93,7 +95,47 @@ void main() {
       expect(_path(harness.router), '/search');
       expect(harness.container.read(searchQueryProvider), 'Aurora result');
       expect(harness.container.read(selectedTagProvider), 'work');
-      expect(scrollable.position.pixels, moreOrLessEquals(offset));
+      final currentResults = find.descendant(
+        of: find.byType(NotesSearchPage),
+        matching: find.byType(Scrollable),
+      );
+      final currentScrollable = tester.state<ScrollableState>(
+        currentResults.first,
+      );
+      expect(currentScrollable.position.pixels, moreOrLessEquals(offset));
+
+      currentScrollable.position.jumpTo(0);
+      await tester.pumpAndSettle();
+      final returnedField = find.byKey(const Key('notes-search-field'));
+      expect(returnedField, findsOneWidget);
+      expect(tester.getRect(returnedField).isEmpty, isFalse);
+      expect(
+        tester.widget<SearchBar>(returnedField).controller?.text,
+        'Aurora result',
+      );
+
+      await tester.tap(find.byKey(const Key('notes-search-filter')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .getSemantics(find.byKey(const Key('filter-tag-work')))
+            .flagsCollection
+            .isSelected,
+        Tristate.isTrue,
+      );
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+
+      final editedResult = find.bySemanticsLabel(
+        'Open note Aurora result 4 edited',
+      );
+      await tester.scrollUntilVisible(
+        editedResult,
+        200,
+        scrollable: currentResults.first,
+      );
+      expect(editedResult, findsOneWidget);
+      expect(harness.container.read(searchQueryProvider), 'Aurora result');
       expect(
         harness.container
             .read(notesProvider)
@@ -139,8 +181,24 @@ void main() {
     await _chooseCardAction(tester, 'Archived launch notes', 'Move to trash');
     await tester.pumpAndSettle();
     expect(find.text('Undo'), findsOneWidget);
+    expect(
+      harness.container
+          .read(notesProvider)
+          .requireValue
+          .singleWhere((note) => note.id == 4)
+          .status,
+      NoteStatus.trashed,
+    );
     await tester.tap(find.text('Undo'));
     await tester.pumpAndSettle();
+    expect(
+      harness.container
+          .read(notesProvider)
+          .requireValue
+          .singleWhere((note) => note.id == 4)
+          .status,
+      NoteStatus.active,
+    );
     expect(
       find.bySemanticsLabel('Open note Archived launch notes'),
       findsOneWidget,
@@ -161,6 +219,7 @@ void main() {
         'Saved exactly once',
       );
       await tester.tap(find.byKey(const Key('editor-done-button')));
+      await tester.tap(find.byKey(const Key('editor-done-button')));
       await repository.entered.future;
       await tester.pump();
 
@@ -177,6 +236,77 @@ void main() {
         findsOneWidget,
       );
       expect(repository.addCalls, 1);
+    },
+  );
+
+  testWidgets(
+    'real MyApp applies and persists Dark from More without changing route',
+    (tester) async {
+      // Mutation caught: wiring More outside MyApp's theme provider, changing
+      // the shell URI, or updating the rendered theme without persisting it.
+      tester.view.physicalSize = const Size(375, 812);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final store = _FakeThemeModeStore(ThemeMode.light);
+      final container = ProviderContainer(
+        overrides: [
+          themeModeStoreProvider.overrideWithValue(store),
+          noteRepositoryProvider.overrideWithValue(
+            InMemoryNoteRepository.seeded(sampleNotes),
+          ),
+          noteReminderGatewayProvider.overrideWithValue(
+            FakeNoteReminderGateway(),
+          ),
+          notificationServiceProvider.overrideWithValue(
+            NotificationService(plugin: FlutterLocalNotificationsPlugin()),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(appThemeProvider.future);
+      final router = container.read(routerProvider);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(container: container, child: const MyApp()),
+      );
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+      await tester.pumpAndSettle();
+      final uriBefore = router.routeInformationProvider.value.uri;
+      expect(
+        Theme.of(tester.element(find.bySemanticsLabel('Notes tab'))).brightness,
+        Brightness.light,
+      );
+
+      await tester.tap(find.bySemanticsLabel('More actions'));
+      await tester.pumpAndSettle();
+      expect(router.routeInformationProvider.value.uri, uriBefore);
+      await tester.tap(find.byKey(const Key('theme-mode-dark')));
+      await tester.pumpAndSettle();
+
+      expect(container.read(appThemeProvider).requireValue, ThemeMode.dark);
+      expect(store.writeCalls, 1);
+      expect(store.mode, ThemeMode.dark);
+      expect(
+        Theme.of(
+          tester.element(find.byKey(const Key('more-actions-sheet'))),
+        ).brightness,
+        Brightness.dark,
+      );
+      expect(router.routeInformationProvider.value.uri, uriBefore);
+
+      container.invalidate(appThemeProvider);
+      expect(await container.read(appThemeProvider.future), ThemeMode.dark);
+      await tester.pumpAndSettle();
+      expect(store.readCalls, 2);
+      expect(
+        Theme.of(
+          tester.element(find.byKey(const Key('more-actions-sheet'))),
+        ).brightness,
+        Brightness.dark,
+      );
     },
   );
 
@@ -297,5 +427,25 @@ class _DeferredAddRepository extends InMemoryNoteRepository {
     if (!entered.isCompleted) entered.complete();
     await _gate.future;
     return super.addNote(note);
+  }
+}
+
+class _FakeThemeModeStore implements ThemeModeStore {
+  _FakeThemeModeStore(this.mode);
+
+  ThemeMode mode;
+  int readCalls = 0;
+  int writeCalls = 0;
+
+  @override
+  Future<ThemeMode> readMode() async {
+    readCalls += 1;
+    return mode;
+  }
+
+  @override
+  Future<void> writeMode(ThemeMode mode) async {
+    writeCalls += 1;
+    this.mode = mode;
   }
 }
