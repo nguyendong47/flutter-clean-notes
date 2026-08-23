@@ -806,7 +806,12 @@ Expected: FAIL because the services/providers/widgets do not exist.
 
 - [ ] **Step 5: Implement deterministic transfer formats**
 
-Encode JSON as a top-level list of NoteModel.fromEntity(note).toJson() maps so the exported format matches NoteModel.fromJson. Parse into NoteModel, then use copyWith(id: null, status: NoteStatus.active, reminder: null) during import. Throw FormatException with user-readable messages for invalid JSON shape or note fields.
+Encode JSON as a top-level list of deterministic field maps built directly from
+`Note` values, and parse validated entries directly into `Note` values in
+`NoteExportFormatter`. Keep import normalization in `ImportNotes`: before the
+repository transaction, copy each parsed note with `id: null`,
+`status: NoteStatus.active`, and `reminder: null`. Throw `FormatException` with
+user-readable messages for invalid JSON shape or note fields.
 
 The platform gateway owns FilePicker, XFile, and SharePlus. Tests override notesTransferGatewayProvider with a fake.
 
