@@ -8,6 +8,7 @@ import 'package:flutter_clean_notes/app/widgets/aurora_background.dart';
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/library_segmented_control.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_collection.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_state_view.dart';
@@ -173,6 +174,8 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
     try {
       await mutation();
       return true;
+    } on PersistedNoteMutationException {
+      return true;
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -263,6 +266,8 @@ class _DeleteForeverDialogState extends State<_DeleteForeverDialog> {
     });
     try {
       await widget.onDelete();
+    } on PersistedNoteMutationException {
+      // The delete committed; only the follow-up refresh failed.
     } catch (_) {
       if (mounted) {
         setState(() {

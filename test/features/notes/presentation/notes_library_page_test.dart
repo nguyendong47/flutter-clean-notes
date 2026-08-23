@@ -202,6 +202,109 @@ void main() {
     expect(find.text('Discarded draft'), findsOneWidget);
   });
 
+  testWidgets(
+    'committed archive restore keeps success and Undo after refresh failure',
+    (tester) async {
+      final repository = _ControlledNoteRepository.seeded(sampleNotes);
+      await _pumpLibrary(tester, repository: repository);
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      await _chooseCardAction(tester, 'Archived launch notes', 'Restore');
+      await tester.pumpAndSettle();
+
+      expect(_statusOf(repository, 4), NoteStatus.active);
+      expect(
+        tester
+            .widget<LibrarySegmentedControl>(
+              find.byType(LibrarySegmentedControl),
+            )
+            .selected,
+        LibrarySection.archived,
+      );
+      expect(find.text('Archived launch notes'), findsOneWidget);
+      expect(find.text('Archived launch notes restored'), findsOneWidget);
+      expect(find.text('Undo'), findsOneWidget);
+      _expectSingleCachedRefreshNotice(tester);
+      _expectNoCommittedMutationFailureUi();
+
+      repository.getErrorAtCall = null;
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      expect(_statusOf(repository, 4), NoteStatus.archived);
+      expect(find.text('Archived launch notes'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'committed archive trash keeps success and Undo after refresh failure',
+    (tester) async {
+      final repository = _ControlledNoteRepository.seeded(sampleNotes);
+      await _pumpLibrary(tester, repository: repository);
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      await _chooseCardAction(tester, 'Archived launch notes', 'Move to trash');
+      await tester.pumpAndSettle();
+
+      expect(_statusOf(repository, 4), NoteStatus.trashed);
+      expect(
+        tester
+            .widget<LibrarySegmentedControl>(
+              find.byType(LibrarySegmentedControl),
+            )
+            .selected,
+        LibrarySection.archived,
+      );
+      expect(find.text('Archived launch notes'), findsOneWidget);
+      expect(find.text('Archived launch notes moved to trash'), findsOneWidget);
+      expect(find.text('Undo'), findsOneWidget);
+      _expectSingleCachedRefreshNotice(tester);
+      _expectNoCommittedMutationFailureUi();
+
+      repository.getErrorAtCall = null;
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      expect(_statusOf(repository, 4), NoteStatus.archived);
+      expect(find.text('Archived launch notes'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'committed trash restore keeps success and Undo after refresh failure',
+    (tester) async {
+      final repository = _ControlledNoteRepository.seeded(sampleNotes);
+      await _pumpLibrary(tester, repository: repository);
+      await _selectTrash(tester);
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      await _chooseCardAction(tester, 'Discarded draft', 'Restore');
+      await tester.pumpAndSettle();
+
+      expect(_statusOf(repository, 5), NoteStatus.active);
+      expect(
+        tester
+            .widget<LibrarySegmentedControl>(
+              find.byType(LibrarySegmentedControl),
+            )
+            .selected,
+        LibrarySection.trash,
+      );
+      expect(find.text('Discarded draft'), findsOneWidget);
+      expect(find.text('Discarded draft restored'), findsOneWidget);
+      expect(find.text('Undo'), findsOneWidget);
+      _expectSingleCachedRefreshNotice(tester);
+      _expectNoCommittedMutationFailureUi();
+
+      repository.getErrorAtCall = null;
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      expect(_statusOf(repository, 5), NoteStatus.trashed);
+      expect(find.text('Discarded draft'), findsOneWidget);
+    },
+  );
+
   testWidgets('delete dialog has exact warning and Cancel restores focus', (
     tester,
   ) async {
@@ -291,6 +394,12 @@ void main() {
     );
     expect(find.text('Discarded draft'), findsOneWidget);
     expect(repository.deleteCalls, 1);
+    expect(
+      find.text('Could not update library. Showing saved notes.'),
+      findsNothing,
+    );
+    expect(find.textContaining('disk write failed'), findsNothing);
+    expect(find.textContaining('StateError'), findsNothing);
 
     repository.deleteError = null;
     await tester.tap(find.widgetWithText(FilledButton, 'Delete forever'));
@@ -300,6 +409,31 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('Discarded draft'), findsNothing);
   });
+
+  testWidgets(
+    'committed permanent delete closes after refresh failure without retry',
+    (tester) async {
+      final repository = _ControlledNoteRepository.seeded(sampleNotes);
+      await _pumpLibrary(tester, repository: repository);
+      await _selectTrash(tester);
+      await _openDeleteDialog(tester, 'Discarded draft');
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete forever'));
+      await tester.pumpAndSettle();
+
+      expect(repository.deleteCalls, 1);
+      expect(repository.notes.any((note) => note.id == 5), isFalse);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(
+        find.text('Could not delete “Discarded draft”. Try again.'),
+        findsNothing,
+      );
+      expect(find.widgetWithText(FilledButton, 'Delete forever'), findsNothing);
+      _expectSingleCachedRefreshNotice(tester);
+      _expectNoCommittedMutationFailureUi();
+    },
+  );
 
   testWidgets('Archive and Trash empty states have distinct useful actions', (
     tester,
@@ -377,6 +511,12 @@ void main() {
     expect(state.value, same(before));
     expect(state.hasError, isFalse);
     _expectStableChrome();
+    expect(
+      tester
+          .widget<LibrarySegmentedControl>(find.byType(LibrarySegmentedControl))
+          .selected,
+      LibrarySection.archived,
+    );
     expect(find.text('Archived launch notes'), findsOneWidget);
     expect(
       find.text('Could not update library. Showing saved notes.'),
@@ -391,6 +531,10 @@ void main() {
     );
     expect(find.text('Could not update library. Try again.'), findsOneWidget);
     expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.text('Undo'), findsNothing);
+    expect(find.textContaining('write failed'), findsNothing);
+    expect(find.textContaining('StateError'), findsNothing);
+    expect(find.textContaining('PersistedNoteMutationException'), findsNothing);
 
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
@@ -534,6 +678,19 @@ void _expectStableChrome() {
   expect(find.byKey(const Key('notes-library-heading')), findsOneWidget);
   expect(find.text('Library'), findsOneWidget);
   expect(find.byType(LibrarySegmentedControl), findsOneWidget);
+}
+
+void _expectSingleCachedRefreshNotice(WidgetTester tester) {
+  final notice = find.text('Could not update library. Showing saved notes.');
+  expect(notice, findsOneWidget);
+  expect(tester.getSemantics(notice).flagsCollection.isLiveRegion, isTrue);
+}
+
+void _expectNoCommittedMutationFailureUi() {
+  expect(find.text('Could not update library. Try again.'), findsNothing);
+  expect(find.textContaining('PersistedNoteMutationException'), findsNothing);
+  expect(find.textContaining('note refresh'), findsNothing);
+  expect(find.textContaining('StateError'), findsNothing);
 }
 
 Future<void> _selectTrash(WidgetTester tester) async {
