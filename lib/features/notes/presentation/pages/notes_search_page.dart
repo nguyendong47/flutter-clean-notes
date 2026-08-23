@@ -410,17 +410,29 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
   }
 
   Future<void> _archive(Note note) async {
-    final succeeded = await _runMutation(
+    final result = await _runMutation(
       () => ref.read(notesProvider.notifier).archiveNote(note),
     );
-    if (succeeded) _showUndo(note, 'Note archived');
+    if (result != _MutationResult.failed) {
+      _showUndo(
+        note,
+        'Note archived',
+        refreshFailed: result == _MutationResult.persistedRefreshFailure,
+      );
+    }
   }
 
   Future<void> _trash(Note note) async {
-    final succeeded = await _runMutation(
+    final result = await _runMutation(
       () => ref.read(notesProvider.notifier).trashNote(note),
     );
-    if (succeeded) _showUndo(note, 'Note moved to trash');
+    if (result != _MutationResult.failed) {
+      _showUndo(
+        note,
+        'Note moved to trash',
+        refreshFailed: result == _MutationResult.persistedRefreshFailure,
+      );
+    }
   }
 
   Future<void> _restore(Note note) async {
@@ -435,19 +447,19 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
     await _runMutation(() => ref.read(notesProvider.notifier).deleteNote(id));
   }
 
-  Future<bool> _runMutation(Future<void> Function() mutation) async {
+  Future<_MutationResult> _runMutation(Future<void> Function() mutation) async {
     try {
       await mutation();
-      return true;
+      return _MutationResult.succeeded;
     } on PersistedNoteMutationException {
-      return true;
+      return _MutationResult.persistedRefreshFailure;
     } catch (_) {
       _showError('Could not update this note. Try again.');
-      return false;
+      return _MutationResult.failed;
     }
   }
 
-  void _showUndo(Note note, String message) {
+  void _showUndo(Note note, String message, {required bool refreshFailed}) {
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger
@@ -455,7 +467,11 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
       ..showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text(message),
+          content: Text(
+            refreshFailed
+                ? '$message. Could not refresh notes; showing saved notes.'
+                : message,
+          ),
           action: SnackBarAction(
             label: 'Undo',
             onPressed: () => unawaited(_restore(note)),
@@ -721,6 +737,8 @@ enum _SearchViewState {
   noMatches,
   results,
 }
+
+enum _MutationResult { succeeded, persistedRefreshFailure, failed }
 
 _SearchViewState _resolveSearchViewState({
   required AsyncValue<List<Note>> notesState,

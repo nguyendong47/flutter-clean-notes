@@ -214,6 +214,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('notes-search-filter-badge')), findsNothing);
+      expect(
+        tester
+            .widget<SearchBar>(find.byKey(const Key('notes-search-field')))
+            .controller
+            ?.text,
+        'project',
+      );
+      expect(find.text('Blocked thought'), findsNothing);
       expect(find.text('Zulu project'), findsOneWidget);
       expect(find.text('Middle project'), findsOneWidget);
       expect(find.text('Alpha project'), findsOneWidget);
@@ -344,36 +352,69 @@ void main() {
   );
 
   testWidgets(
-    'committed archive with refresh failure still succeeds and Undo restores',
+    'committed archive and trash refresh failures warn once and Undo restores',
     (tester) async {
-      final repository = InMemoryNoteRepository.seeded(sampleNotes);
-      await _pumpSearch(
-        tester,
-        repository: repository,
-        size: const Size(600, 1000),
-      );
-      await tester.enterText(
-        find.byKey(const Key('notes-search-field')),
-        'follow-up',
-      );
-      await tester.pumpAndSettle();
-      repository.getErrorAtCall = repository.getCalls + 1;
+      for (final scenario
+          in <({String action, NoteStatus status, String successMessage})>[
+            (
+              action: 'Archive',
+              status: NoteStatus.archived,
+              successMessage: 'Note archived',
+            ),
+            (
+              action: 'Move to trash',
+              status: NoteStatus.trashed,
+              successMessage: 'Note moved to trash',
+            ),
+          ]) {
+        final repository = InMemoryNoteRepository.seeded(sampleNotes);
+        await _pumpSearch(
+          tester,
+          repository: repository,
+          size: const Size(600, 1000),
+        );
+        await tester.enterText(
+          find.byKey(const Key('notes-search-field')),
+          'follow-up',
+        );
+        await tester.pumpAndSettle();
+        repository.getErrorAtCall = repository.getCalls + 1;
 
-      await tester.tap(find.byTooltip('More actions for Design follow-up'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Archive').last);
-      await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('More actions for Design follow-up'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(scenario.action).last);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
 
-      expect(_statusOf(repository, 2), NoteStatus.archived);
-      expect(find.text('Note archived'), findsOneWidget);
-      expect(find.text('Undo'), findsOneWidget);
-      expect(find.text('Could not update this note. Try again.'), findsNothing);
+        expect(_statusOf(repository, 2), scenario.status);
+        expect(
+          find.text('Design follow-up'),
+          findsOneWidget,
+          reason: 'The failed refresh keeps the cached active card visible.',
+        );
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(
+          find.text(
+            '${scenario.successMessage}. '
+            'Could not refresh notes; showing saved notes.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Undo'), findsOneWidget);
+        expect(
+          find.text('Could not update this note. Try again.'),
+          findsNothing,
+        );
+        expect(find.textContaining('note refresh'), findsNothing);
+        expect(find.textContaining('StateError'), findsNothing);
 
-      await tester.tap(find.text('Undo'));
-      await tester.pumpAndSettle();
+        repository.getErrorAtCall = null;
+        await tester.tap(find.text('Undo'));
+        await tester.pumpAndSettle();
 
-      expect(_statusOf(repository, 2), NoteStatus.active);
-      expect(find.text('Design follow-up'), findsOneWidget);
+        expect(_statusOf(repository, 2), NoteStatus.active);
+        expect(find.text('Design follow-up'), findsOneWidget);
+      }
     },
   );
 
