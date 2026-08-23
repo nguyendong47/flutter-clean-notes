@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:flutter_clean_notes/main.dart' as app;
+import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_library_page.dart';
 
 const _pollInterval = Duration(milliseconds: 100);
 const _defaultTimeout = Duration(seconds: 15);
@@ -120,21 +121,26 @@ void main() {
       find.byKey(const Key('notes-library-heading')),
       action: 'open Library',
     );
-    await _waitFor(
-      tester,
-      find.text('No archived notes'),
-      description: 'the default Archived library section',
+    expect(
+      find.text(title),
+      findsNothing,
+      reason: 'The active smoke note must not appear in Archived.',
     );
     await _tapAndWaitFor(
       tester,
       find.text('Trash'),
-      find.text('Trash is empty'),
+      _selectedLibrarySection(LibrarySection.trash),
       action: 'switch Library to Trash',
+    );
+    expect(
+      find.text(title),
+      findsNothing,
+      reason: 'The active smoke note must not appear in Trash.',
     );
     await _tapAndWaitFor(
       tester,
       find.text('Archived'),
-      find.text('No archived notes'),
+      _selectedLibrarySection(LibrarySection.archived),
       action: 'switch Library back to Archived',
     );
 
@@ -200,12 +206,86 @@ void main() {
       find.text(title),
       action: 'undo the archive operation',
     );
+
+    await _tapAndWaitFor(
+      tester,
+      find.byTooltip('More actions for $title'),
+      find.text('Move to trash'),
+      action: 'open the restored note menu for cleanup',
+    );
+    await _tapAndWaitFor(
+      tester,
+      find.text('Move to trash'),
+      find.text('$title moved to trash'),
+      action: 'move the smoke note to Trash for cleanup',
+    );
+    await _waitUntilAbsent(
+      tester,
+      find.text(title),
+      description: 'the trashed smoke note to leave Home',
+    );
+
+    await _tapAndWaitFor(
+      tester,
+      find.byKey(const Key('notes-bottom-bar-library-control')),
+      find.byKey(const Key('notes-library-heading')),
+      action: 'return to Library for cleanup',
+    );
+    await _tapAndWaitFor(
+      tester,
+      find.text('Trash'),
+      find.bySemanticsLabel('Open note $title'),
+      action: 'open Trash and locate the smoke note',
+    );
+    await _tapAndWaitFor(
+      tester,
+      find.byTooltip('More actions for $title'),
+      find.text('Delete forever'),
+      action: 'open the smoke note delete action',
+    );
+    await _tapAndWaitFor(
+      tester,
+      find.text('Delete forever').last,
+      find.byType(AlertDialog),
+      action: 'open the permanent-delete confirmation',
+    );
+    await _tapWhenHitTestable(
+      tester,
+      find.widgetWithText(FilledButton, 'Delete forever'),
+      action: 'confirm permanent cleanup',
+    );
+    await _waitUntilAbsent(
+      tester,
+      find.bySemanticsLabel('Open note $title'),
+      description: 'the permanently deleted smoke note to leave Trash',
+      timeout: const Duration(seconds: 20),
+    );
+    await _tapAndWaitFor(
+      tester,
+      find.byKey(const Key('notes-bottom-bar-notes-control')),
+      find.byKey(const Key('notes-home-header')),
+      action: 'finish the smoke flow on Home',
+    );
     expect(
       find.byKey(const Key('notes-home-header')),
       findsOneWidget,
       reason: 'The smoke flow must finish on Home.',
     );
+    expect(
+      find.text(title),
+      findsNothing,
+      reason: 'A successful smoke run must remove the note it created.',
+    );
   });
+}
+
+Finder _selectedLibrarySection(LibrarySection section) {
+  return find.byWidgetPredicate(
+    (widget) =>
+        widget is SegmentedButton<LibrarySection> &&
+        widget.selected.contains(section),
+    description: 'Library section ${section.name} selected',
+  );
 }
 
 String _textInField(WidgetTester tester, Key key) {
@@ -232,21 +312,45 @@ Future<void> _tapAndWaitFor(
     description: 'the control needed to $action',
     timeout: timeout,
   );
-  await tester.ensureVisible(control.first);
-  await tester.pump();
-  final hittableControl = control.hitTestable();
-  expect(
-    hittableControl,
-    findsOneWidget,
-    reason: 'The control to $action exists but is not hittable.',
-  );
-  await tester.tap(hittableControl);
-  await tester.pump();
+  await _tapWhenHitTestable(tester, control, action: action, timeout: timeout);
   await _waitFor(
     tester,
     destination,
     description: 'the UI expected after attempting to $action',
     timeout: timeout,
+  );
+}
+
+Future<void> _tapWhenHitTestable(
+  WidgetTester tester,
+  Finder control, {
+  required String action,
+  Duration timeout = _defaultTimeout,
+}) async {
+  final deadline = tester.binding.clock.now().add(timeout);
+  var matchedWidgets = 0;
+  var hittableWidgets = 0;
+
+  while (tester.binding.clock.now().isBefore(deadline)) {
+    matchedWidgets = control.evaluate().length;
+    if (matchedWidgets > 0) {
+      await tester.ensureVisible(control.first);
+      await tester.pump();
+      final hittableControl = control.hitTestable();
+      hittableWidgets = hittableControl.evaluate().length;
+      if (hittableWidgets == 1) {
+        await tester.tap(hittableControl);
+        await tester.pump();
+        return;
+      }
+    }
+    await tester.pump(_pollInterval);
+  }
+
+  throw TestFailure(
+    'Timed out after ${timeout.inSeconds}s waiting for the control to $action '
+    'to become on-screen and hit-testable. Matched $matchedWidgets widget(s); '
+    '$hittableWidgets were hit-testable.',
   );
 }
 
