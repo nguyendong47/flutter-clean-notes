@@ -95,7 +95,8 @@ that the current branch or generated manifest already satisfies them.
 
 - [ ] **[OWNER: Android Engineering]** Attach the release merged-manifest excerpt
   proving it contains `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`,
-  `ScheduledNotificationReceiver`, and `ScheduledNotificationBootReceiver`.
+  `ScheduledNotificationReceiver`, `ScheduledNotificationBootReceiver`, and
+  `com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver`.
 - [ ] **[OWNER: Android Engineering/Product]** Request notification permission
   contextually from the reminder flow, not at unrelated app startup. On a fresh
   install, verify denial leaves note saving usable and a later reminder attempt
@@ -104,10 +105,12 @@ that the current branch or generated manifest already satisfies them.
   Prove the source and merged release manifest contain neither
   `SCHEDULE_EXACT_ALARM` nor `USE_EXACT_ALARM`, and confirm no exact-alarm store
   policy declaration is submitted.
-- [ ] **[OWNER: Android Engineering/QA]** Configure Android snooze actions to
-  launch the app/UI intentionally and verify open plus 5/15/30/60-minute snooze
-  on a physical device. `ActionBroadcastReceiver` and a background callback are
-  not expected for this foreground action design; their absence is not a failure.
+- [ ] **[OWNER: Android Engineering/QA]** Configure Android snooze actions with
+  `showsUserInterface: true` and verify open plus 5/15/30/60-minute snooze on a
+  physical device. This setting routes Snooze through the app UI and main-isolate
+  notification callback, so no background callback is required. The
+  `ActionBroadcastReceiver` remains mandatory and must satisfy the merged-manifest
+  gate above.
 - [ ] **[OWNER: Android Engineering/QA]** On a signed physical-device build,
   schedule after fresh-install denial/grant, terminate the process, reboot the
   device, and capture delivery plus open/snooze evidence. Record timing variance
