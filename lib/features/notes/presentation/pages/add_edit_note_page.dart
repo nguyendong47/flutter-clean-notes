@@ -38,6 +38,8 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
   bool _previewMode = false;
   bool _saving = false;
   bool _closed = false;
+  bool _closePending = false;
+  bool _closeRetryScheduled = false;
   bool _allowPop = false;
   bool _hasPartialSave = false;
   String? _validationMessage;
@@ -81,6 +83,8 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
   @override
   Widget build(BuildContext context) {
     ref.watch(notesProvider);
+    final routeIsCurrent = ModalRoute.isCurrentOf(context) ?? false;
+    _schedulePendingCloseIfCurrent(routeIsCurrent);
     final navigatorCanPop = Navigator.of(context).canPop();
     final canPop =
         !_saving && (_allowPop || (navigatorCanPop && !_hasPartialSave));
@@ -692,23 +696,45 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
 
   void _requestClose() {
     if (_saving || _closed) return;
-    _closed = true;
-    if (_hasPartialSave) ref.invalidate(notesProvider);
+
+    final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? false;
+    if (!routeIsCurrent) {
+      if (!_closePending) setState(() => _closePending = true);
+      return;
+    }
 
     final callback = widget.onClose;
+    final needsPopFrame =
+        callback != null &&
+        _hasPartialSave &&
+        !_allowPop &&
+        Navigator.of(context).canPop();
+    if (needsPopFrame) {
+      setState(() {
+        _allowPop = true;
+        _closePending = true;
+      });
+      _schedulePendingCloseIfCurrent(true);
+      return;
+    }
+
+    _closePending = false;
+    _closed = true;
+    if (_hasPartialSave) ref.invalidate(notesProvider);
     if (callback != null) {
-      final needsPopFrame = _hasPartialSave && Navigator.of(context).canPop();
-      if (needsPopFrame) {
-        setState(() => _allowPop = true);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) callback();
-        });
-      } else {
-        callback();
-      }
+      callback();
       return;
     }
     if (context.canPop()) context.pop();
+  }
+
+  void _schedulePendingCloseIfCurrent(bool routeIsCurrent) {
+    if (!_closePending || !routeIsCurrent || _closeRetryScheduled) return;
+    _closeRetryScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _closeRetryScheduled = false;
+      if (mounted) _requestClose();
+    });
   }
 }
 

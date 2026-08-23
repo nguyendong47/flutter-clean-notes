@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -10,9 +12,12 @@ import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/app/router.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
+import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/add_edit_note_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 
+import '../helpers/fake_note_reminder_gateway.dart';
 import '../helpers/in_memory_note_repository.dart';
 import '../helpers/note_fixtures.dart';
 
@@ -127,6 +132,117 @@ void main() {
     expect(_path(harness.router), '/search');
     expect(find.byType(AddEditNotePage), findsNothing);
   });
+
+  testWidgets(
+    'background save closes its owning editor after notification editor closes',
+    (tester) async {
+      // Mutation caught: letting editor A pop the current root route when its
+      // save completes after a notification has pushed editor B.
+      final repository = _DeferredAddRepository(sampleNotes);
+      final harness = await _pumpRouter(
+        tester,
+        initialLocation: '/search',
+        repository: repository,
+      );
+      harness.router.push('/note/new');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('editor-title-field')),
+        'Saved editor A',
+      );
+      await tester.tap(find.byKey(const Key('editor-done-button')));
+      await repository.entered.future;
+      await tester.pump();
+
+      harness.service.handleNotificationResponse(
+        _openResponse(harness.service),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(AddEditNotePage, skipOffstage: false),
+        findsNWidgets(2),
+      );
+
+      const draft = 'Unsaved notification editor B draft';
+      await tester.enterText(
+        find.byKey(const Key('editor-title-field')),
+        draft,
+      );
+      await tester.pump();
+
+      repository.release();
+      await tester.pumpAndSettle();
+
+      expect(_path(harness.router), '/search');
+      expect(
+        find.byType(AddEditNotePage, skipOffstage: false),
+        findsNWidgets(2),
+      );
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('editor-title-field')))
+            .controller!
+            .text,
+        draft,
+      );
+
+      await tester.tap(find.byKey(const Key('editor-back-button')));
+      await tester.pumpAndSettle();
+
+      expect(_path(harness.router), '/search');
+      expect(find.byType(AddEditNotePage, skipOffstage: false), findsNothing);
+      expect(rootNavigatorKey.currentState!.canPop(), isFalse);
+      expect(repository.addCalls, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'partial-save close rechecks ownership after a notification push',
+    (tester) async {
+      // Mutation caught: capturing and invoking A's close callback on the next
+      // frame without checking whether notification editor B became current.
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final gateway = FakeNoteReminderGateway()
+        ..cancelError = StateError('notification cancel failed');
+      final harness = await _pumpRouter(
+        tester,
+        initialLocation: '/search',
+        repository: repository,
+        gateway: gateway,
+      );
+      harness.router.push('/note/1');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('editor-title-field')),
+        'Partially saved editor A',
+      );
+      await tester.tap(find.byKey(const Key('editor-done-button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('editor-save-error')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('editor-back-button')));
+      harness.service.handleNotificationResponse(
+        _openResponse(harness.service),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(AddEditNotePage, skipOffstage: false),
+        findsNWidgets(2),
+      );
+      expect(rootNavigatorKey.currentState!.canPop(), isTrue);
+
+      await tester.tap(find.byKey(const Key('editor-back-button')));
+      await tester.pumpAndSettle();
+
+      expect(_path(harness.router), '/search');
+      expect(find.byType(AddEditNotePage, skipOffstage: false), findsNothing);
+      expect(rootNavigatorKey.currentState!.canPop(), isFalse);
+      expect(repository.notes.first.title, 'Partially saved editor A');
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 typedef _Harness = ({
@@ -139,6 +255,8 @@ Future<_Harness> _pumpRouter(
   WidgetTester tester, {
   String initialLocation = '/',
   NotificationService? service,
+  InMemoryNoteRepository? repository,
+  FakeNoteReminderGateway? gateway,
 }) async {
   tester.view.physicalSize = const Size(375, 812);
   tester.view.devicePixelRatio = 1;
@@ -150,9 +268,11 @@ Future<_Harness> _pumpRouter(
   final container = ProviderContainer(
     overrides: [
       noteRepositoryProvider.overrideWithValue(
-        InMemoryNoteRepository.seeded(sampleNotes),
+        repository ?? InMemoryNoteRepository.seeded(sampleNotes),
       ),
       notificationServiceProvider.overrideWithValue(notificationService),
+      if (gateway != null)
+        noteReminderGatewayProvider.overrideWithValue(gateway),
     ],
   );
   final router = container.read(routerProvider);
@@ -187,6 +307,22 @@ NotificationResponse _openResponse(NotificationService service) {
 }
 
 String _path(GoRouter router) => router.routeInformationProvider.value.uri.path;
+
+class _DeferredAddRepository extends InMemoryNoteRepository {
+  _DeferredAddRepository(super.notes) : super.seeded();
+
+  final entered = Completer<void>();
+  final _gate = Completer<void>();
+
+  void release() => _gate.complete();
+
+  @override
+  Future<int> addNote(Note note) async {
+    if (!entered.isCompleted) entered.complete();
+    await _gate.future;
+    return super.addNote(note);
+  }
+}
 
 class _LaunchDetailsPlugin extends Fake
     implements FlutterLocalNotificationsPlugin {

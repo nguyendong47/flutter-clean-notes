@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/add_edit_note_page.dart';
@@ -10,6 +10,8 @@ import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_libr
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_search_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_shell_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/search_focus_request.dart';
+
+part 'router.g.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>(
   debugLabel: 'root navigator',
@@ -25,7 +27,8 @@ final libraryNavigatorKey = GlobalKey<NavigatorState>(
 );
 
 /// Application router with persistent Notes, Search, and Library branches.
-final routerProvider = Provider<GoRouter>((ref) {
+@Riverpod(keepAlive: true)
+GoRouter router(Ref ref) {
   final notificationService = ref.watch(notificationServiceProvider);
   final router = GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -107,7 +110,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     router.dispose();
   });
   return router;
-});
+}
 
 void _closeEditor(BuildContext context) {
   if (context.canPop()) {
