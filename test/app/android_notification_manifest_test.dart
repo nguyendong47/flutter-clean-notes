@@ -1,8 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-// XML is already resolved by Flutter tooling but is not re-exported.
-// ignore: depend_on_referenced_packages
 import 'package:xml/xml.dart';
 
 const _androidNamespace = 'http://schemas.android.com/apk/res/android';
