@@ -35,12 +35,23 @@ void main() {
       ]);
     },
   );
+
+  test('repository forwards global tag removal as one operation', () async {
+    final dataSource = _RecordingLocalNoteDataSource();
+    final repository = NoteRepositoryImpl(dataSource);
+
+    final changed = await repository.removeTag('shared');
+
+    expect(changed, 3);
+    expect(dataSource.removedTags, ['shared']);
+  });
 }
 
 class _RecordingLocalNoteDataSource implements LocalNoteDataSource {
   int addCalls = 0;
   int importCalls = 0;
   List<NoteModel> imported = const [];
+  final List<String> removedTags = [];
 
   @override
   Future<int> addNote(NoteModel note) async {
@@ -52,6 +63,12 @@ class _RecordingLocalNoteDataSource implements LocalNoteDataSource {
   Future<void> importNotes(List<NoteModel> notes) async {
     importCalls += 1;
     imported = [...notes];
+  }
+
+  @override
+  Future<int> removeTag(String tag) async {
+    removedTags.add(tag);
+    return 3;
   }
 
   @override

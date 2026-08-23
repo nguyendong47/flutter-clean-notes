@@ -27,6 +27,8 @@ class InMemoryNoteRepository implements NoteRepository {
   Object? deleteError;
   Object? statusError;
   Object? cleanupError;
+  Object? removeTagError;
+  int removeTagCalls = 0;
 
   List<Note> get notes => List<Note>.unmodifiable(_notes);
 
@@ -119,5 +121,28 @@ class InMemoryNoteRepository implements NoteRepository {
           note.status == NoteStatus.trashed && note.createdAt.isBefore(cutoff),
     );
     return before - _notes.length;
+  }
+
+  @override
+  Future<int> removeTag(String tag) async {
+    removeTagCalls += 1;
+    if (removeTagError case final error?) _throw(error);
+    var changed = 0;
+    final staged = [
+      for (final note in _notes)
+        if (note.tags.contains(tag))
+          note.copyWith(
+            tags: note.tags.where((candidate) => candidate != tag).toList(),
+          )
+        else
+          note,
+    ];
+    for (var index = 0; index < _notes.length; index++) {
+      if (!identical(staged[index], _notes[index])) changed += 1;
+    }
+    _notes
+      ..clear()
+      ..addAll(staged);
+    return changed;
   }
 }

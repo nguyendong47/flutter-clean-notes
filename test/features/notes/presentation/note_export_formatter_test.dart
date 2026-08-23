@@ -14,7 +14,7 @@ void main() {
         color: 0xFF6757D9,
         createdAt: DateTime.utc(2026, 8, 23, 9, 15),
         isPinned: true,
-        tags: const ['work', 'design'],
+        tags: const ['work', 'finance,2026'],
         status: NoteStatus.archived,
         reminder: DateTime.utc(2026, 8, 24, 7, 30),
       );
@@ -40,11 +40,30 @@ void main() {
         'color': 0xFF6757D9,
         'createdAt': '2026-08-23T09:15:00.000Z',
         'isPinned': 1,
-        'tags': 'work,design',
+        'tags': ['work', 'finance,2026'],
         'status': 1,
         'reminder': '2026-08-24T07:30:00.000Z',
       });
       expect(NoteExportFormatter.toJson([note]), payload);
+    });
+
+    test('accepts legacy comma-delimited backup tags', () {
+      final payload = jsonEncode([
+        {
+          'title': 'Legacy tags',
+          'content': '',
+          'color': 17,
+          'createdAt': '2026-08-17T10:00:00.000Z',
+          'isPinned': 0,
+          'tags': 'legacy, work',
+          'status': 0,
+          'reminder': null,
+        },
+      ]);
+
+      final note = NoteExportFormatter.fromJson(payload).single;
+
+      expect(note.tags, ['legacy', 'work']);
     });
 
     test('accepts the legacy boolean list and named-status shape', () {

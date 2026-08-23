@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter_clean_notes/features/notes/data/models/note_model.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 
 abstract final class NoteExportFormatter {
@@ -55,7 +54,19 @@ abstract final class NoteExportFormatter {
 
   static String toJson(Iterable<Note> notes) {
     final maps = notes
-        .map((note) => NoteModel.fromEntity(note).toJson())
+        .map(
+          (note) => <String, Object?>{
+            if (note.id != null) 'id': note.id,
+            'title': note.title,
+            'content': note.content,
+            'color': note.color,
+            'createdAt': note.createdAt.toIso8601String(),
+            'isPinned': note.isPinned ? 1 : 0,
+            'tags': List<String>.of(note.tags, growable: false),
+            'status': note.status.index,
+            'reminder': note.reminder?.toIso8601String(),
+          },
+        )
         .toList(growable: false);
     return const JsonEncoder.withIndent('  ').convert(maps);
   }
@@ -92,23 +103,19 @@ abstract final class NoteExportFormatter {
       map[entry.key as String] = entry.value;
     }
 
-    final normalized = <String, dynamic>{
-      if (map.containsKey('id')) 'id': _nullableInt(map['id'], number, 'id'),
-      'title': _string(map['title'], number, 'title'),
-      'content': _string(map['content'], number, 'content'),
-      'color': _integer(map['color'], number, 'color'),
-      'createdAt': _date(map['createdAt'], number, 'createdAt'),
-      'isPinned': _pinned(map['isPinned'], number),
-      'tags': _tags(map['tags'], number),
-      'status': _status(map['status'], number),
-      'reminder': _nullableDate(map['reminder'], number, 'reminder'),
-    };
-
-    try {
-      return NoteModel.fromJson(normalized);
-    } catch (_) {
-      throw FormatException('Note $number contains invalid data.');
-    }
+    final createdAt = _date(map['createdAt'], number, 'createdAt');
+    final reminder = _nullableDate(map['reminder'], number, 'reminder');
+    return Note(
+      id: map.containsKey('id') ? _nullableInt(map['id'], number, 'id') : null,
+      title: _string(map['title'], number, 'title'),
+      content: _string(map['content'], number, 'content'),
+      color: _integer(map['color'], number, 'color'),
+      createdAt: DateTime.parse(createdAt),
+      isPinned: _pinned(map['isPinned'], number) == 1,
+      tags: _tags(map['tags'], number),
+      status: NoteStatus.values[_status(map['status'], number)],
+      reminder: reminder == null ? null : DateTime.parse(reminder),
+    );
   }
 
   static int? _nullableInt(Object? value, int number, String field) {
@@ -147,13 +154,19 @@ abstract final class NoteExportFormatter {
     };
   }
 
-  static String _tags(Object? value, int number) {
-    if (value is String) return value;
+  static List<String> _tags(Object? value, int number) {
+    if (value is String) {
+      return value
+          .split(',')
+          .map((tag) => tag.trim())
+          .where((tag) => tag.isNotEmpty)
+          .toList();
+    }
     if (value is List) {
       if (value.any((tag) => tag is! String)) {
         throw _invalidField(number, 'tags');
       }
-      return value.cast<String>().join(',');
+      return value.cast<String>().toList(growable: false);
     }
     throw _invalidField(number, 'tags');
   }

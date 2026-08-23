@@ -15,6 +15,7 @@ abstract class LocalNoteDataSource {
   Future<List<NoteModel>> getNotesByStatus(int status);
   Future<int> setNoteStatus(int id, int status);
   Future<int> cleanupTrash();
+  Future<int> removeTag(String tag);
 }
 
 class LocalNoteDataSourceImpl implements LocalNoteDataSource {
@@ -176,5 +177,30 @@ class LocalNoteDataSourceImpl implements LocalNoteDataSource {
   Future<int> deleteNote(int id) async {
     final db = await database;
     return await db.delete(_tableName, where: 'id = ?', whereArgs: [id]);
+  }
+
+  @override
+  Future<int> removeTag(String tag) async {
+    final db = await database;
+    return db.transaction((transaction) async {
+      final rows = await transaction.query(_tableName, orderBy: 'id ASC');
+      var changed = 0;
+      for (final row in rows) {
+        final note = NoteModel.fromJson(row);
+        if (!note.tags.contains(tag)) continue;
+        final updated = NoteModel.fromEntity(
+          note.copyWith(
+            tags: note.tags.where((candidate) => candidate != tag).toList(),
+          ),
+        );
+        changed += await transaction.update(
+          _tableName,
+          {'tags': updated.toJson()['tags']},
+          where: 'id = ?',
+          whereArgs: [note.id],
+        );
+      }
+      return changed;
+    });
   }
 }

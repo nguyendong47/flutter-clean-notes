@@ -617,7 +617,7 @@ void main() {
   );
 
   test(
-    'removeTag updates all statuses then performs one outer refetch',
+    'removeTag uses one global operation then performs one outer refetch',
     () async {
       final repository = _CountingRepository.seeded([
         _note(1, NoteStatus.active, const ['shared', 'shared', 'active']),
@@ -635,16 +635,10 @@ void main() {
 
       await container.read(notesProvider.notifier).removeTag('shared');
 
-      expect(repository.updateCalls, 3);
+      expect(repository.removeTagCalls, 1);
+      expect(repository.updateCalls, 0);
       expect(repository.statusReadCalls, 3);
-      expect(repository.events, [
-        'update:1',
-        'update:2',
-        'update:3',
-        'read',
-        'read',
-        'read',
-      ]);
+      expect(repository.events, ['remove:shared', 'read', 'read', 'read']);
       expect(
         repository.notes.expand((note) => note.tags),
         isNot(contains('shared')),
@@ -657,10 +651,11 @@ void main() {
     },
   );
 
-  test('failed removeTag retains selected filter and cached notes', () async {
-    final repository = _CountingRepository.seeded([
+  test('failed removeTag is atomic and retains the selected filter', () async {
+    final repository = _FailingAtomicTagRepository.seeded([
       _note(1, NoteStatus.active, const ['shared']),
-    ])..updateError = StateError('write failed');
+      _note(2, NoteStatus.archived, const ['shared']),
+    ]);
     final container = ProviderContainer(
       overrides: [noteRepositoryProvider.overrideWithValue(repository)],
     );
@@ -676,7 +671,11 @@ void main() {
     expect(container.read(selectedTagProvider), 'shared');
     expect(container.read(notesProvider).hasError, isTrue);
     expect(container.read(notesProvider).value, before);
-    expect(repository.notes.single.tags, ['shared']);
+    expect(repository.removeTagCalls, 1);
+    expect(
+      repository.notes.expand((note) => note.tags),
+      everyElement('shared'),
+    );
   });
 }
 
@@ -795,8 +794,22 @@ class _CountingRepository extends InMemoryNoteRepository {
 
   void resetTrace() {
     updateCalls = 0;
+    removeTagCalls = 0;
     statusReadCalls = 0;
     events.clear();
+  }
+
+  @override
+  Future<int> removeTag(String tag) async {
+    removeTagCalls += 1;
+    events.add('remove:$tag');
+    final changed = notes.where((note) => note.tags.contains(tag)).toList();
+    for (final note in changed) {
+      await super.updateNote(
+        note.copyWith(tags: note.tags.where((item) => item != tag).toList()),
+      );
+    }
+    return changed.length;
   }
 
   @override
@@ -811,5 +824,24 @@ class _CountingRepository extends InMemoryNoteRepository {
     statusReadCalls += 1;
     events.add('read');
     return super.getNotesByStatus(status);
+  }
+}
+
+class _FailingAtomicTagRepository extends InMemoryNoteRepository {
+  _FailingAtomicTagRepository.seeded(super.notes) : super.seeded();
+
+  int updateCalls = 0;
+
+  @override
+  Future<int> removeTag(String tag) async {
+    removeTagCalls += 1;
+    throw StateError('write failed');
+  }
+
+  @override
+  Future<int> updateNote(Note note) async {
+    updateCalls += 1;
+    if (updateCalls == 2) throw StateError('write failed');
+    return super.updateNote(note);
   }
 }

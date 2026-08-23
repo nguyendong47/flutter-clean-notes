@@ -496,7 +496,7 @@ void main() {
     tester,
   ) async {
     final repository = _ControlledRepository.seeded(_tagNotes)
-      ..updateGate = Completer<void>();
+      ..removeTagGate = Completer<void>();
     final harness = await _pumpMore(tester, repository: repository);
     harness.container.read(selectedTagProvider.notifier).select('shared');
     await _openTags(tester);
@@ -513,18 +513,18 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
     await tester.pump();
 
-    expect(repository.updateCalls, 1);
+    expect(repository.removeTagInvocations, 1);
     expect(find.text('Removing…'), findsOneWidget);
     expect(find.byType(AlertDialog), findsOneWidget);
     await tester.binding.handlePopRoute();
     await tester.pump();
     expect(find.byType(AlertDialog), findsOneWidget);
-    expect(repository.updateCalls, 1);
+    expect(repository.removeTagInvocations, 1);
 
-    repository.updateGate!.complete();
+    repository.removeTagGate!.complete();
     await tester.pumpAndSettle();
 
-    expect(repository.updateCalls, 3);
+    expect(repository.removeTagInvocations, 1);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('shared'), findsNothing);
     expect(harness.container.read(selectedTagProvider), isNull);
@@ -536,7 +536,7 @@ void main() {
 
   testWidgets('failed tag removal stays inline and can retry', (tester) async {
     final repository = _ControlledRepository.seeded(_tagNotes)
-      ..updateError = StateError('write failed');
+      ..removeTagError = StateError('write failed');
     await _pumpMore(tester, repository: repository);
     await _openTags(tester);
     await tester.tap(find.byTooltip('Remove shared tag'));
@@ -549,7 +549,7 @@ void main() {
     expect(find.text('Could not remove “shared”. Try again.'), findsOneWidget);
     expect(find.byType(TagManagerSheet), findsOneWidget);
 
-    repository.updateError = null;
+    repository.removeTagError = null;
     await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
     await tester.pumpAndSettle();
 
@@ -847,15 +847,15 @@ class _FakeNotesTransferGateway extends NotesTransferGateway {
 class _ControlledRepository extends InMemoryNoteRepository {
   _ControlledRepository.seeded(super.notes) : super.seeded();
 
-  Completer<void>? updateGate;
+  Completer<void>? removeTagGate;
   Completer<void>? readGate;
-  int updateCalls = 0;
+  int removeTagInvocations = 0;
 
   @override
-  Future<int> updateNote(Note note) async {
-    updateCalls += 1;
-    await updateGate?.future;
-    return super.updateNote(note);
+  Future<int> removeTag(String tag) async {
+    removeTagInvocations += 1;
+    await removeTagGate?.future;
+    return super.removeTag(tag);
   }
 
   @override

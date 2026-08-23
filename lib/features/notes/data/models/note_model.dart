@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 
 class NoteModel extends Note {
@@ -37,7 +39,7 @@ class NoteModel extends Note {
       'color': color,
       'createdAt': createdAt.toIso8601String(),
       'isPinned': isPinned ? 1 : 0,
-      'tags': tags.join(','),
+      'tags': jsonEncode(tags),
       'status': status.index,
       'reminder': reminder?.toIso8601String(),
     };
@@ -61,6 +63,14 @@ class NoteModel extends Note {
     if (value == null) return const [];
     final str = value as String;
     if (str.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(str);
+      if (decoded is List && decoded.every((tag) => tag is String)) {
+        return decoded.cast<String>();
+      }
+    } on FormatException {
+      // Rows created before JSON tag storage remain comma-delimited.
+    }
     return str
         .split(',')
         .map((t) => t.trim())

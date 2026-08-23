@@ -73,6 +73,12 @@ CleanupTrash cleanupTrashUsecase(Ref ref) {
   return CleanupTrash(repository);
 }
 
+@riverpod
+RemoveTag removeTagUsecase(Ref ref) {
+  final repository = ref.watch(noteRepositoryProvider);
+  return RemoveTag(repository);
+}
+
 enum NoteMode { active, archived, trashed }
 
 @riverpod
@@ -288,16 +294,8 @@ class NotesNotifier extends _$NotesNotifier {
   }
 
   Future<void> importBackup(List<Note> notes) {
-    final sanitized = [
-      for (final note in notes)
-        note.copyWith(
-          id: null, // Let the destination database allocate a fresh ID
-          status: NoteStatus.active, // Imported notes start as active
-          reminder: null, // Reset reminder on import
-        ),
-    ];
     return _importAndRefresh(() async {
-      await ref.read(importNotesUsecaseProvider)(sanitized);
+      await ref.read(importNotesUsecaseProvider)(notes);
     });
   }
 
@@ -319,15 +317,8 @@ class NotesNotifier extends _$NotesNotifier {
   }
 
   Future<void> removeTag(String tag) async {
-    final notes = state.value ?? await _fetchAllNotes();
     await _mutate(() async {
-      final update = ref.read(updateNoteUsecaseProvider);
-      for (final note in notes) {
-        if (!note.tags.contains(tag)) continue;
-        await update(
-          note.copyWith(tags: note.tags.where((item) => item != tag).toList()),
-        );
-      }
+      await ref.read(removeTagUsecaseProvider)(tag);
     });
     if (ref.read(selectedTagProvider) == tag) {
       ref.read(selectedTagProvider.notifier).select(null);

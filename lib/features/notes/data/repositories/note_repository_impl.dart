@@ -52,4 +52,9 @@ class NoteRepositoryImpl implements NoteRepository {
   Future<int> cleanupTrash() async {
     return await localDataSource.cleanupTrash();
   }
+
+  @override
+  Future<int> removeTag(String tag) async {
+    return localDataSource.removeTag(tag);
+  }
 }

@@ -435,6 +435,47 @@ final class CleanupTrashUsecaseProvider
 String _$cleanupTrashUsecaseHash() =>
     r'80e7b0ee28c7ff72da3d5b9373f5a65704a13cad';
 
+@ProviderFor(removeTagUsecase)
+final removeTagUsecaseProvider = RemoveTagUsecaseProvider._();
+
+final class RemoveTagUsecaseProvider
+    extends $FunctionalProvider<RemoveTag, RemoveTag, RemoveTag>
+    with $Provider<RemoveTag> {
+  RemoveTagUsecaseProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'removeTagUsecaseProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$removeTagUsecaseHash();
+
+  @$internal
+  @override
+  $ProviderElement<RemoveTag> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  RemoveTag create(Ref ref) {
+    return removeTagUsecase(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(RemoveTag value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<RemoveTag>(value),
+    );
+  }
+}
+
+String _$removeTagUsecaseHash() => r'5e009bb7dc7cfd335ab54a2f432f6e401a3df184';
+
 @ProviderFor(NoteModeNotifier)
 final noteModeProvider = NoteModeNotifierProvider._();
 
@@ -988,7 +1029,7 @@ final class NotesNotifierProvider
   NotesNotifier create() => NotesNotifier();
 }
 
-String _$notesNotifierHash() => r'0c299066fa4ed5ed522305df9e83b62919687ff5';
+String _$notesNotifierHash() => r'7bd23f2db11f5537c03aecab32e8a75850df37d5';
 
 abstract class _$NotesNotifier extends $AsyncNotifier<List<Note>> {
   FutureOr<List<Note>> build();

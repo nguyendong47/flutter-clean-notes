@@ -27,7 +27,11 @@ class ImportNotes {
   ImportNotes(this.repository);
 
   Future<void> call(List<Note> notes) async {
-    return repository.importNotes(notes);
+    final sanitized = [
+      for (final note in notes)
+        note.copyWith(id: null, status: NoteStatus.active, reminder: null),
+    ];
+    return repository.importNotes(sanitized);
   }
 }
 
@@ -78,5 +82,15 @@ class CleanupTrash {
 
   Future<int> call() async {
     return repository.cleanupTrash();
+  }
+}
+
+class RemoveTag {
+  final NoteRepository repository;
+
+  RemoveTag(this.repository);
+
+  Future<int> call(String tag) async {
+    return repository.removeTag(tag);
   }
 }
