@@ -22,6 +22,7 @@ import 'package:flutter_clean_notes/features/notes/presentation/providers/note_r
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/search_focus_request.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/library_segmented_control.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/widgets/note_filter_sheet.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_bottom_bar.dart';
 import '../helpers/fake_note_reminder_gateway.dart';
 import '../helpers/in_memory_note_repository.dart';
@@ -509,6 +510,49 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Notes tab'));
       await tester.pumpAndSettle();
       expect(homeScrollable.position.pixels, moreOrLessEquals(homeOffset));
+    },
+  );
+
+  testWidgets(
+    'Search filter is a root modal that preserves URI and blocks shell controls',
+    (tester) async {
+      // Mutation caught: presenting filters on the Search branch navigator,
+      // which leaves the root shell controls reachable above the route modal.
+      final harness = await _pumpRouter(
+        tester,
+        repository: InMemoryNoteRepository.seeded(sampleNotes),
+      );
+
+      await tester.tap(find.bySemanticsLabel('Search tab'));
+      await tester.pumpAndSettle();
+      expect(_path(harness.router), '/search');
+      final originalUri = harness.router.routeInformationProvider.value.uri;
+
+      await tester.tap(find.byKey(const Key('notes-search-filter')));
+      await tester.pumpAndSettle();
+
+      final sheet = find.byType(NoteFilterSheet);
+      expect(sheet, findsOneWidget);
+      expect(
+        Navigator.of(tester.element(sheet)),
+        same(rootNavigatorKey.currentState),
+      );
+      expect(harness.router.routeInformationProvider.value.uri, originalUri);
+      expect(_path(harness.router), '/search');
+      for (final label in const [
+        'Notes tab',
+        'Search tab',
+        'Create new note',
+        'Library tab',
+        'More actions',
+      ]) {
+        expect(find.bySemanticsLabel(label).hitTestable(), findsNothing);
+      }
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Done'));
+      await tester.pumpAndSettle();
+      expect(sheet, findsNothing);
+      expect(_path(harness.router), '/search');
     },
   );
 

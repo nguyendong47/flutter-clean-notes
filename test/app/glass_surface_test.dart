@@ -39,6 +39,8 @@ void main() {
   testWidgets('GlassSurface uses an opaque fallback for high contrast', (
     tester,
   ) async {
+    // Mutation caught: disabling blur while leaving the surface or border
+    // translucent, which lets background detail reduce high-contrast clarity.
     await tester.pumpWidget(
       const MaterialApp(
         home: MediaQuery(
@@ -55,7 +57,17 @@ void main() {
         matching: find.byType(DecoratedBox),
       ),
     );
-    expect((decorated.decoration as BoxDecoration).border, isNotNull);
+    final decoration = decorated.decoration as BoxDecoration;
+    final activeSurface = Theme.of(
+      tester.element(find.byType(GlassSurface)),
+    ).colorScheme.surface;
+    expect(decoration.color, activeSurface);
+    expect(decoration.color!.toARGB32() >>> 24, 255);
+
+    final border = decoration.border;
+    expect(border, isA<Border>());
+    final borderColor = (border! as Border).top.color;
+    expect(borderColor.toARGB32() >>> 24, 255);
   });
 
   testWidgets('GlassSurface uses an opaque fallback when blur is zero', (

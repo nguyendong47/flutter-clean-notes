@@ -196,6 +196,10 @@ void main() {
 
       await tester.tap(filter.hitTestable());
       await tester.pumpAndSettle();
+      expect(
+        tester.getSemantics(filter).flagsCollection.isExpanded,
+        Tristate.isTrue,
+      );
       final allTag = find.byKey(const Key('filter-tag-all'));
       final workTag = find.byKey(const Key('filter-tag-work'));
       expect(tester.getSize(allTag).height, greaterThanOrEqualTo(44));
@@ -230,6 +234,10 @@ void main() {
       expect(tester.getSize(done).height, greaterThanOrEqualTo(44));
       await tester.tap(done);
       await tester.pumpAndSettle();
+      expect(
+        tester.getSemantics(filter).flagsCollection.isExpanded,
+        Tristate.isFalse,
+      );
 
       await tester.tap(clear.hitTestable());
       await tester.pump();

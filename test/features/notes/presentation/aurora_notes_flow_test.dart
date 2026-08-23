@@ -189,6 +189,10 @@ void main() {
           .status,
       NoteStatus.trashed,
     );
+    expect(
+      find.bySemanticsLabel('Open note Archived launch notes'),
+      findsNothing,
+    );
     await tester.tap(find.text('Undo'));
     await tester.pumpAndSettle();
     expect(
@@ -365,7 +369,11 @@ Future<_AppHarness> _pumpApp(
       ),
     ],
   );
+  addTearDown(container.dispose);
   final router = container.read(routerProvider);
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   if (initialLocation != '/') router.go(initialLocation);
   await tester.pumpWidget(
     UncontrolledProviderScope(
@@ -377,10 +385,6 @@ Future<_AppHarness> _pumpApp(
     ),
   );
   await tester.pumpAndSettle();
-  addTearDown(() async {
-    await tester.pumpWidget(const SizedBox.shrink());
-    container.dispose();
-  });
   return (container: container, router: router);
 }
 
