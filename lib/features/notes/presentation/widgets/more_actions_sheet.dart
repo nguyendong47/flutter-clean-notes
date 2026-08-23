@@ -95,6 +95,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet> {
                         icon: Icons.palette_outlined,
                         label: 'Theme',
                         description: _themeLabel(selectedTheme),
+                        expanded: _themeChoicesVisible,
                         enabled: !busy,
                         trailing: Icon(
                           _themeChoicesVisible
@@ -444,6 +445,7 @@ class _ActionRow extends StatelessWidget {
     this.loading = false,
     this.reserveDescriptionForStatus = false,
     this.selected,
+    this.expanded,
     super.key,
   });
 
@@ -460,90 +462,100 @@ class _ActionRow extends StatelessWidget {
   final bool loading;
   final bool reserveDescriptionForStatus;
   final bool? selected;
+  final bool? expanded;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final effectiveEnabled = enabled && onPressed != null;
-    return Semantics(
-      button: true,
-      enabled: effectiveEnabled,
-      selected: selected,
-      label: label,
-      value: status ?? description,
-      child: Material(
-        color: selected == true
-            ? colorScheme.primaryContainer.withValues(alpha: 0.7)
-            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.42),
-        borderRadius: BorderRadius.circular(18),
-        clipBehavior: Clip.antiAlias,
-        child: Builder(
-          builder: (rowContext) => InkWell(
-            focusNode: focusNode,
-            onTap: effectiveEnabled
-                ? () => unawaited(Future.sync(() => onPressed!(rowContext)))
-                : null,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 56),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    ExcludeSemantics(
-                      child: SizedBox.square(
-                        dimension: 44,
-                        child: Center(child: Icon(icon, size: 24)),
+    return Builder(
+      builder: (rowContext) {
+        void activate() {
+          unawaited(Future.sync(() => onPressed!(rowContext)));
+        }
+
+        return Semantics(
+          key: statusKey,
+          container: true,
+          button: true,
+          enabled: effectiveEnabled,
+          selected: selected,
+          expanded: expanded,
+          label: label,
+          value: status ?? description,
+          liveRegion: status != null,
+          onTap: effectiveEnabled ? activate : null,
+          excludeSemantics: true,
+          child: Material(
+            color: selected == true
+                ? colorScheme.primaryContainer.withValues(alpha: 0.7)
+                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.42),
+            borderRadius: BorderRadius.circular(18),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              focusNode: focusNode,
+              onTap: effectiveEnabled ? activate : null,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 56),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      ExcludeSemantics(
+                        child: SizedBox.square(
+                          dimension: 44,
+                          child: Center(child: Icon(icon, size: 24)),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            label,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              label,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          _ActionRowStatus(
-                            description: description,
-                            status: status,
-                            statusKey: statusKey,
-                            statusIsError: statusIsError,
-                            reserveDescription: reserveDescriptionForStatus,
-                          ),
-                        ],
+                            const SizedBox(height: 2),
+                            _ActionRowStatus(
+                              description: description,
+                              status: status,
+                              statusIsError: statusIsError,
+                              reserveDescription: reserveDescriptionForStatus,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox.square(
-                      dimension: 44,
-                      child: Center(
-                        child: loading
-                            ? const SizedBox.square(
-                                dimension: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : trailing ?? const Icon(Icons.chevron_right),
+                      const SizedBox(width: 8),
+                      SizedBox.square(
+                        dimension: 44,
+                        child: Center(
+                          child: loading
+                              ? const SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : trailing ?? const Icon(Icons.chevron_right),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -552,14 +564,12 @@ class _ActionRowStatus extends StatelessWidget {
   const _ActionRowStatus({
     required this.description,
     required this.status,
-    required this.statusKey,
     required this.statusIsError,
     required this.reserveDescription,
   });
 
   final String description;
   final String? status;
-  final Key? statusKey;
   final bool statusIsError;
   final bool reserveDescription;
 
@@ -576,15 +586,11 @@ class _ActionRowStatus extends StatelessWidget {
     final message = status;
     if (message == null) return descriptionWidget;
 
-    final statusWidget = Semantics(
-      key: statusKey,
-      liveRegion: true,
-      child: Text(
-        message,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: statusIsError ? colorScheme.error : colorScheme.primary,
-          fontWeight: statusIsError ? FontWeight.w500 : FontWeight.w700,
-        ),
+    final statusWidget = Text(
+      message,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: statusIsError ? colorScheme.error : colorScheme.primary,
+        fontWeight: statusIsError ? FontWeight.w500 : FontWeight.w700,
       ),
     );
     if (!reserveDescription) return statusWidget;
@@ -632,6 +638,9 @@ String _transferProgress(NotesTransferOperation operation) {
 }
 
 String _transferSuccess(NotesTransferOutcome outcome) {
+  if (outcome.status == NotesTransferOutcomeStatus.shareSheetOpened) {
+    return 'Share sheet opened.';
+  }
   return switch (outcome.operation) {
     NotesTransferOperation.exportText => 'Text export complete.',
     NotesTransferOperation.backupJson => 'Backup sharing complete.',

@@ -11,6 +11,8 @@ import 'package:flutter_clean_notes/features/notes/presentation/providers/notes_
 import 'package:flutter_clean_notes/features/notes/presentation/services/notes_transfer_gateway.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:share_plus/share_plus.dart'
+    show ShareParams, ShareResult, ShareResultStatus;
 
 import '../../../helpers/in_memory_note_repository.dart';
 import '../../../helpers/note_fixtures.dart';
@@ -52,6 +54,42 @@ void main() {
     },
   );
 
+  test('platform gateway maps text and file share results', () async {
+    const cases = [
+      (
+        platform: ShareResult('com.example.target', ShareResultStatus.success),
+        expected: NotesShareResult.completed,
+      ),
+      (
+        platform: ShareResult('', ShareResultStatus.dismissed),
+        expected: NotesShareResult.dismissed,
+      ),
+      (
+        platform: ShareResult.unavailable,
+        expected: NotesShareResult.unavailable,
+      ),
+    ];
+
+    for (final testCase in cases) {
+      final gateway = NotesTransferGateway(
+        share: (ShareParams _) async => testCase.platform,
+      );
+
+      expect(
+        await gateway.shareText(text: 'Readable notes', subject: 'Notes'),
+        testCase.expected,
+      );
+      expect(
+        await gateway.shareFile(
+          text: '{"notes":[]}',
+          fileName: 'notes.json',
+          mimeType: 'application/json',
+        ),
+        testCase.expected,
+      );
+    }
+  });
+
   test(
     'platform picker returns null on cancellation and configures JSON',
     () async {
@@ -81,6 +119,29 @@ void main() {
       expect(await const NotesTransferGateway().pickJsonText(), '[]');
     },
   );
+
+  test('platform picker bounds unknown-size imports by actual bytes', () async {
+    final picker = _FakeFilePicker()
+      ..result = FilePickerResult([
+        PlatformFile(
+          name: 'backup.json',
+          size: 0,
+          bytes: Uint8List(10 * 1024 * 1024 + 1)..fillRange(0, 1, 0x5B),
+        ),
+      ]);
+    FilePicker.platform = picker;
+
+    await expectLater(
+      const NotesTransferGateway().pickJsonText(),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'The selected backup file is too large. Choose a file up to 10 MB.',
+        ),
+      ),
+    );
+  });
 
   test('platform picker accepts an unknown-size path-backed file', () async {
     final directory = await Directory.systemTemp.createTemp(
@@ -223,6 +284,45 @@ void main() {
       expect(gateway.lastSharedText, contains('Aurora design'));
     },
   );
+
+  test('dismissed share cancels and clears prior settled success', () async {
+    final gateway = _FakeNotesTransferGateway();
+    final container = _container(gateway: gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    expect(
+      await container.read(notesTransferProvider.notifier).exportText(),
+      NotesTransferResult.completed,
+    );
+    expect(container.read(notesTransferProvider).requireValue, isNotNull);
+
+    gateway.shareResult = NotesShareResult.dismissed;
+    final result = await container
+        .read(notesTransferProvider.notifier)
+        .backupJson();
+
+    expect(result, NotesTransferResult.cancelled);
+    expect(container.read(notesTransferProvider).requireValue, isNull);
+    expect(container.read(notesTransferProvider.notifier).operation, isNull);
+  });
+
+  test('unavailable share result remains a neutral settled outcome', () async {
+    final gateway = _FakeNotesTransferGateway()
+      ..shareResult = NotesShareResult.unavailable;
+    final container = _container(gateway: gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    final result = await container
+        .read(notesTransferProvider.notifier)
+        .exportMarkdown();
+
+    expect(result, NotesTransferResult.unavailable);
+    final outcome = container.read(notesTransferProvider).requireValue!;
+    expect(outcome.operation, NotesTransferOperation.exportMarkdown);
+    expect(outcome.status, NotesTransferOutcomeStatus.shareSheetOpened);
+  });
 
   test(
     'picker cancellation is a silent no-op distinct from an error',
@@ -541,6 +641,7 @@ class _FakeNotesTransferGateway extends NotesTransferGateway {
   Object? pickError;
   Object? shareError;
   Completer<void>? shareGate;
+  NotesShareResult shareResult = NotesShareResult.completed;
 
   int pickCalls = 0;
   int shareTextCalls = 0;
@@ -556,7 +657,7 @@ class _FakeNotesTransferGateway extends NotesTransferGateway {
   }
 
   @override
-  Future<void> shareText({
+  Future<NotesShareResult> shareText({
     required String text,
     required String subject,
     Rect? sharePositionOrigin,
@@ -566,10 +667,11 @@ class _FakeNotesTransferGateway extends NotesTransferGateway {
     lastOrigin = sharePositionOrigin;
     if (shareError case final error?) throw error;
     await shareGate?.future;
+    return shareResult;
   }
 
   @override
-  Future<void> shareFile({
+  Future<NotesShareResult> shareFile({
     required String text,
     required String fileName,
     required String mimeType,
@@ -580,6 +682,7 @@ class _FakeNotesTransferGateway extends NotesTransferGateway {
     lastOrigin = sharePositionOrigin;
     if (shareError case final error?) throw error;
     await shareGate?.future;
+    return shareResult;
   }
 }
 

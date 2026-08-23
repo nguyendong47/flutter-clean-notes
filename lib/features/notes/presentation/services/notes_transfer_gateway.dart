@@ -6,8 +6,17 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart' hide XFile;
 
+enum NotesShareResult { completed, dismissed, unavailable }
+
 class NotesTransferGateway {
-  const NotesTransferGateway();
+  const NotesTransferGateway({
+    @visibleForTesting Future<ShareResult> Function(ShareParams)? share,
+  }) : _share = share;
+
+  final Future<ShareResult> Function(ShareParams)? _share;
+
+  /// Caps decode and JSON parsing memory for imports on mobile devices.
+  static const int _maxImportBytes = 10 * 1024 * 1024;
 
   Future<String?> pickJsonText() async {
     final FilePickerResult? result;
@@ -33,6 +42,7 @@ class NotesTransferGateway {
       if (bytes.isEmpty) {
         throw const FormatException('The selected backup file is empty.');
       }
+      _checkImportSize(bytes.length);
       xFile = XFile.fromData(
         bytes,
         name: file.name,
@@ -58,17 +68,22 @@ class NotesTransferGateway {
     }
 
     try {
+      if (bytes == null) _checkImportSize(await xFile.length());
       var text = await xFile.readAsString(encoding: utf8);
       if (bytes != null) {
         text = utf8.decode(bytes, allowMalformed: false);
       }
+      _checkImportSize(utf8.encode(text).length);
       if (text.startsWith('\uFEFF')) text = text.substring(1);
       if (text.trim().isEmpty) {
         throw const FormatException('The selected backup file is empty.');
       }
       return text;
     } on FormatException catch (error) {
-      if (error.message.contains('empty')) rethrow;
+      if (error.message.contains('empty') ||
+          error.message.contains('too large')) {
+        rethrow;
+      }
       throw const FormatException('The backup file is not valid UTF-8 text.');
     } catch (_) {
       throw const FormatException(
@@ -77,7 +92,15 @@ class NotesTransferGateway {
     }
   }
 
-  Future<void> shareText({
+  static void _checkImportSize(int byteLength) {
+    if (byteLength > _maxImportBytes) {
+      throw const FormatException(
+        'The selected backup file is too large. Choose a file up to 10 MB.',
+      );
+    }
+  }
+
+  Future<NotesShareResult> shareText({
     required String text,
     required String subject,
     Rect? sharePositionOrigin,
@@ -85,7 +108,7 @@ class NotesTransferGateway {
     if (text.trim().isEmpty) {
       throw const FormatException('Nothing to share.');
     }
-    await SharePlus.instance.share(
+    return _shareContent(
       ShareParams(
         text: text,
         subject: subject,
@@ -94,7 +117,7 @@ class NotesTransferGateway {
     );
   }
 
-  Future<void> shareFile({
+  Future<NotesShareResult> shareFile({
     required String text,
     required String fileName,
     required String mimeType,
@@ -112,12 +135,22 @@ class NotesTransferGateway {
       mimeType: mimeType,
       name: fileName,
     );
-    await SharePlus.instance.share(
+    return _shareContent(
       ShareParams(
         files: [file],
         fileNameOverrides: [fileName],
         sharePositionOrigin: sharePositionOrigin,
       ),
     );
+  }
+
+  Future<NotesShareResult> _shareContent(ShareParams params) async {
+    final result =
+        await (_share?.call(params) ?? SharePlus.instance.share(params));
+    return switch (result.status) {
+      ShareResultStatus.success => NotesShareResult.completed,
+      ShareResultStatus.dismissed => NotesShareResult.dismissed,
+      ShareResultStatus.unavailable => NotesShareResult.unavailable,
+    };
   }
 }

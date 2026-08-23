@@ -27,6 +27,7 @@ class TagManagerSheet extends ConsumerStatefulWidget {
 
 class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
   bool _confirmationOpen = false;
+  bool _retrying = false;
 
   @override
   Widget build(BuildContext context) {
@@ -94,8 +95,11 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
                     else if (!notesState.hasValue && notesState.hasError)
                       _TagLoadError(onRetry: _retry)
                     else ...[
-                      if (notesState.hasError) ...[
-                        _TagRefreshError(onRetry: _retry),
+                      if (_retrying || notesState.hasError) ...[
+                        _TagRefreshError(
+                          onRetry: _retry,
+                          refreshing: _retrying,
+                        ),
                         const SizedBox(height: 12),
                       ],
                       if (usage.isEmpty)
@@ -121,8 +125,17 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
     );
   }
 
-  void _retry() {
+  Future<void> _retry() async {
+    if (_retrying) return;
+    setState(() => _retrying = true);
     ref.invalidate(notesProvider);
+    try {
+      await ref.read(notesProvider.future);
+    } catch (_) {
+      // The provider retains cached data and exposes the refreshed error state.
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
   }
 
   Future<void> _requestRemoval(TagUsage usage) async {
@@ -191,16 +204,20 @@ class _TagLoadError extends StatelessWidget {
 }
 
 class _TagRefreshError extends StatelessWidget {
-  const _TagRefreshError({required this.onRetry});
+  const _TagRefreshError({required this.onRetry, required this.refreshing});
 
   final VoidCallback onRetry;
+  final bool refreshing;
 
   @override
   Widget build(BuildContext context) {
     return _TagErrorPanel(
-      message: 'Could not refresh tag counts. Showing saved counts.',
+      message: refreshing
+          ? 'Refreshing tag counts…'
+          : 'Could not refresh tag counts. Showing saved counts.',
       onRetry: onRetry,
       compact: true,
+      refreshing: refreshing,
     );
   }
 }
@@ -210,11 +227,13 @@ class _TagErrorPanel extends StatelessWidget {
     required this.message,
     required this.onRetry,
     this.compact = false,
+    this.refreshing = false,
   });
 
   final String message;
   final VoidCallback onRetry;
   final bool compact;
+  final bool refreshing;
 
   @override
   Widget build(BuildContext context) {
@@ -229,7 +248,7 @@ class _TagErrorPanel extends StatelessWidget {
             Text(
               message,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colorScheme.error,
+                color: refreshing ? colorScheme.primary : colorScheme.error,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -240,8 +259,13 @@ class _TagErrorPanel extends StatelessWidget {
                 constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 child: OutlinedButton.icon(
                   key: const Key('tag-retry'),
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh),
+                  onPressed: refreshing ? null : onRetry,
+                  icon: refreshing
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh),
                   label: const Text('Retry'),
                 ),
               ),
@@ -269,10 +293,12 @@ class _TagRow extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final countLabel = usage.count == 1 ? '1 note' : '${usage.count} notes';
     return Semantics(
-      label: '${usage.tag}, $countLabel',
+      key: Key('tag-row-${usage.tag}'),
+      label: usage.tag,
+      value: countLabel,
       container: true,
+      explicitChildNodes: true,
       child: DecoratedBox(
-        key: Key('tag-row-${usage.tag}'),
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.42),
           borderRadius: BorderRadius.circular(18),
@@ -284,36 +310,43 @@ class _TagRow extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        usage.tag,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
+                  child: ExcludeSemantics(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          usage.tag,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        countLabel,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
+                        const SizedBox(height: 2),
+                        Text(
+                          countLabel,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton(
-                  constraints: const BoxConstraints(
-                    minWidth: 48,
-                    minHeight: 48,
+                Semantics(
+                  button: true,
+                  enabled: enabled,
+                  label: 'Remove ${usage.tag} tag',
+                  onTap: enabled ? onRemove : null,
+                  excludeSemantics: true,
+                  child: IconButton(
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                    tooltip: 'Remove ${usage.tag} tag',
+                    onPressed: enabled ? onRemove : null,
+                    color: colorScheme.error,
+                    icon: const Icon(Icons.delete_outline),
                   ),
-                  tooltip: 'Remove ${usage.tag} tag',
-                  onPressed: enabled ? onRemove : null,
-                  color: colorScheme.error,
-                  icon: const Icon(Icons.delete_outline),
                 ),
               ],
             ),

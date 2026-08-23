@@ -17,13 +17,20 @@ enum NotesTransferOperation {
   importBackup,
 }
 
-enum NotesTransferResult { completed, cancelled, busy, failed }
+enum NotesTransferResult { completed, cancelled, unavailable, busy, failed }
+
+enum NotesTransferOutcomeStatus { completed, shareSheetOpened }
 
 class NotesTransferOutcome {
-  const NotesTransferOutcome({required this.operation, this.importedCount});
+  const NotesTransferOutcome({
+    required this.operation,
+    this.importedCount,
+    this.status = NotesTransferOutcomeStatus.completed,
+  });
 
   final NotesTransferOperation operation;
   final int? importedCount;
+  final NotesTransferOutcomeStatus status;
 }
 
 @Riverpod(keepAlive: true)
@@ -50,23 +57,21 @@ class NotesTransfer extends _$NotesTransfer {
   Future<NotesTransferResult> exportText({Rect? sharePositionOrigin}) {
     return _run(NotesTransferOperation.exportText, () async {
       final notes = await _notes();
-      await ref
+      final shareResult = await ref
           .read(notesTransferGatewayProvider)
           .shareText(
             text: NoteExportFormatter.toText(notes),
             subject: 'My Notes',
             sharePositionOrigin: sharePositionOrigin,
           );
-      return const NotesTransferOutcome(
-        operation: NotesTransferOperation.exportText,
-      );
+      return _shareOutcome(NotesTransferOperation.exportText, shareResult);
     });
   }
 
   Future<NotesTransferResult> backupJson({Rect? sharePositionOrigin}) {
     return _run(NotesTransferOperation.backupJson, () async {
       final notes = await _notes();
-      await ref
+      final shareResult = await ref
           .read(notesTransferGatewayProvider)
           .shareFile(
             text: NoteExportFormatter.toJson(notes),
@@ -74,16 +79,14 @@ class NotesTransfer extends _$NotesTransfer {
             mimeType: 'application/json',
             sharePositionOrigin: sharePositionOrigin,
           );
-      return const NotesTransferOutcome(
-        operation: NotesTransferOperation.backupJson,
-      );
+      return _shareOutcome(NotesTransferOperation.backupJson, shareResult);
     });
   }
 
   Future<NotesTransferResult> exportMarkdown({Rect? sharePositionOrigin}) {
     return _run(NotesTransferOperation.exportMarkdown, () async {
       final notes = await _notes();
-      await ref
+      final shareResult = await ref
           .read(notesTransferGatewayProvider)
           .shareFile(
             text: NoteExportFormatter.toMarkdown(notes),
@@ -91,9 +94,7 @@ class NotesTransfer extends _$NotesTransfer {
             mimeType: 'text/markdown',
             sharePositionOrigin: sharePositionOrigin,
           );
-      return const NotesTransferOutcome(
-        operation: NotesTransferOperation.exportMarkdown,
-      );
+      return _shareOutcome(NotesTransferOperation.exportMarkdown, shareResult);
     });
   }
 
@@ -117,6 +118,20 @@ class NotesTransfer extends _$NotesTransfer {
     return cached ?? await ref.read(notesProvider.future);
   }
 
+  NotesTransferOutcome? _shareOutcome(
+    NotesTransferOperation operation,
+    NotesShareResult shareResult,
+  ) {
+    return switch (shareResult) {
+      NotesShareResult.completed => NotesTransferOutcome(operation: operation),
+      NotesShareResult.dismissed => null,
+      NotesShareResult.unavailable => NotesTransferOutcome(
+        operation: operation,
+        status: NotesTransferOutcomeStatus.shareSheetOpened,
+      ),
+    };
+  }
+
   Future<NotesTransferResult> _run(
     NotesTransferOperation operation,
     Future<NotesTransferOutcome?> Function() action,
@@ -133,6 +148,9 @@ class NotesTransfer extends _$NotesTransfer {
         return NotesTransferResult.cancelled;
       }
       state = AsyncData(outcome);
+      if (outcome.status == NotesTransferOutcomeStatus.shareSheetOpened) {
+        return NotesTransferResult.unavailable;
+      }
       return NotesTransferResult.completed;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);

@@ -79,6 +79,35 @@ void main() {
         reason: key,
       );
     }
+    for (final entry in _moreRowSemantics.entries) {
+      final row = find.byKey(Key(entry.key));
+      final data = tester.getSemantics(row).getSemanticsData();
+      expect(data.label, entry.value.label, reason: entry.key);
+      expect(data.value, entry.value.value, reason: entry.key);
+      expect(data.hasAction(SemanticsAction.tap), isTrue, reason: entry.key);
+      expect(
+        find.bySemanticsLabel(RegExp('^${RegExp.escape(entry.value.label)}\$')),
+        findsOneWidget,
+        reason: '${entry.key} must have one spoken label',
+      );
+    }
+    expect(
+      tester
+          .getSemantics(find.byKey(const Key('more-row-theme')))
+          .flagsCollection
+          .isExpanded,
+      Tristate.isTrue,
+    );
+    await tester.tap(find.byKey(const Key('more-row-theme')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .getSemantics(find.byKey(const Key('more-row-theme')))
+          .flagsCollection
+          .isExpanded,
+      Tristate.isFalse,
+    );
+    expect(find.byKey(const Key('theme-mode-system')), findsNothing);
     expect(find.byType(GlassSurface), findsOneWidget);
     expect(find.byType(SafeArea), findsWidgets);
   });
@@ -143,15 +172,14 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Exporting text…'), findsOneWidget);
-    expect(
-      tester
-          .getSemantics(
-            find.byKey(const Key('more-transfer-status-exportText')),
-          )
-          .flagsCollection
-          .isLiveRegion,
-      isTrue,
-    );
+    final loadingSemantics = tester
+        .getSemantics(find.byKey(const Key('more-transfer-status-exportText')))
+        .getSemanticsData();
+    expect(loadingSemantics.label, 'Export text');
+    expect(loadingSemantics.value, 'Exporting text…');
+    expect(loadingSemantics.flagsCollection.isLiveRegion, isTrue);
+    expect(loadingSemantics.hasAction(SemanticsAction.tap), isFalse);
+    expect(find.bySemanticsLabel(RegExp(r'^Export text$')), findsOneWidget);
     expect(tester.getSize(exportRow), sizeBefore);
 
     await tester.binding.handlePopRoute();
@@ -166,6 +194,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(MoreActionsSheet), findsOneWidget);
     expect(find.text('Text export complete.'), findsOneWidget);
+    final successSemantics = tester
+        .getSemantics(find.byKey(const Key('more-transfer-status-exportText')))
+        .getSemanticsData();
+    expect(successSemantics.label, 'Export text');
+    expect(successSemantics.value, 'Text export complete.');
+    expect(successSemantics.flagsCollection.isLiveRegion, isTrue);
+    expect(successSemantics.hasAction(SemanticsAction.tap), isTrue);
 
     gateway
       ..shareGate = null
@@ -236,6 +271,54 @@ void main() {
     expect(tester.getSemantics(status).flagsCollection.isLiveRegion, isTrue);
   });
 
+  testWidgets('share outcomes stay truthful and clear across sessions', (
+    tester,
+  ) async {
+    final gateway = _FakeNotesTransferGateway()
+      ..shareResult = NotesShareResult.unavailable;
+    final harness = await _pumpMore(tester, gateway: gateway);
+    final backupRow = find.byKey(const Key('more-row-backup-json'));
+    await tester.ensureVisible(backupRow);
+
+    await tester.tap(backupRow);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Share sheet opened.'), findsOneWidget);
+    expect(find.text('Backup sharing complete.'), findsNothing);
+    expect(
+      harness.container.read(notesTransferProvider).requireValue?.status,
+      NotesTransferOutcomeStatus.shareSheetOpened,
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open more'));
+    await tester.pump();
+
+    expect(find.text('Share sheet opened.'), findsNothing);
+    expect(find.text('Backup sharing complete.'), findsNothing);
+    await tester.pumpAndSettle();
+
+    gateway.shareResult = NotesShareResult.dismissed;
+    final exportRow = find.byKey(const Key('more-row-export-text'));
+    await tester.ensureVisible(exportRow);
+    await tester.pumpAndSettle();
+    await tester.tap(exportRow);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Text export complete.'), findsNothing);
+    expect(find.text('Share sheet opened.'), findsNothing);
+    expect(harness.container.read(notesTransferProvider).requireValue, isNull);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open more'));
+    await tester.pump();
+
+    expect(find.text('Text export complete.'), findsNothing);
+    expect(find.text('Share sheet opened.'), findsNothing);
+  });
+
   testWidgets('silent import cancellation restores import focus', (
     tester,
   ) async {
@@ -282,6 +365,28 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byType(MoreActionsSheet), findsNothing);
+  });
+
+  testWidgets('tag row exposes one label plus a separate delete action', (
+    tester,
+  ) async {
+    await _pumpMore(tester, notes: _tagNotes);
+    await _openTags(tester);
+
+    final row = find.byKey(const Key('tag-row-shared'));
+    final tagSemantics = find.bySemanticsLabel(RegExp(r'^shared$'));
+    expect(tagSemantics, findsOneWidget);
+    final rowData = tester.getSemantics(row).getSemanticsData();
+    expect(rowData.label, 'shared');
+    expect(rowData.value, '3 notes');
+    expect(rowData.hasAction(SemanticsAction.tap), isFalse);
+
+    final delete = find.bySemanticsLabel(RegExp(r'^Remove shared tag$'));
+    expect(delete, findsOneWidget);
+    final deleteData = tester.getSemantics(delete).getSemanticsData();
+    expect(deleteData.label, 'Remove shared tag');
+    expect(deleteData.flagsCollection.isButton, isTrue);
+    expect(deleteData.hasAction(SemanticsAction.tap), isTrue);
   });
 
   testWidgets('tag manager distinguishes loading from a true empty state', (
@@ -351,7 +456,29 @@ void main() {
     expect(find.text('shared'), findsOneWidget);
     expect(find.text('3 notes'), findsOneWidget);
     expect(find.text('No tags yet'), findsNothing);
-    expect(find.byKey(const Key('tag-retry')), findsOneWidget);
+    final retry = find.byKey(const Key('tag-retry'));
+    expect(retry, findsOneWidget);
+
+    repository.readGate = Completer<void>();
+    await tester.tap(retry);
+    await tester.pump();
+
+    final refreshing = find.text('Refreshing tag counts…');
+    expect(refreshing, findsOneWidget);
+    expect(find.text('shared'), findsOneWidget);
+    expect(find.text('3 notes'), findsOneWidget);
+    expect(tester.widget<OutlinedButton>(retry).onPressed, isNull);
+    expect(
+      tester.getSemantics(refreshing).flagsCollection.isLiveRegion,
+      isTrue,
+    );
+
+    repository.readGate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(refreshing, findsNothing);
+    expect(find.text('shared'), findsOneWidget);
+    expect(find.text('3 notes'), findsOneWidget);
   });
 
   testWidgets('tag manager shows empty only after an empty load completes', (
@@ -510,6 +637,33 @@ const _moreRowKeys = [
   'more-row-import-backup',
 ];
 
+const _moreRowSemantics = {
+  'more-row-theme': (label: 'Theme', value: 'Follow device setting'),
+  'theme-mode-system': (label: 'System', value: 'Match this device'),
+  'theme-mode-light': (label: 'Light', value: 'Always use light appearance'),
+  'theme-mode-dark': (label: 'Dark', value: 'Always use dark appearance'),
+  'more-row-manage-tags': (
+    label: 'Manage tags',
+    value: 'Review usage and remove tags everywhere',
+  ),
+  'more-row-export-text': (
+    label: 'Export text',
+    value: 'Share a readable text copy',
+  ),
+  'more-row-backup-json': (
+    label: 'Backup JSON',
+    value: 'Share a restorable backup file',
+  ),
+  'more-row-export-markdown': (
+    label: 'Export Markdown',
+    value: 'Share notes with Markdown formatting',
+  ),
+  'more-row-import-backup': (
+    label: 'Import backup',
+    value: 'Append notes from a JSON backup',
+  ),
+};
+
 final _tagNotes = [
   _note(1, NoteStatus.active, const ['shared', 'shared', 'active']),
   _note(2, NoteStatus.archived, const ['shared', 'archive']),
@@ -651,6 +805,7 @@ class _FakeNotesTransferGateway extends NotesTransferGateway {
   Object? pickError;
   Object? shareError;
   Completer<void>? shareGate;
+  NotesShareResult shareResult = NotesShareResult.completed;
 
   int pickCalls = 0;
   int shareTextCalls = 0;
@@ -664,7 +819,7 @@ class _FakeNotesTransferGateway extends NotesTransferGateway {
   }
 
   @override
-  Future<void> shareText({
+  Future<NotesShareResult> shareText({
     required String text,
     required String subject,
     Rect? sharePositionOrigin,
@@ -672,10 +827,11 @@ class _FakeNotesTransferGateway extends NotesTransferGateway {
     shareTextCalls += 1;
     if (shareError case final error?) throw error;
     await shareGate?.future;
+    return shareResult;
   }
 
   @override
-  Future<void> shareFile({
+  Future<NotesShareResult> shareFile({
     required String text,
     required String fileName,
     required String mimeType,
@@ -684,6 +840,7 @@ class _FakeNotesTransferGateway extends NotesTransferGateway {
     shareFileCalls += 1;
     if (shareError case final error?) throw error;
     await shareGate?.future;
+    return shareResult;
   }
 }
 
