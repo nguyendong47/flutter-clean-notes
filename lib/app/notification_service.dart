@@ -310,8 +310,8 @@ class NotificationService {
 
     await _plugin.zonedSchedule(
       id!,
-      'Note reminder',
-      'Open Aurora Notes to view your reminder.',
+      'Clean Notes',
+      'Open Clean Notes to view your reminder.',
       tz.TZDateTime.from(reminder, tz.local),
       NotificationDetails(
         android: androidDetails,

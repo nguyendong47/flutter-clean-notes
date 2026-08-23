@@ -212,8 +212,8 @@ void main() {
           expect(fakePlugin.zonedScheduleCalls.length, equals(1));
           final call = fakePlugin.zonedScheduleCalls.first;
           expect(call.id, equals(1));
-          expect(call.title, equals('Note reminder'));
-          expect(call.body, equals('Open Aurora Notes to view your reminder.'));
+          expect(call.title, equals('Clean Notes'));
+          expect(call.body, equals('Open Clean Notes to view your reminder.'));
           expect(
             call.androidScheduleMode,
             equals(AndroidScheduleMode.inexactAllowWhileIdle),
@@ -437,8 +437,8 @@ void main() {
           expect(fakePlugin.zonedScheduleCalls.length, equals(1));
           final call = fakePlugin.zonedScheduleCalls.first;
           expect(call.id, equals(1));
-          expect(call.title, equals('Note reminder'));
-          expect(call.body, equals('Open Aurora Notes to view your reminder.'));
+          expect(call.title, equals('Clean Notes'));
+          expect(call.body, equals('Open Clean Notes to view your reminder.'));
           expect(
             call.scheduledDate,
             tz.TZDateTime.from(now.add(const Duration(minutes: 15)), tz.local),
@@ -488,7 +488,7 @@ void main() {
           expect(fakePlugin.zonedScheduleCalls.length, equals(1));
           final call = fakePlugin.zonedScheduleCalls.first;
           expect(call.id, equals(1));
-          expect(call.title, equals('Note reminder'));
+          expect(call.title, equals('Clean Notes'));
           expect(call.payload, 'note:v1:1');
         },
       );
@@ -507,8 +507,8 @@ void main() {
         expect(fakePlugin.zonedScheduleCalls, hasLength(1));
         final call = fakePlugin.zonedScheduleCalls.single;
         expect(call.id, 1);
-        expect(call.title, 'Note reminder');
-        expect(call.body, 'Open Aurora Notes to view your reminder.');
+        expect(call.title, 'Clean Notes');
+        expect(call.body, 'Open Clean Notes to view your reminder.');
         expect(call.payload, 'note:v1:1');
       });
 

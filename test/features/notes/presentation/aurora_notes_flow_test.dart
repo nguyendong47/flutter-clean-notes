@@ -249,6 +249,44 @@ void main() {
     },
   );
 
+  testWidgets('real MyApp publishes Clean Notes as the application title', (
+    tester,
+  ) async {
+    // Mutation caught: reintroducing a generated framework/project name in
+    // the platform task switcher title exposed by MaterialApp.
+    final container = ProviderContainer(
+      overrides: [
+        themeModeStoreProvider.overrideWithValue(
+          _FakeThemeModeStore(ThemeMode.light),
+        ),
+        noteRepositoryProvider.overrideWithValue(
+          InMemoryNoteRepository.seeded(const <Note>[]),
+        ),
+        noteReminderGatewayProvider.overrideWithValue(
+          FakeNoteReminderGateway(),
+        ),
+        notificationServiceProvider.overrideWithValue(
+          NotificationService(plugin: FlutterLocalNotificationsPlugin()),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(appThemeProvider.future);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const MyApp()),
+    );
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).title,
+      'Clean Notes',
+    );
+  });
+
   testWidgets(
     'real MyApp Home toggle persists effective themes without changing route',
     (tester) async {

@@ -1,6 +1,6 @@
 {
-    "name": "flutter_clean_notes",
-    "short_name": "flutter_clean_notes",
+    "name": "Clean Notes",
+    "short_name": "Clean Notes",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#15172B",

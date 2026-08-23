@@ -28,7 +28,7 @@ class MyApp extends ConsumerWidget {
     final themeMode = ref.watch(appThemeProvider).value ?? ThemeMode.system;
 
     return MaterialApp.router(
-      title: 'Flutter Clean Notes',
+      title: 'Clean Notes',
       debugShowCheckedModeBanner: false,
       routerConfig: ref.watch(routerProvider),
       theme: AuroraTheme.light(),
