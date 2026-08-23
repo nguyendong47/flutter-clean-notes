@@ -716,6 +716,72 @@ void main() {
     expect(_path(harness.router), '/');
   });
 
+  testWidgets(
+    'pushed dirty editor system Back preserves its origin until discard',
+    (tester) async {
+      // Mutation caught: a stale PopScope.canPop value letting a changed root
+      // editor pop before the discard dialog is shown.
+      final harness = await _pumpRouter(
+        tester,
+        repository: InMemoryNoteRepository.seeded(sampleNotes),
+        initialLocation: '/search',
+      );
+      harness.router.push('/note/new');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('editor-title-field')),
+        'Unsaved pushed draft',
+      );
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('discard-changes-dialog')), findsOneWidget);
+      expect(find.byType(AddEditNotePage), findsOneWidget);
+      expect(_path(harness.router), '/search');
+      await tester.tap(find.byKey(const Key('keep-editing-button')));
+      await tester.pumpAndSettle();
+      expect(find.byType(AddEditNotePage), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('discard-changes-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AddEditNotePage), findsNothing);
+      expect(find.byType(NotesSearchPage), findsOneWidget);
+      expect(_path(harness.router), '/search');
+      expect(rootNavigatorKey.currentState!.canPop(), isFalse);
+    },
+  );
+
+  testWidgets('direct dirty editor top Back falls back only after discard', (
+    tester,
+  ) async {
+    // Mutation caught: bypassing unsaved-change protection on a direct route
+    // whose close callback uses go('/') instead of popping a prior route.
+    final harness = await _pumpRouter(
+      tester,
+      repository: InMemoryNoteRepository.seeded(sampleNotes),
+      initialLocation: '/note/1',
+    );
+    await tester.enterText(
+      find.byKey(const Key('editor-body-field')),
+      'Unsaved direct-route body',
+    );
+
+    await tester.tap(find.byKey(const Key('editor-back-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('discard-changes-dialog')), findsOneWidget);
+    expect(_path(harness.router), '/note/1');
+    await tester.tap(find.byKey(const Key('discard-changes-button')));
+    await tester.pumpAndSettle();
+
+    expect(_path(harness.router), '/');
+    expect(find.byType(NotesHomePage), findsOneWidget);
+  });
+
   testWidgets('direct editor Done falls back to Notes', (tester) async {
     final harness = await _pumpRouter(
       tester,

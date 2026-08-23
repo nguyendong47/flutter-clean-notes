@@ -148,6 +148,183 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets(
+    'dirty new note top Back keeps the exact draft when Keep editing is chosen',
+    (tester) async {
+      // Mutation caught: closing a dirty editor without waiting for an
+      // explicit discard decision.
+      final semantics = tester.ensureSemantics();
+      final harness = await _pumpEditor(tester);
+      const title = 'Unpublished title';
+      const body = 'Exact body with trailing space ';
+      await tester.enterText(
+        find.byKey(const Key('editor-title-field')),
+        title,
+      );
+      await tester.enterText(find.byKey(const Key('editor-body-field')), body);
+
+      await tester.tap(find.byKey(const Key('editor-back-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('discard-changes-dialog')), findsOneWidget);
+      expect(find.text('Discard changes?'), findsOneWidget);
+      expect(find.text('Your unsaved changes will be lost.'), findsOneWidget);
+      final keepEditing = find.byKey(const Key('keep-editing-button'));
+      expect(tester.widget<FilledButton>(keepEditing).autofocus, isTrue);
+      expect(tester.getSemantics(keepEditing).label, 'Keep editing');
+      expect(
+        tester
+            .getSemantics(find.byKey(const Key('discard-changes-button')))
+            .label,
+        'Discard changes',
+      );
+      expect(harness.closeCount.value, 0);
+
+      await tester.tap(keepEditing);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('discard-changes-dialog')), findsNothing);
+      expect(_text(tester, 'editor-title-field'), title);
+      expect(_text(tester, 'editor-body-field'), body);
+      expect(harness.closeCount.value, 0);
+      semantics.dispose();
+    },
+  );
+
+  testWidgets(
+    'dirty existing note system Back closes only after Discard changes',
+    (tester) async {
+      // Mutation caught: allowing PopScope to pop a changed existing note.
+      final repository = _RecordingRepository([sampleNote]);
+      final harness = await _pumpEditor(
+        tester,
+        note: sampleNote,
+        repository: repository,
+      );
+      await tester.enterText(
+        find.byKey(const Key('editor-body-field')),
+        'Unsaved replacement body',
+      );
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('discard-changes-dialog')), findsOneWidget);
+      expect(harness.closeCount.value, 0);
+      expect(repository.updateCalls, 0);
+
+      await tester.tap(find.byKey(const Key('discard-changes-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('discard-changes-dialog')), findsNothing);
+      expect(harness.closeCount.value, 1);
+      expect(repository.updateCalls, 0);
+      expect(repository.notes.single.content, sampleNote.content);
+    },
+  );
+
+  for (final metadataChange in _MetadataChange.values) {
+    testWidgets(
+      '${metadataChange.name} metadata alone requires discard confirmation',
+      (tester) async {
+        // Mutation caught: omitting one persisted metadata field from the
+        // editor's semantic dirty snapshot.
+        final harness = await _pumpEditor(tester, note: sampleNote);
+        await _applyMetadataChange(tester, metadataChange);
+
+        await tester.tap(find.byKey(const Key('editor-back-button')));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('discard-changes-dialog')), findsOneWidget);
+        expect(harness.closeCount.value, 0);
+        await tester.tap(find.byKey(const Key('keep-editing-button')));
+        await tester.pumpAndSettle();
+        expect(harness.closeCount.value, 0);
+      },
+    );
+  }
+
+  testWidgets('duplicate close and discard actions resolve exactly once', (
+    tester,
+  ) async {
+    // Mutation caught: racing close callbacks creating stacked dialogs or
+    // invoking the owning route's close callback more than once.
+    final harness = await _pumpEditor(tester);
+    await tester.enterText(
+      find.byKey(const Key('editor-title-field')),
+      'One close only',
+    );
+    final requestClose = tester
+        .widget<BackButton>(find.byKey(const Key('editor-back-button')))
+        .onPressed!;
+
+    requestClose();
+    requestClose();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('discard-changes-dialog')), findsOneWidget);
+    final discard = tester
+        .widget<TextButton>(find.byKey(const Key('discard-changes-button')))
+        .onPressed!;
+    discard();
+    discard();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('discard-changes-dialog')), findsNothing);
+    expect(harness.closeCount.value, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reverted text is clean and closes without a dialog', (
+    tester,
+  ) async {
+    // Mutation caught: latching dirty state after the draft again equals its
+    // initial semantic snapshot.
+    final harness = await _pumpEditor(tester, note: sampleNote);
+    final title = find.byKey(const Key('editor-title-field'));
+    await tester.enterText(title, 'Temporary title');
+    await tester.enterText(title, sampleNote.title);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('discard-changes-dialog')), findsNothing);
+    expect(harness.closeCount.value, 1);
+  });
+
+  testWidgets(
+    'compact scaled editor presents one usable unsaved-changes dialog',
+    (tester) async {
+      // Mutation caught: a custom dialog that overflows or loses its safe
+      // default action under mobile accessibility scaling.
+      final harness = await _pumpEditor(
+        tester,
+        size: const Size(320, 640),
+        textScaler: const TextScaler.linear(2),
+        disableAnimations: true,
+      );
+      await tester.enterText(
+        find.byKey(const Key('editor-body-field')),
+        'Scaled draft',
+      );
+
+      await tester.tap(find.byKey(const Key('editor-back-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('discard-changes-dialog')), findsOneWidget);
+      expect(
+        find.byKey(const Key('keep-editing-button')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('discard-changes-button')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(harness.closeCount.value, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('save disables every close path and waits for persistence', (
     tester,
   ) async {
@@ -1097,6 +1274,36 @@ Widget _editorPage({
 
 String _text(WidgetTester tester, String key) {
   return tester.widget<TextField>(find.byKey(Key(key))).controller!.text;
+}
+
+enum _MetadataChange { color, tags, reminder }
+
+Future<void> _applyMetadataChange(
+  WidgetTester tester,
+  _MetadataChange change,
+) async {
+  await tester.tap(find.byKey(const Key('editor-metadata-button')));
+  await tester.pumpAndSettle();
+  switch (change) {
+    case _MetadataChange.color:
+      await tester.tap(
+        find.byKey(
+          ValueKey('metadata-tint-${Colors.blue.shade100.toARGB32()}'),
+        ),
+      );
+    case _MetadataChange.tags:
+      await tester.enterText(
+        find.byKey(const Key('metadata-tag-field')),
+        'unsaved',
+      );
+      await tester.tap(find.byKey(const Key('metadata-add-tag')));
+    case _MetadataChange.reminder:
+      await tester.tap(find.byKey(const Key('metadata-clear-reminder')));
+  }
+  final apply = find.byKey(const Key('metadata-apply'));
+  await tester.ensureVisible(apply);
+  await tester.tap(apply);
+  await tester.pumpAndSettle();
 }
 
 class _RecordingRepository extends InMemoryNoteRepository {

@@ -224,6 +224,13 @@ void main() {
 
       await tester.tap(find.byKey(const Key('editor-back-button')));
       await tester.pumpAndSettle();
+      expect(find.byKey(const Key('discard-changes-dialog')), findsOneWidget);
+      expect(
+        find.byType(AddEditNotePage, skipOffstage: false),
+        findsNWidgets(2),
+      );
+      await tester.tap(find.byKey(const Key('discard-changes-button')));
+      await tester.pumpAndSettle();
 
       expect(_path(harness.router), '/search');
       expect(find.byType(AddEditNotePage, skipOffstage: false), findsNothing);

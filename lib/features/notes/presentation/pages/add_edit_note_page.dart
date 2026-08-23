@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -38,13 +39,17 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
   late List<String> _tags;
   late DateTime? _reminder;
   late DateTime? _persistedReminder;
+  late _EditorSnapshot _cleanSnapshot;
   bool _previewMode = false;
   bool _saving = false;
   bool _closed = false;
   bool _closePending = false;
   bool _closeRetryScheduled = false;
+  bool _discardDialogOpen = false;
+  bool _discardConfirmed = false;
   bool _allowPop = false;
   bool _hasPartialSave = false;
+  bool _isDirty = false;
   String? _validationMessage;
   _EditorSaveError? _saveError;
   _EditorFocusIntent _focusIntent = _EditorFocusIntent.none;
@@ -70,10 +75,15 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
     _tags = List<String>.of(note?.tags ?? const []);
     _reminder = note?.reminder;
     _persistedReminder = note?.id == null ? null : note?.reminder;
+    _cleanSnapshot = _currentSnapshot();
+    _titleController.addListener(_handleDraftChanged);
+    _contentController.addListener(_handleDraftChanged);
   }
 
   @override
   void dispose() {
+    _titleController.removeListener(_handleDraftChanged);
+    _contentController.removeListener(_handleDraftChanged);
     _titleController.dispose();
     _contentController.dispose();
     _titleFocusNode.removeListener(_handleTitleFocus);
@@ -89,9 +99,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
     ref.watch(notesProvider);
     final routeIsCurrent = ModalRoute.isCurrentOf(context) ?? false;
     _schedulePendingCloseIfCurrent(routeIsCurrent);
-    final navigatorCanPop = Navigator.of(context).canPop();
-    final canPop =
-        !_saving && (_allowPop || (navigatorCanPop && !_hasPartialSave));
+    final canPop = !_saving && _allowPop;
     final media = MediaQuery.of(context);
     final duration = media.disableAnimations
         ? Duration.zero
@@ -637,6 +645,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       _selectedColor = value.color;
       _tags = List<String>.of(value.tags);
       _reminder = value.reminder;
+      _isDirty = _currentSnapshot() != _cleanSnapshot;
     });
   }
 
@@ -698,6 +707,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       }
       if (!mounted) return;
       _saving = false;
+      _markDraftClean();
       _requestClose();
     } on InvalidNoteReminderException {
       if (!mounted) return;
@@ -713,6 +723,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       _persistedReminder = error.persistedNote.reminder;
       _hasPartialSave = true;
       if (!mounted) return;
+      _markDraftClean();
       ref.invalidate(notesProvider);
       setState(() {
         _saving = false;
@@ -754,7 +765,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
   }
 
   void _requestClose() {
-    if (_saving || _closed) return;
+    if (_saving || _closed || _discardDialogOpen) return;
 
     final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? false;
     if (!routeIsCurrent) {
@@ -762,12 +773,58 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       return;
     }
 
+    if (_isDirty && !_discardConfirmed) {
+      _showDiscardChangesDialog();
+      return;
+    }
+
+    _finishCloseRequest();
+  }
+
+  Future<void> _showDiscardChangesDialog() async {
+    _discardDialogOpen = true;
+    _closePending = false;
+    var choiceResolved = false;
+    final discard = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        void resolve(bool value) {
+          if (choiceResolved) return;
+          choiceResolved = true;
+          Navigator.of(dialogContext).pop(value);
+        }
+
+        return AlertDialog(
+          key: const Key('discard-changes-dialog'),
+          semanticLabel: 'Unsaved changes',
+          title: const Text('Discard changes?'),
+          content: const Text('Your unsaved changes will be lost.'),
+          actions: [
+            TextButton(
+              key: const Key('discard-changes-button'),
+              onPressed: () => resolve(true),
+              child: const Text('Discard changes'),
+            ),
+            FilledButton(
+              key: const Key('keep-editing-button'),
+              autofocus: true,
+              onPressed: () => resolve(false),
+              child: const Text('Keep editing'),
+            ),
+          ],
+        );
+      },
+    );
+    _discardDialogOpen = false;
+    if (!mounted || discard != true || _saving || _closed) return;
+    _discardConfirmed = true;
+    _requestClose();
+  }
+
+  void _finishCloseRequest() {
     final callback = widget.onClose;
-    final needsPopFrame =
-        callback != null &&
-        _hasPartialSave &&
-        !_allowPop &&
-        Navigator.of(context).canPop();
+    final needsPopFrame = !_allowPop && Navigator.of(context).canPop();
     if (needsPopFrame) {
       setState(() {
         _allowPop = true;
@@ -787,6 +844,29 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
     if (context.canPop()) context.pop();
   }
 
+  _EditorSnapshot _currentSnapshot() {
+    return _EditorSnapshot(
+      title: _titleController.text,
+      body: _contentController.text,
+      color: _selectedColor.toARGB32(),
+      tags: _tags,
+      reminder: _reminder,
+    );
+  }
+
+  void _handleDraftChanged() {
+    if (!mounted) return;
+    final isDirty = _currentSnapshot() != _cleanSnapshot;
+    if (_isDirty == isDirty) return;
+    setState(() => _isDirty = isDirty);
+  }
+
+  void _markDraftClean() {
+    _cleanSnapshot = _currentSnapshot();
+    _isDirty = false;
+    _discardConfirmed = false;
+  }
+
   void _schedulePendingCloseIfCurrent(bool routeIsCurrent) {
     if (!_closePending || !routeIsCurrent || _closeRetryScheduled) return;
     _closeRetryScheduled = true;
@@ -804,4 +884,35 @@ class _EditorSaveError {
 
   final String heading;
   final String detail;
+}
+
+class _EditorSnapshot {
+  _EditorSnapshot({
+    required this.title,
+    required this.body,
+    required this.color,
+    required List<String> tags,
+    required this.reminder,
+  }) : tags = List<String>.unmodifiable(tags);
+
+  final String title;
+  final String body;
+  final int color;
+  final List<String> tags;
+  final DateTime? reminder;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is _EditorSnapshot &&
+            title == other.title &&
+            body == other.body &&
+            color == other.color &&
+            listEquals(tags, other.tags) &&
+            reminder == other.reminder;
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(title, body, color, Object.hashAll(tags), reminder);
 }
