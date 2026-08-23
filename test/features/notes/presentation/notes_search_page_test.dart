@@ -635,6 +635,84 @@ void main() {
   });
 
   testWidgets(
+    'cached refresh error preserves search state and Retry clears it',
+    (tester) async {
+      final repository = InMemoryNoteRepository.seeded([
+        _note(1, 'Alpha project', const ['work'], DateTime.utc(2026, 1, 1)),
+        _note(2, 'Zulu project', const ['work'], DateTime.utc(2026, 1, 3)),
+        _note(3, 'Middle project', const [
+          'personal',
+        ], DateTime.utc(2026, 1, 2)),
+      ]);
+      final container = await _pumpSearch(
+        tester,
+        repository: repository,
+        size: const Size(320, 900),
+        textScaler: const TextScaler.linear(1.5),
+      );
+      final searchField = find.byKey(const Key('notes-search-field'));
+
+      await tester.enterText(searchField, 'project');
+      container.read(selectedTagProvider.notifier).select('work');
+      container.read(sortOrderProvider.notifier).set(NoteSort.titleZA);
+      await tester.pumpAndSettle();
+
+      repository.getError = StateError(
+        r'C:\Users\private\Documents\notes.db unavailable',
+      );
+      container.invalidate(notesProvider);
+      await tester.pumpAndSettle();
+
+      final cachedState = container.read(notesProvider);
+      expect(cachedState.hasError, isTrue);
+      expect(cachedState.hasValue, isTrue);
+      final notice = find.byKey(const Key('notes-search-cached-error'));
+      expect(notice, findsOneWidget);
+      expect(
+        find.text('Could not refresh notes. Showing saved notes.'),
+        findsOneWidget,
+      );
+      expect(tester.getSemantics(notice).flagsCollection.isLiveRegion, isTrue);
+      final retry = find.byKey(const Key('notes-search-cached-error-retry'));
+      expect(retry, findsOneWidget);
+      expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('notes.db'), findsNothing);
+      expect(find.textContaining('StateError'), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(tester.widget<SearchBar>(searchField).controller?.text, 'project');
+      expect(container.read(selectedTagProvider), 'work');
+      expect(container.read(sortOrderProvider), NoteSort.titleZA);
+      expect(find.text('Middle project'), findsNothing);
+      expect(find.text('Zulu project'), findsOneWidget);
+      expect(find.text('Alpha project'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Zulu project')).dy,
+        lessThan(tester.getTopLeft(find.text('Alpha project')).dy),
+      );
+
+      repository.getError = null;
+      await tester.tap(retry);
+      await tester.pumpAndSettle();
+
+      expect(container.read(notesProvider), isA<AsyncData<List<Note>>>());
+      expect(notice, findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(tester.takeException(), isNull);
+      expect(tester.widget<SearchBar>(searchField).controller?.text, 'project');
+      expect(container.read(selectedTagProvider), 'work');
+      expect(container.read(sortOrderProvider), NoteSort.titleZA);
+      expect(find.text('Middle project'), findsNothing);
+      expect(find.text('Zulu project'), findsOneWidget);
+      expect(find.text('Alpha project'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Zulu project')).dy,
+        lessThan(tester.getTopLeft(find.text('Alpha project')).dy),
+      );
+    },
+  );
+
+  testWidgets(
     'keeps chrome stable for loading, initial error, and pre-write failure',
     (tester) async {
       final deferred = _DeferredNoteRepository(sampleNotes);

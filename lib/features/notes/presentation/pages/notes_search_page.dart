@@ -127,6 +127,8 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
                 if (index == 4) {
                   return _buildState(
                     viewState: viewState,
+                    showCachedRefreshError:
+                        notesState.hasError && notesState.hasValue,
                     query: query,
                     results: results,
                     tags: tags,
@@ -260,6 +262,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
 
   Widget _buildState({
     required _SearchViewState viewState,
+    required bool showCachedRefreshError,
     required String query,
     required List<Note> results,
     required List<String> tags,
@@ -308,6 +311,10 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (showCachedRefreshError) ...[
+          _CachedErrorNotice(onRetry: _retry),
+          const SizedBox(height: 12),
+        ],
         if (searchStatus != null) ...[
           searchStatus,
           if (viewState == _SearchViewState.results) const SizedBox(height: 12),
@@ -517,6 +524,57 @@ class _InitialErrorState extends StatelessWidget {
       action: SizedBox(
         height: 48,
         child: FilledButton(onPressed: onRetry, child: const Text('Try again')),
+      ),
+    );
+  }
+}
+
+class _CachedErrorNotice extends StatelessWidget {
+  const _CachedErrorNotice({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Semantics(
+      key: const Key('notes-search-cached-error'),
+      container: true,
+      liveRegion: true,
+      child: GlassSurface(
+        borderRadius: const BorderRadius.all(Radius.circular(16)),
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 8, 8),
+        blur: 14,
+        opacity: 0.78,
+        child: Row(
+          children: [
+            ExcludeSemantics(
+              child: Icon(
+                Icons.cloud_off_outlined,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Could not refresh notes. Showing saved notes.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 48,
+              child: TextButton(
+                key: const Key('notes-search-cached-error-retry'),
+                onPressed: onRetry,
+                child: const Text('Retry'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
