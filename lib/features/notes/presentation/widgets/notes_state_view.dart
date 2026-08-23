@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_grid_layout.dart';
 
 class NotesSkeleton extends StatelessWidget {
   const NotesSkeleton({super.key});
@@ -17,7 +18,7 @@ class NotesSkeleton extends StatelessWidget {
         return SliverPadding(
           padding: EdgeInsets.symmetric(horizontal: horizontalInset),
           sliver: SliverMasonryGrid.count(
-            crossAxisCount: viewportWidth < 360 ? 1 : 2,
+            crossAxisCount: notesGridColumnCount(viewportWidth),
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
             childCount: 4,

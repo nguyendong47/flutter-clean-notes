@@ -235,7 +235,8 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
         SnackBar(
           behavior: SnackBarBehavior.floating,
           content: const Text(
-            'Could not update notes. Your saved notes are unchanged.',
+            'Could not refresh notes. Your latest change may already be saved. '
+            'Try again.',
           ),
         ),
       );
@@ -294,7 +295,9 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
           button: true,
           enabled: !_themeBusy,
           label: toggleLabel,
-          excludeSemantics: true,
+          value: _themeBusy ? 'Saving theme preference…' : null,
+          liveRegion: _themeBusy,
+          excludeSemantics: !_themeBusy,
           child: SizedBox.square(
             key: const Key('notes-home-theme-toggle'),
             dimension: 48,

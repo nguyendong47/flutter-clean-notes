@@ -49,7 +49,10 @@ void main() {
     expect(find.text(sampleNote.title), findsOneWidget);
     expect(find.textContaining('write failed'), findsNothing);
     expect(
-      find.text('Could not update notes. Your saved notes are unchanged.'),
+      find.text(
+        'Could not refresh notes. Your latest change may already be saved. '
+        'Try again.',
+      ),
       findsOneWidget,
     );
   });

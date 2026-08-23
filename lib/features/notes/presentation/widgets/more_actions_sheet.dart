@@ -361,14 +361,12 @@ class _ThemeChoiceRow extends StatelessWidget {
       icon: selected ? Icons.radio_button_checked : Icons.radio_button_off,
       label: label,
       description: description,
+      status: loading ? 'Saving theme preference…' : null,
       selected: selected,
       enabled: enabled,
-      trailing: loading
-          ? const SizedBox.square(
-              dimension: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(selected ? Icons.check : Icons.chevron_right),
+      loading: loading,
+      reserveDescriptionForStatus: true,
+      trailing: Icon(selected ? Icons.check : Icons.chevron_right),
       onPressed: (_) => onSelected(mode),
     );
   }

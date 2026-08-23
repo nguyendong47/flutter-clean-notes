@@ -168,6 +168,71 @@ void main() {
     );
   });
 
+  testWidgets(
+    'theme persistence stays emphasized, announced, and route-guarded',
+    (tester) async {
+      final gate = Completer<void>();
+      final store = _FakeThemeModeStore()..writeGate = gate;
+      await _pumpMore(tester, themeStore: store);
+      final darkRow = find.byKey(const Key('theme-mode-dark'));
+
+      await tester.tap(darkRow);
+      await tester.pump();
+
+      expect(store.writeCalls, 1);
+      expect(
+        find.descendant(
+          of: darkRow,
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+      final loadingSemantics = tester.getSemantics(darkRow).getSemanticsData();
+      expect(loadingSemantics.value, 'Saving theme preference…');
+      expect(loadingSemantics.flagsCollection.isLiveRegion, isTrue);
+      expect(loadingSemantics.hasAction(SemanticsAction.tap), isFalse);
+      expect(
+        find.descendant(
+          of: darkRow,
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Opacity && widget.opacity == 1,
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('more-row-manage-tags')),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Opacity && widget.opacity < 0.6,
+          ),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pump();
+      expect(find.byType(MoreActionsSheet), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.byType(MoreActionsSheet), findsOneWidget);
+
+      await tester.tap(darkRow, warnIfMissed: false);
+      await tester.pump();
+      expect(store.writeCalls, 1);
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(store.mode, ThemeMode.dark);
+      expect(find.byType(MoreActionsSheet), findsOneWidget);
+
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pumpAndSettle();
+      expect(find.byType(MoreActionsSheet), findsNothing);
+    },
+  );
+
   testWidgets('keeps transfer row stable, blocks overlap and survives errors', (
     tester,
   ) async {
@@ -837,6 +902,7 @@ Note _note(int id, NoteStatus status, List<String> tags) {
 class _FakeThemeModeStore implements ThemeModeStore {
   ThemeMode mode = ThemeMode.system;
   Object? writeError;
+  Completer<void>? writeGate;
   int writeCalls = 0;
 
   @override
@@ -845,6 +911,7 @@ class _FakeThemeModeStore implements ThemeModeStore {
   @override
   Future<void> writeMode(ThemeMode mode) async {
     writeCalls += 1;
+    await writeGate?.future;
     if (writeError case final error?) throw error;
     this.mode = mode;
   }

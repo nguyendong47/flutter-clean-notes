@@ -26,34 +26,46 @@ void main() {
     (name: 'high contrast', highContrast: true, disabled: false),
     (name: 'disabled animations', highContrast: false, disabled: true),
   ]) {
-    testWidgets('${setting.name} paints one opaque theme surface', (
-      tester,
-    ) async {
-      await _pumpBackground(
-        tester,
-        highContrast: setting.highContrast,
-        disableAnimations: setting.disabled,
-      );
+    for (final appearance in <({String name, ThemeData theme})>[
+      (name: 'light', theme: AuroraTheme.light()),
+      (name: 'dark', theme: AuroraTheme.dark()),
+    ]) {
+      testWidgets(
+        '${setting.name} paints one opaque ${appearance.name} theme surface',
+        (tester) async {
+          await _pumpBackground(
+            tester,
+            theme: appearance.theme,
+            highContrast: setting.highContrast,
+            disableAnimations: setting.disabled,
+          );
 
-      final decorations = _decorations(tester);
-      expect(decorations, hasLength(1));
-      expect(decorations.single.gradient, isNull);
-      expect(decorations.single.color, AuroraTheme.light().colorScheme.surface);
-      expect(decorations.single.color!.a, 1);
-      expect(find.byType(SafeArea), findsOneWidget);
-      expect(find.text('Notes content'), findsOneWidget);
-    });
+          final decorations = _decorations(tester);
+          expect(decorations, hasLength(1));
+          expect(decorations.single.gradient, isNull);
+          expect(
+            decorations.single.color,
+            appearance.theme.colorScheme.surface,
+          );
+          expect(decorations.single.color!.a, 1);
+          expect(find.byType(SafeArea), findsOneWidget);
+          expect(find.text('Notes content'), findsOneWidget);
+        },
+      );
+    }
   }
 }
 
 Future<void> _pumpBackground(
   WidgetTester tester, {
+  ThemeData? theme,
   bool highContrast = false,
   bool disableAnimations = false,
 }) async {
+  final resolvedTheme = theme ?? AuroraTheme.light();
   await tester.pumpWidget(
     MaterialApp(
-      theme: AuroraTheme.light(),
+      theme: resolvedTheme,
       home: Builder(
         builder: (context) => MediaQuery(
           data: MediaQuery.of(context).copyWith(

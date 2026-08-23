@@ -211,10 +211,43 @@ void main() {
     expect(find.byType(NotesErrorState), findsNothing);
     expect(find.textContaining('write failed'), findsNothing);
     expect(
-      find.text('Could not update notes. Your saved notes are unchanged.'),
+      find.text(
+        'Could not refresh notes. Your latest change may already be saved. '
+        'Try again.',
+      ),
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'post-commit refresh failure uses accurate neutral mutation feedback',
+    (tester) async {
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      await _pumpHome(
+        tester,
+        repository: repository,
+        size: const Size(800, 1100),
+      );
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      await tester.tap(find.byTooltip('More actions for Design follow-up'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(_statusOf(repository, 2), NoteStatus.archived);
+      expect(
+        find.text(
+          'Could not refresh notes. Your latest change may already be saved. '
+          'Try again.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('saved notes are unchanged'), findsNothing);
+      expect(find.textContaining('note refresh'), findsNothing);
+    },
+  );
 
   testWidgets('archive and trash actions each offer working Undo restoration', (
     tester,
@@ -272,7 +305,10 @@ void main() {
     expect(find.text(sampleNote.title), findsOneWidget);
     expect(find.textContaining('restore failed'), findsNothing);
     expect(
-      find.text('Could not update notes. Your saved notes are unchanged.'),
+      find.text(
+        'Could not refresh notes. Your latest change may already be saved. '
+        'Try again.',
+      ),
       findsOneWidget,
     );
   });
@@ -302,6 +338,45 @@ void main() {
       expect(store.mode, ThemeMode.light);
       expect(find.textContaining('theme.db'), findsNothing);
       expect(find.text('Theme stays unchanged. Try again.'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'theme toggle announces pending persistence and prevents repeat writes',
+    (tester) async {
+      final gate = Completer<void>();
+      final store = _FakeThemeModeStore(ThemeMode.light)..writeGate = gate;
+      await _pumpHome(
+        tester,
+        repository: InMemoryNoteRepository.seeded(sampleNotes),
+        themeStore: store,
+      );
+
+      final toggle = find.byKey(const Key('notes-home-theme-toggle'));
+      await tester.tap(toggle);
+      await tester.pump();
+
+      expect(store.writeCalls, 1);
+      expect(
+        find.descendant(
+          of: toggle,
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+      final loadingSemantics = tester.getSemantics(toggle).getSemanticsData();
+      expect(loadingSemantics.value, 'Saving theme preference…');
+      expect(loadingSemantics.flagsCollection.isLiveRegion, isTrue);
+      expect(loadingSemantics.hasAction(SemanticsAction.tap), isFalse);
+
+      await tester.tap(toggle, warnIfMissed: false);
+      await tester.pump();
+      expect(store.writeCalls, 1);
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(store.writeCalls, 1);
+      expect(store.mode, ThemeMode.dark);
     },
   );
 
@@ -427,6 +502,55 @@ void main() {
       expect(tester.takeException(), isNull, reason: '${surface.size}');
     }
   });
+
+  testWidgets('loading grid matches populated columns at every breakpoint', (
+    tester,
+  ) async {
+    final surfaces = <({Size size, int columns, double contentWidth})>[
+      (size: const Size(359, 1000), columns: 1, contentWidth: 327),
+      (size: const Size(360, 1000), columns: 2, contentWidth: 328),
+      (size: const Size(600, 1100), columns: 2, contentWidth: 552),
+      (size: const Size(700, 1100), columns: 3, contentWidth: 652),
+      (size: const Size(768, 1100), columns: 3, contentWidth: 720),
+      (size: const Size(900, 1200), columns: 3, contentWidth: 840),
+    ];
+
+    for (final surface in surfaces) {
+      final repository = _DeferredNoteRepository(sampleNotes);
+      await _pumpHome(
+        tester,
+        repository: repository,
+        size: surface.size,
+        settle: false,
+      );
+      await tester.pump();
+
+      final masonry = tester.widget<SliverMasonryGrid>(
+        find.descendant(
+          of: find.byType(NotesSkeleton),
+          matching: find.byType(SliverMasonryGrid),
+        ),
+      );
+      final delegate =
+          masonry.gridDelegate
+              as SliverSimpleGridDelegateWithFixedCrossAxisCount;
+      expect(
+        delegate.crossAxisCount,
+        surface.columns,
+        reason: '${surface.size.width} loading columns',
+      );
+      final expectedCardWidth =
+          (surface.contentWidth - (surface.columns - 1) * 12) / surface.columns;
+      expect(
+        tester.getSize(find.byKey(const Key('notes-skeleton-card-0'))).width,
+        moreOrLessEquals(expectedCardWidth),
+        reason: '${surface.size.width} loading card width',
+      );
+
+      repository.release();
+      await tester.pumpAndSettle();
+    }
+  });
 }
 
 Future<ProviderContainer> _pumpHome(
@@ -504,6 +628,7 @@ class _FakeThemeModeStore implements ThemeModeStore {
 
   ThemeMode mode;
   Object? writeError;
+  Completer<void>? writeGate;
   int writeCalls = 0;
 
   @override
@@ -512,6 +637,7 @@ class _FakeThemeModeStore implements ThemeModeStore {
   @override
   Future<void> writeMode(ThemeMode mode) async {
     writeCalls += 1;
+    await writeGate?.future;
     if (writeError case final error?) throw error;
     this.mode = mode;
   }
