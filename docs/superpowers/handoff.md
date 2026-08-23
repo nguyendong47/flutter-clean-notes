@@ -13,25 +13,29 @@ This is the tracked operational checkpoint. The [Aurora specification](specs/202
 
 ## Latest verified evidence
 
-Task 9 closed through five commits:
+Task 9 closed through six implementation and verification commits:
 
 - `ee262e6` — initial cross-screen acceptance, accessibility, and transfer regressions;
 - `6474acf` — full-width editor Preview surface correction;
 - `5866e67` — opaque high-contrast glass fallback and the pre-existing NoteCard format gate;
 - `b8c3460` — active-only empty copy and root Search filter modal correction;
-- `12b01a3` — strengthened Search retention, durable real-`MyApp` theme, gated mutation, Library refresh, transfer, Preview, and accessibility verification.
+- `12b01a3` — strengthened Search retention, durable real-`MyApp` theme, gated mutation, Library refresh, transfer, Preview, and accessibility verification;
+- `3dfa0ee` — follow-up opaque-glass, root Search modal, Undo visibility, teardown, and expanded-semantics regressions.
 
 The final Task 9 gate recorded:
 
 - code generation succeeded and wrote zero files;
 - `dart format --output=none --set-exit-if-changed lib test` exited zero with 74 files checked and zero changed;
 - `flutter analyze` exited zero with no issues;
-- eight focused owner suites passed 104/104;
-- `flutter test --concurrency=1` passed 264/264;
+- eight focused owner suites passed 104/104, followed by a 52/52 four-owner correction gate;
+- `flutter test --concurrency=1` passed 265/265 after the follow-up regressions;
 - `git diff --check` exited zero;
 - OSV-Scanner 2.4.0 found no issues across all 143 lockfile packages;
 - all seven command-generated Linux, macOS, and Windows registrant files were restored exactly;
-- staged GitNexus detection for `12b01a3` reported ten test symbols and three test-only processes at MEDIUM risk, with no production file in that commit.
+- staged GitNexus detection for `12b01a3` reported ten test symbols and three test-only processes at MEDIUM risk, with no production file in that commit;
+- staged GitNexus detection for `3dfa0ee` reported LOW risk across four test files, with zero mapped symbols and zero affected processes.
+
+The final full-range GitNexus comparison from `4f81a47` reported HIGH risk across 36 changed symbols, 14 tracked files, and 8 affected processes. That reach is expected from the shared `GlassSurface` build paths and test-flow participation; reconciliation found no unexpected domain, data, database, or code-generated drift.
 
 These exact counts are checkpoint evidence, not a permanent inventory. Use the current test tree and fresh command output for later gates. Detailed evidence is local and ignored; when present, see the [Task 9 report](../../.superpowers/sdd/2026-08-17-aurora-glass-redesign/task-9-report.md).
 
@@ -44,7 +48,7 @@ Task 9 did change production after focused failing regressions or rendered evide
 - Home distinguishes an empty active collection from an entirely empty notebook;
 - Search opens its filter sheet on the root navigator so it is above the shell.
 
-The retained evidence directory is `C:\Users\nguye\AppData\Local\Temp\aurora-task9-20260823-190828`. It contains 14 inspected, seeded, font-loaded `font-mobile-*.png` captures made with real `MyApp` pages, Roboto, and Material Icons. The required corrected evidence includes `font-mobile-search-filter-light.png`, `font-mobile-home-empty.png`, and `font-mobile-home-high-contrast.png`; the remaining matrix covers populated/error/dark Home, Search results/no-match, Archive/Trash, More, and editor edit/preview/error states. Obsolete Ahem, diagnostic, persisted-user Windows captures, and `flutter-run.pid` were permanently removed while preserving the directory and seeded evidence.
+The retained evidence directory is `%TEMP%\aurora-task9-20260823-190828`. It contains 14 inspected, seeded, font-loaded `font-mobile-*.png` captures made with real `MyApp` pages, Roboto, and Material Icons. The required corrected evidence includes `font-mobile-search-filter-light.png`, `font-mobile-home-empty.png`, and `font-mobile-home-high-contrast.png`; the remaining matrix covers populated/error/dark Home, Search results/no-match, Archive/Trash, More, and editor edit/preview/error states. Obsolete Ahem, diagnostic, persisted-user Windows captures, and `flutter-run.pid` were permanently removed while preserving the directory and seeded evidence.
 
 ## Completed Aurora work
 
@@ -59,7 +63,7 @@ The retained evidence directory is `C:\Users\nguye\AppData\Local\Temp\aurora-tas
 | 6 | Add More, tag management, and safe transfer | `4f79490`, `b65985b`, `fba6957` |
 | 7 | Add the mobile navigation shell and deep-link routing | `332d054`, `e497bf2`, `6ed7b11` |
 | 8 | Redesign the distraction-free Aurora editor | `9afeb18` |
-| 9 | Verify and correct cross-screen accessibility, responsiveness, and regressions | `ee262e6`, `6474acf`, `5866e67`, `b8c3460`, `12b01a3` |
+| 9 | Verify and correct cross-screen accessibility, responsiveness, and regressions | `ee262e6`, `6474acf`, `5866e67`, `b8c3460`, `12b01a3`, `3dfa0ee` |
 
 ## Open work
 
