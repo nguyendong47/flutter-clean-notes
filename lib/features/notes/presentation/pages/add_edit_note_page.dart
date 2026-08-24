@@ -24,7 +24,8 @@ class AddEditNotePage extends ConsumerStatefulWidget {
   ConsumerState<AddEditNotePage> createState() => _AddEditNotePageState();
 }
 
-class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
+class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
+    implements PopEntry<Object?> {
   late final TextEditingController _titleController;
   late final TextEditingController _contentController;
   late final FocusNode _titleFocusNode;
@@ -33,6 +34,10 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
   late final DateTime _createdAt;
   late final NoteStatus _status;
   late final bool _isPinned;
+  ModalRoute<dynamic>? _route;
+
+  @override
+  late final ValueNotifier<bool> canPopNotifier;
 
   int? _persistedId;
   late Color _selectedColor;
@@ -59,6 +64,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
   @override
   void initState() {
     super.initState();
+    canPopNotifier = ValueNotifier<bool>(false);
     final note = widget.note;
     _titleController = TextEditingController(text: note?.title ?? '');
     _contentController = TextEditingController(text: note?.content ?? '');
@@ -81,7 +87,21 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextRoute = ModalRoute.of(context);
+    if (nextRoute != _route) {
+      _route?.unregisterPopEntry(this);
+      _route = nextRoute;
+      _route?.registerPopEntry(this);
+    }
+    _syncCanPop();
+  }
+
+  @override
   void dispose() {
+    _route?.unregisterPopEntry(this);
+    canPopNotifier.dispose();
     _titleController.removeListener(_handleDraftChanged);
     _contentController.removeListener(_handleDraftChanged);
     _titleController.dispose();
@@ -99,44 +119,34 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
     ref.watch(notesProvider);
     final routeIsCurrent = ModalRoute.isCurrentOf(context) ?? false;
     _schedulePendingCloseIfCurrent(routeIsCurrent);
-    final navigatorCanPop = Navigator.of(context).canPop();
-    final canPop =
-        !_saving &&
-        (_allowPop || (navigatorCanPop && !_isDirty && !_hasPartialSave));
+    _syncCanPop();
     final media = MediaQuery.of(context);
     final duration = media.disableAnimations
         ? Duration.zero
         : const Duration(milliseconds: 200);
 
-    return PopScope(
-      canPop: canPop,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop || _saving) return;
-        _requestClose();
-      },
-      child: Scaffold(
-        key: const Key('note-editor-page'),
-        backgroundColor: Colors.transparent,
-        resizeToAvoidBottomInset: false,
-        body: AuroraBackground(
-          child: AnimatedPadding(
-            duration: duration,
-            curve: Curves.easeOutCubic,
-            padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final gutter = constraints.maxWidth >= 600 ? 24.0 : 16.0;
-                return Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 760),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: gutter),
-                      child: _buildPageLayout(constraints),
-                    ),
+    return Scaffold(
+      key: const Key('note-editor-page'),
+      backgroundColor: Colors.transparent,
+      resizeToAvoidBottomInset: false,
+      body: AuroraBackground(
+        child: AnimatedPadding(
+          duration: duration,
+          curve: Curves.easeOutCubic,
+          padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final gutter = constraints.maxWidth >= 600 ? 24.0 : 16.0;
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: gutter),
+                    child: _buildPageLayout(constraints),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -650,6 +660,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       _reminder = value.reminder;
       _isDirty = _currentSnapshot() != _cleanSnapshot;
     });
+    _syncCanPop();
   }
 
   Future<void> _saveNote() async {
@@ -696,6 +707,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       _validationMessage = null;
       _saveError = null;
     });
+    _syncCanPop();
 
     try {
       final notifier = ref.read(notesProvider.notifier);
@@ -711,6 +723,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
       if (!mounted) return;
       _saving = false;
       _markDraftClean();
+      _syncCanPop();
       _requestClose();
     } on InvalidNoteReminderException {
       if (!mounted) return;
@@ -720,6 +733,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
         _validationMessage = 'Choose a reminder time in the future';
         _saveError = null;
       });
+      _syncCanPop();
     } on PersistedNoteSaveException catch (error) {
       final persistedId = error.persistedNote.id;
       if (persistedId != null) _persistedId = persistedId;
@@ -735,6 +749,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
           detail: 'Your note is saved, but finishing needs another try.',
         );
       });
+      _syncCanPop();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -744,6 +759,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
           detail: 'Your changes are still here. Try again.',
         );
       });
+      _syncCanPop();
     }
   }
 
@@ -782,6 +798,17 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
     }
 
     _finishCloseRequest();
+  }
+
+  @override
+  void onPopInvoked(bool didPop) {
+    onPopInvokedWithResult(didPop, null);
+  }
+
+  @override
+  void onPopInvokedWithResult(bool didPop, Object? result) {
+    if (!mounted || didPop || _saving) return;
+    _requestClose();
   }
 
   Future<void> _showDiscardChangesDialog() async {
@@ -836,6 +863,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
         _allowPop = true;
         _closePending = true;
       });
+      _syncCanPop();
       _schedulePendingCloseIfCurrent(true);
       return;
     }
@@ -865,12 +893,21 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
     final isDirty = _currentSnapshot() != _cleanSnapshot;
     if (_isDirty == isDirty) return;
     setState(() => _isDirty = isDirty);
+    _syncCanPop();
   }
 
   void _markDraftClean() {
     _cleanSnapshot = _currentSnapshot();
     _isDirty = false;
     _discardConfirmed = false;
+  }
+
+  void _syncCanPop() {
+    if (!mounted) return;
+    final navigatorCanPop = Navigator.of(context).canPop();
+    canPopNotifier.value =
+        !_saving &&
+        (_allowPop || (navigatorCanPop && !_isDirty && !_hasPartialSave));
   }
 
   void _schedulePendingCloseIfCurrent(bool routeIsCurrent) {

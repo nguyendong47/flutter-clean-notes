@@ -733,7 +733,6 @@ void main() {
         find.byKey(const Key('editor-title-field')),
         'Unsaved pushed draft',
       );
-      await tester.pump();
 
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
@@ -779,11 +778,9 @@ void main() {
 
       final title = find.byKey(const Key('editor-title-field'));
       await tester.enterText(title, 'Unsaved iOS title');
-      await tester.pump();
       expect(route.popGestureEnabled, isFalse);
 
       await tester.enterText(title, sampleNote.title);
-      await tester.pump();
       expect(route.popGestureEnabled, isTrue);
     } finally {
       debugDefaultTargetPlatformOverride = null;
