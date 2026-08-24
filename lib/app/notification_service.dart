@@ -362,6 +362,7 @@ class NotificationService {
   }
 
   Future<void> cancelReminder(int id) async {
+    if (kIsWeb || defaultTargetPlatform == TargetPlatform.windows) return;
     await _plugin.cancel(id);
   }
 }

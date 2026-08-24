@@ -58,6 +58,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
   bool _discardConfirmed = false;
   bool _allowPop = false;
   bool _hasPartialSave = false;
+  bool _reminderReconciliationPending = false;
   bool _isDirty = false;
   String? _validationMessage;
   _EditorSaveError? _saveError;
@@ -716,9 +717,15 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     }
 
     final reminder = _reminder;
-    final reminderChanged = reminder != _persistedReminder;
+    final persistedReminderBeforeSave = _persistedReminder;
+    final reconciliationWasPending = _reminderReconciliationPending;
+    final reminderChanged = reminder != persistedReminderBeforeSave;
+    final reminderNeedsReconciliation =
+        reminderChanged || reconciliationWasPending;
     final now = widget.now?.call() ?? DateTime.now();
-    if (reminderChanged && reminder != null && !reminder.isAfter(now)) {
+    if (reminderNeedsReconciliation &&
+        reminder != null &&
+        !reminder.isAfter(now)) {
       _showReminderValidationError();
       return;
     }
@@ -750,10 +757,12 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
           note,
           now: widget.now,
           persistedReminder: _persistedReminder,
+          forceReminderReconciliation: reconciliationWasPending,
         );
       }
       if (!mounted) return;
       _saving = false;
+      _reminderReconciliationPending = false;
       _markDraftClean();
       _syncCanPop();
       _requestClose();
@@ -765,14 +774,23 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
       if (persistedId != null) _persistedId = persistedId;
       _persistedReminder = error.persistedNote.reminder;
       _hasPartialSave = true;
+      final reminderWasInvolved =
+          reconciliationWasPending ||
+          reminder != null ||
+          persistedReminderBeforeSave != null;
+      _reminderReconciliationPending = reminderWasInvolved;
       if (!mounted) return;
       _markDraftClean();
       ref.invalidate(notesProvider);
       setState(() {
         _saving = false;
-        _saveError = const _EditorSaveError(
+        _saveError = _EditorSaveError(
           heading: 'Couldn’t finish saving note',
-          detail: 'Your note is saved, but finishing needs another try.',
+          detail: reminderWasInvolved
+              ? 'Your note is saved, but its reminder is not confirmed. '
+                    'Retry or update the reminder.'
+              : 'Your note is saved, but the note list could not be '
+                    'refreshed. Retry to finish.',
         );
       });
       _syncCanPop();

@@ -308,6 +308,7 @@ class NotesNotifier extends _$NotesNotifier {
     Note note, {
     DateTime Function()? now,
     DateTime? persistedReminder,
+    bool forceReminderReconciliation = false,
   }) async {
     final requestedNote = _persistedSnapshot(note);
     var reminderBeforeUpdate = persistedReminder;
@@ -324,9 +325,11 @@ class NotesNotifier extends _$NotesNotifier {
       await _mutate(() async {
         final reminder = requestedNote.reminder;
         final currentTime = now?.call() ?? DateTime.now();
-        final unchangedReminder = reminder == reminderBeforeUpdate;
+        final reminderChanged = reminder != reminderBeforeUpdate;
+        final shouldReconcileReminder =
+            reminderChanged || forceReminderReconciliation;
         if (reminder != null &&
-            !unchangedReminder &&
+            shouldReconcileReminder &&
             !reminder.isAfter(currentTime)) {
           throw const InvalidNoteReminderException();
         }
@@ -338,7 +341,7 @@ class NotesNotifier extends _$NotesNotifier {
         }
         persistedNote = requestedNote;
         final id = requestedNote.id;
-        if (id != null) {
+        if (id != null && shouldReconcileReminder) {
           final gateway = ref.read(noteReminderGatewayProvider);
           await gateway.cancel(id);
           if (reminder != null && reminder.isAfter(currentTime)) {

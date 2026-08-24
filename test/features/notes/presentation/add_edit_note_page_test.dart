@@ -728,7 +728,10 @@ void main() {
 
       expect(find.text('Couldn’t finish saving note'), findsOneWidget);
       expect(
-        find.text('Your note is saved, but finishing needs another try.'),
+        find.text(
+          'Your note is saved, but its reminder is not confirmed. '
+          'Retry or update the reminder.',
+        ),
         findsOneWidget,
       );
       expect(repository.addCalls, 1);
@@ -759,7 +762,113 @@ void main() {
       expect(stored.tags, draft.tags);
       expect(stored.reminder, draft.reminder);
       expect(stored.content, 'Latest exact draft');
+      expect(gateway.events, [
+        'schedule:$allocatedId',
+        'cancel:$allocatedId',
+        'schedule:$allocatedId',
+      ]);
       expect(harness.closeCount.value, 1);
+    },
+  );
+
+  testWidgets(
+    'post-write refresh failure without a reminder reports saved note state',
+    (tester) async {
+      final repository = _RecordingRepository(const [])..getErrorAtCall = 4;
+      final gateway = FakeNoteReminderGateway();
+      final harness = await _pumpEditor(
+        tester,
+        note: Note(
+          title: 'Saved without reminder',
+          content: 'Only the list refresh is pending',
+          color: 0,
+          createdAt: DateTime.utc(2030, 1, 15, 10),
+        ),
+        repository: repository,
+        gateway: gateway,
+      );
+
+      await tester.tap(find.byKey(const Key('editor-done-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Couldn’t finish saving note'), findsOneWidget);
+      expect(
+        find.text(
+          'Your note is saved, but the note list could not be refreshed. '
+          'Retry to finish.',
+        ),
+        findsOneWidget,
+      );
+      expect(repository.addCalls, 1);
+      expect(repository.notes, hasLength(1));
+      expect(gateway.events, isEmpty);
+      expect(harness.closeCount.value, 0);
+
+      await tester.tap(find.byKey(const Key('editor-retry-button')));
+      await tester.pumpAndSettle();
+
+      expect(repository.addCalls, 1);
+      expect(repository.updateCalls, 1);
+      expect(gateway.events, isEmpty);
+      expect(harness.closeCount.value, 1);
+    },
+  );
+
+  testWidgets(
+    'Retry keeps the editor open when a partially saved reminder has elapsed',
+    (tester) async {
+      var now = DateTime.utc(2030, 1, 15, 10);
+      final reminder = now.add(const Duration(minutes: 5));
+      final repository = _RecordingRepository(const []);
+      final gateway = FakeNoteReminderGateway()
+        ..scheduleError = StateError('notification failed');
+      final harness = await _pumpEditor(
+        tester,
+        note: Note(
+          title: 'Reminder retry',
+          content: 'Do not silently lose this reminder',
+          color: 0,
+          createdAt: now,
+          reminder: reminder,
+        ),
+        repository: repository,
+        gateway: gateway,
+        now: () => now,
+      );
+
+      await tester.tap(find.byKey(const Key('editor-done-button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('editor-save-error')), findsOneWidget);
+      expect(
+        find.text(
+          'Your note is saved, but its reminder is not confirmed. '
+          'Retry or update the reminder.',
+        ),
+        findsOneWidget,
+      );
+      expect(repository.addCalls, 1);
+
+      gateway.scheduleError = null;
+      now = reminder;
+      await tester.tap(find.byKey(const Key('editor-retry-button')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.text('Open Note details to choose a future reminder.'),
+        findsOneWidget,
+      );
+      expect(repository.updateCalls, 0);
+      expect(gateway.scheduled, hasLength(1));
+      expect(harness.closeCount.value, 0);
+      expect(find.byType(AddEditNotePage), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const Key('editor-metadata-button')))
+            .focusNode
+            ?.hasFocus,
+        isTrue,
+      );
     },
   );
 

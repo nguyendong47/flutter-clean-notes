@@ -399,10 +399,22 @@ void main() {
     });
 
     group('Reminder Cancellation', () {
-      test('cancelReminder should call plugin cancel', () async {
+      test('cancelReminder delegates on a supported platform', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
         await notificationService.cancelReminder(42);
 
-        expect(fakePlugin.cancelledIds, contains(42));
+        expect(fakePlugin.cancelledIds, [42]);
+      });
+
+      test('cancelReminder is a no-op on unsupported Windows', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+        await notificationService.cancelReminder(42);
+
+        expect(fakePlugin.cancelledIds, isEmpty);
       });
     });
 

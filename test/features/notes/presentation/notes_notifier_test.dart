@@ -1,12 +1,16 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/invalid_note_reminder_exception.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/note_reminder_gateway.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_save_exception.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -768,10 +772,36 @@ void main() {
     expect(gateway.events, isEmpty);
   });
 
-  test('update preserves an unchanged expired stored reminder', () async {
+  test(
+    'update preserves an unchanged expired reminder without reconciling it',
+    () async {
+      final now = DateTime.utc(2030, 1, 15, 10, 15);
+      final expired = DateTime.utc(2029, 12, 31, 23, 59);
+      final original = sampleNote.copyWith(reminder: expired);
+      final repository = _RecordingNoteRepository([original], <String>[]);
+      final gateway = FakeNoteReminderGateway();
+      final container = _container(repository, gateway);
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+
+      await _updateNoteAt(
+        container.read(notesProvider.notifier),
+        original.copyWith(title: 'Unrelated edit'),
+        () => now,
+      );
+
+      expect(repository.updateCalls, 1);
+      expect(repository.notes.single.title, 'Unrelated edit');
+      expect(repository.notes.single.reminder, expired);
+      expect(gateway.events, isEmpty);
+    },
+  );
+
+  test('update does not reconcile an unchanged future reminder', () async {
     final now = DateTime.utc(2030, 1, 15, 10, 15);
-    final expired = DateTime.utc(2029, 12, 31, 23, 59);
-    final original = sampleNote.copyWith(reminder: expired);
+    final original = sampleNote.copyWith(
+      reminder: now.add(const Duration(days: 1)),
+    );
     final repository = _RecordingNoteRepository([original], <String>[]);
     final gateway = FakeNoteReminderGateway();
     final container = _container(repository, gateway);
@@ -786,10 +816,82 @@ void main() {
 
     expect(repository.updateCalls, 1);
     expect(repository.notes.single.title, 'Unrelated edit');
-    expect(repository.notes.single.reminder, expired);
-    expect(gateway.cancelled, [original.id]);
-    expect(gateway.scheduled, isEmpty);
+    expect(gateway.events, isEmpty);
   });
+
+  test('update does not reconcile an unchanged null reminder', () async {
+    final original = sampleNote.copyWith(reminder: null);
+    final repository = _RecordingNoteRepository([original], <String>[]);
+    final gateway = FakeNoteReminderGateway();
+    final container = _container(repository, gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    await container
+        .read(notesProvider.notifier)
+        .updateNote(original.copyWith(title: 'Unrelated edit'));
+
+    expect(repository.updateCalls, 1);
+    expect(repository.notes.single.title, 'Unrelated edit');
+    expect(gateway.events, isEmpty);
+  });
+
+  test(
+    'forced reconciliation reschedules an unchanged future reminder',
+    () async {
+      final now = DateTime.utc(2030, 1, 15, 10, 15);
+      final reminder = now.add(const Duration(days: 1));
+      final events = <String>[];
+      final original = sampleNote.copyWith(reminder: reminder);
+      final repository = _RecordingNoteRepository([original], events);
+      final gateway = FakeNoteReminderGateway(eventLog: events);
+      final container = _container(repository, gateway);
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+      events.clear();
+
+      await container
+          .read(notesProvider.notifier)
+          .updateNote(
+            original.copyWith(title: 'Retry reminder'),
+            now: () => now,
+            persistedReminder: reminder,
+            forceReminderReconciliation: true,
+          );
+
+      expect(events, ['update:1', 'cancel:1', 'schedule:1']);
+      expect(gateway.scheduled.single.reminder, reminder);
+    },
+  );
+
+  test(
+    'forced reconciliation rejects an unchanged reminder that is now expired',
+    () async {
+      final now = DateTime.utc(2030, 1, 15, 10, 15);
+      final expired = now.subtract(const Duration(minutes: 1));
+      final original = sampleNote.copyWith(reminder: expired);
+      final repository = _RecordingNoteRepository([original], <String>[]);
+      final gateway = FakeNoteReminderGateway();
+      final container = _container(repository, gateway);
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+      final notifier = container.read(notesProvider.notifier);
+
+      await expectLater(
+        notifier.updateNote(
+          original.copyWith(title: 'Retry after reminder elapsed'),
+          now: () => now,
+          persistedReminder: original.reminder,
+          forceReminderReconciliation: true,
+        ),
+        throwsA(isA<InvalidNoteReminderException>()),
+      );
+
+      expect(repository.updateCalls, 0);
+      expect(repository.notes.single, original);
+      expect(gateway.events, isEmpty);
+    },
+  );
 
   test('pending mutation exposes loading with the previous notes', () async {
     // Mutation caught: leaving notesProvider as plain AsyncData while an
@@ -806,7 +908,10 @@ void main() {
     );
     addTearDown(subscription.close);
     final initial = await container.read(notesProvider.future);
-    final changed = initial.first.copyWith(title: 'Committed while pending');
+    final changed = initial.first.copyWith(
+      title: 'Committed while pending',
+      reminder: DateTime.now().add(const Duration(days: 2)),
+    );
 
     final save = container.read(notesProvider.notifier).updateNote(changed);
     await Future<void>.delayed(Duration.zero);
@@ -831,11 +936,15 @@ void main() {
   test('update freezes the caller draft before awaiting persistence', () async {
     final now = DateTime.utc(2030, 1, 15, 10, 15);
     final sourceTags = <String>['draft'];
-    final note = sampleNote.copyWith(
-      tags: sourceTags,
+    final persistedNote = sampleNote.copyWith(
+      tags: const ['persisted'],
       reminder: now.add(const Duration(days: 1)),
     );
-    final repository = _GatedUpdateRepository([note]);
+    final note = persistedNote.copyWith(
+      tags: sourceTags,
+      reminder: now.add(const Duration(days: 2)),
+    );
+    final repository = _GatedUpdateRepository([persistedNote]);
     final gateway = FakeNoteReminderGateway();
     final container = _container(repository, gateway);
     addTearDown(container.dispose);
@@ -895,6 +1004,33 @@ void main() {
     expect(gateway.cancelled, [sampleNote.id]);
     expect(gateway.scheduled, isEmpty);
   });
+
+  test(
+    'delete completes on Windows when concrete cancellation is unsupported',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final repository = InMemoryNoteRepository.seeded([sampleNote]);
+      final plugin = _RecordingNotificationsPlugin();
+      final gateway = NotificationNoteReminderGateway(
+        NotificationService(plugin: plugin),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          noteReminderGatewayProvider.overrideWithValue(gateway),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+
+      await container.read(notesProvider.notifier).deleteNote(sampleNote.id!);
+
+      expect(repository.notes, isEmpty);
+      expect(container.read(notesProvider).requireValue, isEmpty);
+      expect(plugin.cancelledIds, isEmpty);
+    },
+  );
 
   test('delete cancellation failure is typed after the row commits', () async {
     final failure = StateError('cancel failed');
@@ -1408,6 +1544,16 @@ Future<void> _updateNoteAt(
   DateTime Function() now,
 ) {
   return notifier.updateNote(note, now: now);
+}
+
+class _RecordingNotificationsPlugin extends Fake
+    implements FlutterLocalNotificationsPlugin {
+  final List<int> cancelledIds = [];
+
+  @override
+  Future<void> cancel(int id, {String? tag}) async {
+    cancelledIds.add(id);
+  }
 }
 
 class _RecordingNoteRepository extends InMemoryNoteRepository {
