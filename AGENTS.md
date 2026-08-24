@@ -35,6 +35,12 @@ Flutter note-taking app using feature-first Clean Architecture, Riverpod code ge
 - Android notifications use the dedicated monochrome `ic_stat_clean_notes` small icon, retained by `android/app/src/main/res/raw/keep.xml`. Do not substitute a launcher asset.
 - Permanent note deletion stays committed when reminder cancellation fails. Preserve the sanitized, coalesced cancellation-retry path; a retry must never recreate the deleted note or repeat the database delete.
 
+## Android release signing
+
+- Read [release readiness](docs/release.md#android-release-configuration) before changing Android identity, signing, Gradle wrapper/toolchain, or release verification. Owner credentials stay external: use ignored `android/key.properties` or direct `CLEAN_NOTES_*` process environment, never Gradle `-P` or `ORG_GRADLE_PROJECT_*`. A complete six-value direct configuration bypasses the unused file.
+- Release validation fails closed on unsafe Git/worktree topology without breaking debug, profile, IDE sync, or help tasks. Debug uses `<release-id>.debug` when configured; profile always uses `<base-id>.profile` with the debug signer; release alone uses the approved upload signer.
+- Run `dart run tool/verify_android_release_signing.dart --build-positive-release-artifacts` on the exact committed candidate. Set absolute external `JAVA_HOME`, `CLEAN_NOTES_ANDROID_SDK_ROOT`, `CLEAN_NOTES_FLUTTER_ROOT`, and pinned `CLEAN_NOTES_BUNDLETOOL_JAR`. The verifier must use its isolated exact-commit clone and verified wrapper snapshot, inspect real APK/AAB identity, certificate, and hashes, delete all temporary artifacts, and leave canonical build outputs unchanged.
+
 ## Aurora Glass work
 
 - The canonical product and UX contract is the [Aurora Glass specification](docs/superpowers/specs/2026-08-17-notes-ui-ux-redesign-design.md); the ordered implementation contract is the [Aurora plan](docs/superpowers/plans/2026-08-17-aurora-glass-redesign.md).

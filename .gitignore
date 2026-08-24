@@ -13,6 +13,14 @@ doc/api/
 # dotenv environment variables file
 .env*
 
+# Android release credentials and private key material stay outside every
+# checkout, regardless of which folder a local or CI workflow uses.
+key.properties
+*.keystore
+*.jks
+*.p12
+*.pfx
+
 # Avoid committing generated Javascript files:
 *.dart.js
 # Produced by the --dump-info flag.

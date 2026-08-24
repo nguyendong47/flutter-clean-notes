@@ -1,0 +1,8 @@
+# Copy this file to android/key.properties, keep it private, and replace every
+# placeholder. Relative storeFile paths resolve from this file's directory.
+applicationId=<owner-approved-application-id>
+storeFile=<C:/Users/you/secure/upload-keystore.jks-or-relative-path>
+storePassword=<upload-keystore-password>
+keyAlias=<upload-key-alias>
+keyPassword=<upload-key-password>
+uploadCertificateSha256=<64-hex-approved-upload-certificate-sha256>

@@ -10,15 +10,18 @@ const _androidNamespace = 'http://schemas.android.com/apk/res/android';
 void main() {
   group('display identity contract', () {
     test(
-      'Android displays Clean Notes without changing identity or backup policy',
+      'Android displays Clean Notes without changing code namespace or backup policy',
       () {
-        // Mutation caught: changing the launcher label, package identity, or
-        // backup opt-out while updating Android display metadata.
+        // Mutation caught: changing the launcher label, Kotlin namespace, or
+        // backup opt-out while updating display or release package metadata.
         final manifest = XmlDocument.parse(
           _read('android/app/src/main/AndroidManifest.xml'),
         );
         final application = manifest.findAllElements('application').single;
         final gradle = _read('android/app/build.gradle.kts');
+        final mainActivity = _read(
+          'android/app/src/main/kotlin/com/example/flutter_clean_notes/MainActivity.kt',
+        );
 
         expect(_androidAttribute(application, 'label'), _displayName);
         expect(_androidAttribute(application, 'name'), r'${applicationName}');
@@ -33,8 +36,19 @@ void main() {
           'com.example.flutter_clean_notes',
         );
         expect(
-          _capture(gradle, RegExp(r'applicationId\s*=\s*"([^"]+)"')),
+          _capture(gradle, RegExp(r'templateApplicationId\s*=\s*"([^"]+)"')),
           'com.example.flutter_clean_notes',
+        );
+        expect(
+          gradle,
+          contains(
+            'applicationId = configuredReleaseApplicationId ?: templateApplicationId',
+          ),
+        );
+        expect(gradle, contains('applicationIdSuffix = ".debug"'));
+        expect(
+          mainActivity.split(RegExp(r'\r?\n')).first.trim(),
+          'package com.example.flutter_clean_notes',
         );
       },
     );

@@ -9,10 +9,19 @@ result. File defects with reproduction steps and link them from the release reco
 
 Run from the repository root in PowerShell:
 
+Set the verifier's required absolute external tool roots first. `JAVA_HOME` must
+identify JDK 17 or newer (the Android Studio JBR is acceptable), and the
+bundletool path must identify the pinned `1.18.3` JAR.
+
 ```powershell
 flutter pub get --enforce-lockfile
+$env:JAVA_HOME = 'C:\path\to\jdk-17-or-newer'
+$env:CLEAN_NOTES_ANDROID_SDK_ROOT = 'C:\path\to\Android\Sdk'
+$env:CLEAN_NOTES_FLUTTER_ROOT = 'C:\path\to\flutter'
+$env:CLEAN_NOTES_BUNDLETOOL_JAR = 'C:\path\to\bundletool-all-1.18.3.jar'
+dart run tool/verify_android_release_signing.dart --build-positive-release-artifacts
 dart run build_runner build
-dart format --output=none --set-exit-if-changed lib test integration_test
+dart format --output=none --set-exit-if-changed lib test integration_test tool
 flutter analyze
 flutter test --concurrency=1
 $deviceId = 'emulator-5554'
@@ -27,11 +36,12 @@ For focused reruns, use paths rather than cached test counts, for example:
 flutter test test/features/notes/presentation/aurora_accessibility_test.dart
 flutter test test/features/notes/presentation/aurora_notes_flow_test.dart
 flutter test test/features/notes/presentation/notes_transfer_provider_test.dart
+flutter test test/features/notes/data/datasources/local_note_datasource_migration_test.dart
 flutter test test/notification_service_test.dart test/app/notification_routing_test.dart
 ```
 
 Passing widget/unit tests does not replace physical-device, native share-sheet,
-notification permission, signing, database-file upgrade, or store-build evidence.
+notification permission, installed-app upgrade, or store-build evidence.
 Run the Android smoke test twice as separate fresh-install runs; the Flutter test
 runner uninstalls the test app after each run. Each run must pass and verify before
 exit that its test-created note was permanently removed through the public Trash,
@@ -194,6 +204,81 @@ files. Record target/min SDK values, permissions, receivers, backup attributes,
 data-extraction rules, signing identity, artifact SHA-256, and inspection-tool
 versions.
 
+Before owner credentials are available, run the signing verifier with
+`JAVA_HOME`, `CLEAN_NOTES_ANDROID_SDK_ROOT`, and `CLEAN_NOTES_FLUTTER_ROOT` set to
+absolute external roots. Positive modes also require
+`CLEAN_NOTES_BUNDLETOOL_JAR` pointing to the pinned bundletool `1.18.3` JAR. The
+verifier resolves `HEAD` with a trusted absolute Git executable, clones that
+exact commit without hard links into a system-temporary directory, runs locked
+dependency resolution there, and performs all Gradle and Flutter work against
+the isolated snapshot. Uncommitted working-tree content is outside the proof.
+It uses absolute Java, `keytool`, `jarsigner`, Flutter, `apkanalyzer`, and
+`apksigner` paths, a reduced trusted `PATH`, sanitized Git/JVM environments, and
+a fresh system-temporary `GRADLE_USER_HOME`.
+
+The default mode must prove both `:app:assembleRelease` and
+`:app:bundleRelease` fail at `validateReleaseConfiguration` without usable
+inputs. It verifies missing and blank direct inputs, complete direct-environment
+precedence and bypass of an unused malformed properties file, relative and
+Windows path handling, upload-certificate mismatch, debug-key rejection, and
+containment of the canonical common Git root plus every linked or sibling
+worktree. Repository-topology failures must block release validation while
+debug, profile, IDE sync, and help tasks remain usable. The verifier must inspect
+fresh unconfigured and configured debug/profile APKs: debug uses either the
+template ID or `<release-id>.debug`; profile uses `<base-id>.profile` and the
+debug signer, never the upload signer. It must also prove ignored credential
+patterns, the shipped placeholder behavior, symlink boundaries, and fail-closed
+missing or malformed linked-worktree metadata.
+
+Add `--build-positive-release-artifacts` for the same checks plus a synthetic-key
+release APK and AAB, or use `--build-positive-release-artifacts-only` only after
+the default results were recorded for the exact commit. The verifier must read
+the real packaged application ID, signing-certificate SHA-256, and artifact
+SHA-256 from both outputs. Trusted, absolute Flutter release builds must generate
+a production-only Android plugin registrant. In the isolated exact-commit clone,
+a temporary minimal launcher shim must launch the pinned wrapper JAR with trusted
+Java and forward Flutter's Gradle arguments without batch `call` reparsing. The
+verifier must check the shim and snapshot
+before and after each build, restore the original launcher byte-for-byte, and
+reject any tracked candidate mutation. It
+validates and reads the AAB with pinned bundletool, `jarsigner`, and `keytool`; it
+inspects the APK with `apkanalyzer` and `apksigner`. The full gate must run on Windows; a
+non-Windows host must report the Windows path proof as incomplete/nonzero.
+Conflicting positive modes must exit with usage status `64` before any build
+starts. Synthetic artifacts are never store candidates. The verifier must delete
+its exact-commit clone, credentials, Gradle state, APK, and AAB before PASS,
+report `ARTIFACTS_RETAINED=false`, and leave canonical repository build outputs
+unchanged.
+All Gradle invocations must use `--no-daemon`; cleanup must not execute a wrapper
+after any integrity failure. Non-Flutter contract tasks must invoke the pinned
+wrapper JAR with trusted Java directly and revalidate the complete snapshot before
+and after every process.
+
+Require `.gitattributes`, `android/gradlew`, `android/gradlew.bat`,
+`android/gradle/wrapper/gradle-wrapper.jar`, and its properties file to be
+tracked regular files matching the exact candidate. The verifier must hash the
+already-read bytes in-process, match both launcher hashes and the official Gradle
+8.14 wrapper-JAR SHA-256, pin the Gradle 8.14 all-distribution SHA-256, and enforce
+the committed `LF`/`CRLF` line-ending contract. All wrapper tasks must run through
+the verified temporary wrapper snapshot, not a mutable repository launcher.
+
+Run Android gates with JDK 17 or newer, Android Gradle Plugin `8.11.1`, and the
+checksum-pinned Gradle `8.14-all` wrapper. Reject a final tree that tracks
+`org.gradle.java.home`; set process `JAVA_HOME` instead. For the candidate, use
+only the ignored `android/key.properties` contract or direct `CLEAN_NOTES_*`
+process environment described in
+[release readiness](release.md#android-release-configuration). Do not use Gradle
+`-P` or `ORG_GRADLE_PROJECT_*` for signing inputs. Verify direct values override
+file values, a complete six-value direct configuration bypasses the unused file,
+relative file-based keystore paths resolve from the selected properties file,
+and relative direct-environment paths resolve from `android/`. Inspect the
+packaged application ID and signing certificate from both the exact candidate
+APK and finished AAB. The release ID must be the owner-approved non-template
+value; debug must use `<release-id>.debug`, and profile must use
+`<release-id>.profile` with the debug signer. The release certificate must match
+the pinned approved upload-certificate SHA-256 and must not match a debug
+keystore. Redact passwords and private paths from retained logs.
+
 Run the current official Android 16 KB page-size compatibility check against
 every packaged native library, then install and exercise the candidate on a 16 KB
 page-size device or official equivalent environment. Both ELF segment alignment
@@ -207,9 +292,11 @@ asset path.
 
 ## Database upgrades v1-v5
 
-Current automated datasource tests cover persistence and transaction behavior,
-but they do not prove file upgrades through every schema version. Maintain
-versioned, synthetic database fixtures outside user data and test each path:
+`test/features/notes/data/datasources/local_note_datasource_migration_test.dart`
+automatically creates physical SQLite files at schema versions v1 through v5,
+opens each through the current datasource, and verifies migration to v5 while
+preserving representative legacy rows. Maintain all five fixture paths whenever
+the schema changes:
 
 | Start | Expected v5 result |
 | --- | --- |
@@ -219,12 +306,14 @@ versioned, synthetic database fixtures outside user data and test each path:
 | v4 | Adds nullable `reminder`; existing active/archive/trash values remain intact. |
 | v5 | Opens without migration or data changes. |
 
-For every approved Android, iOS, and desktop database path: install/run the old
-fixture build, create representative notes, replace it with the candidate build,
-then verify schema version, row count, all fields/statuses, reminder behavior,
-search, export, mutation, and persistence after relaunch. Also test fresh v5
-creation, interrupted/failed upgrade recovery, low storage, and backup before any
-destructive recovery. Downgrade is unsupported until separate evidence proves it.
+This automated physical-file proof covers migration mechanics in the host test
+environment. For every approved Android, iOS, and desktop database path, still
+install/run the old fixture build, create representative notes, replace it with
+the candidate build, then verify schema version, row count, all fields/statuses,
+reminder behavior, search, export, mutation, and persistence after relaunch. Also
+test fresh v5 creation, interrupted/failed upgrade recovery, low storage, and
+backup before any destructive recovery. Downgrade is unsupported until separate
+evidence proves it.
 
 ## Evidence and exit criteria
 
