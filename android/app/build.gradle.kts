@@ -4,6 +4,7 @@ import java.security.MessageDigest
 import java.security.PrivateKey
 import java.security.cert.X509Certificate
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
@@ -461,6 +462,12 @@ val configuredReleaseApplicationId =
     releaseConfiguration.applicationId
         ?.takeUnless(::isPlaceholderApplicationId)
 
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
+    }
+}
+
 android {
     namespace = "com.example.flutter_clean_notes"
     compileSdk = flutter.compileSdkVersion
@@ -470,10 +477,6 @@ android {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     defaultConfig {

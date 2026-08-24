@@ -30,6 +30,39 @@ void main() {
       _requiredKotlinVersion,
     );
   });
+
+  test('Android Kotlin target uses the typed compiler options DSL', () {
+    // Mutations caught: restoring the deprecated kotlinOptions block or
+    // assigning the JVM target through a string silently reintroduces the
+    // Kotlin Gradle plugin deprecation.
+    final buildScript = File('android/app/build.gradle.kts').readAsStringSync();
+
+    expect(
+      buildScript,
+      contains('import org.jetbrains.kotlin.gradle.dsl.JvmTarget'),
+    );
+    expect(
+      buildScript,
+      matches(
+        RegExp(
+          r'kotlin\s*\{\s*compilerOptions\s*\{\s*'
+          r'jvmTarget\s*=\s*JvmTarget\.JVM_17\s*\}\s*\}',
+          multiLine: true,
+        ),
+      ),
+    );
+    expect(buildScript, isNot(contains('kotlinOptions')));
+    expect(
+      buildScript,
+      isNot(
+        matches(
+          RegExp(
+            r'jvmTarget\s*=\s*(?:"17"|JavaVersion\.VERSION_17\.toString\(\))',
+          ),
+        ),
+      ),
+    );
+  });
 }
 
 String? _pluginVersion(String settings, String pluginId) {
