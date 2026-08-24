@@ -117,14 +117,19 @@ reminder schedule/cancel:
 
 ## Backup import and export
 
-- Export text, Markdown, and JSON through the real OS share sheet. Inspect files
-  in a user-selected destination; verify Unicode, Markdown characters, commas in
-  tags, empty fields, all note statuses, colors, pin state, timestamps, and
-  reminders.
+- Before tapping a transfer row, verify its visible and screen-reader disclosure:
+  text/Markdown include Active and Archive while excluding Trash; JSON includes
+  Active, Archive, and Trash; import appends Active copies and clears reminders.
+- Export text and Markdown through the real OS share sheet. Inspect files in a
+  user-selected destination; verify Active and Archive notes, Unicode, Markdown
+  characters, commas in tags, and empty fields, and prove Trash content is absent.
+- Export JSON through the real OS share sheet. Verify Active, Archive, and Trash
+  are all present with colors, pin state, timestamps, reminders, and status.
 - Inspect JSON against the fields listed in [privacy.md](privacy.md), then import
   into a clean database. Verify title, content, tags, color, creation time, and pin
   state are retained; imported entries must receive fresh IDs, active status, and
-  no reminder. Repeat in a populated database and confirm fresh IDs avoid conflicts.
+  no reminder. Treat this as append-as-copy behavior, not a byte-for-byte restore.
+  Repeat in a populated database and confirm fresh IDs avoid conflicts.
 - Verify cancel/dismiss/unavailable share results and chooser/picker failures.
 - Import valid UTF-8 with and without BOM, malformed JSON, wrong top-level type,
   invalid/missing fields, empty file, wrong extension, multiple-file attempt,

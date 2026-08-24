@@ -56,7 +56,7 @@ class NotesTransfer extends _$NotesTransfer {
 
   Future<NotesTransferResult> exportText({Rect? sharePositionOrigin}) {
     return _run(NotesTransferOperation.exportText, () async {
-      final notes = await _notes();
+      final notes = await _readableExportNotes();
       final shareResult = await ref
           .read(notesTransferGatewayProvider)
           .shareText(
@@ -70,7 +70,7 @@ class NotesTransfer extends _$NotesTransfer {
 
   Future<NotesTransferResult> backupJson({Rect? sharePositionOrigin}) {
     return _run(NotesTransferOperation.backupJson, () async {
-      final notes = await _notes();
+      final notes = await _allStatusBackupNotes();
       final shareResult = await ref
           .read(notesTransferGatewayProvider)
           .shareFile(
@@ -85,7 +85,7 @@ class NotesTransfer extends _$NotesTransfer {
 
   Future<NotesTransferResult> exportMarkdown({Rect? sharePositionOrigin}) {
     return _run(NotesTransferOperation.exportMarkdown, () async {
-      final notes = await _notes();
+      final notes = await _readableExportNotes();
       final shareResult = await ref
           .read(notesTransferGatewayProvider)
           .shareFile(
@@ -116,6 +116,14 @@ class NotesTransfer extends _$NotesTransfer {
   Future<List<Note>> _notes() async {
     final cached = ref.read(notesProvider).value;
     return cached ?? await ref.read(notesProvider.future);
+  }
+
+  Future<ReadableNotesExport> _readableExportNotes() async {
+    return ReadableNotesExport.fromAllStatuses(await _notes());
+  }
+
+  Future<AllStatusNotesBackup> _allStatusBackupNotes() async {
+    return AllStatusNotesBackup.fromAllStatuses(await _notes());
   }
 
   NotesTransferOutcome? _shareOutcome(

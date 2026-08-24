@@ -2,12 +2,31 @@ import 'dart:convert';
 
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 
+/// A privacy-scoped snapshot for human-readable exports.
+///
+/// Construction always removes Trash so callers cannot accidentally pass an
+/// all-status collection to the text or Markdown formatters.
+final class ReadableNotesExport {
+  ReadableNotesExport.fromAllStatuses(Iterable<Note> notes)
+    : _notes = List<Note>.unmodifiable(notes.where(_isReadableNote));
+
+  final List<Note> _notes;
+}
+
+/// A complete snapshot for JSON backup, including every note status.
+final class AllStatusNotesBackup {
+  AllStatusNotesBackup.fromAllStatuses(Iterable<Note> notes)
+    : _notes = List<Note>.unmodifiable(notes);
+
+  final List<Note> _notes;
+}
+
 abstract final class NoteExportFormatter {
   static const emptyExportMessage = 'No notes to export.';
 
-  static String toText(Iterable<Note> notes) {
+  static String toText(ReadableNotesExport export) {
     final buffer = StringBuffer();
-    for (final note in notes) {
+    for (final note in export._notes) {
       if (note.title.trim().isNotEmpty) buffer.writeln('# ${note.title}');
       if (note.content.isNotEmpty) buffer.writeln(note.content);
       if (note.tags.isNotEmpty) {
@@ -19,8 +38,8 @@ abstract final class NoteExportFormatter {
     return text.isEmpty ? emptyExportMessage : text;
   }
 
-  static String toMarkdown(Iterable<Note> notes) {
-    final materialized = notes.toList(growable: false);
+  static String toMarkdown(ReadableNotesExport export) {
+    final materialized = export._notes;
     if (materialized.isEmpty) return emptyExportMessage;
 
     final buffer = StringBuffer();
@@ -52,8 +71,8 @@ abstract final class NoteExportFormatter {
     return buffer.toString().trimRight();
   }
 
-  static String toJson(Iterable<Note> notes) {
-    final maps = notes
+  static String toJson(AllStatusNotesBackup backup) {
+    final maps = backup._notes
         .map(
           (note) => <String, Object?>{
             if (note.id != null) 'id': note.id,
@@ -208,4 +227,11 @@ abstract final class NoteExportFormatter {
     }
     return escaped;
   }
+}
+
+bool _isReadableNote(Note note) {
+  return switch (note.status) {
+    NoteStatus.active || NoteStatus.archived => true,
+    NoteStatus.trashed => false,
+  };
 }

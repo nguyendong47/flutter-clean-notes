@@ -18,7 +18,9 @@ provenance.
 - Archive, Trash, restore, permanent deletion, and Undo for reversible mutations.
 - Reminder scheduling with tap/open handling and Android snooze actions; platform
   permission, delivery, and relaunch behavior remain release-gated.
-- Text and Markdown export, JSON backup/import, and system/light/dark themes.
+- Text and Markdown export of Active and Archive notes (Trash excluded),
+  all-status JSON backup, and append-as-Active JSON import with reminders cleared.
+- System, light, and dark themes.
 - Accessibility behavior for scaled text, high contrast, and reduced motion.
 
 ## Project Sync

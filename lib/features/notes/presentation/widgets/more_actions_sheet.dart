@@ -199,7 +199,8 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet> {
                         operation: NotesTransferOperation.exportText,
                         icon: Icons.ios_share_outlined,
                         label: 'Export text',
-                        description: 'Share a readable text copy',
+                        description:
+                            'Share Active and Archive; Trash is excluded',
                         state: transferState,
                         activeOperation: transferNotifier.operation,
                         enabled: !busy,
@@ -213,7 +214,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet> {
                         operation: NotesTransferOperation.backupJson,
                         icon: Icons.data_object_outlined,
                         label: 'Backup JSON',
-                        description: 'Share a restorable backup file',
+                        description: 'Includes Active, Archive, and Trash',
                         state: transferState,
                         activeOperation: transferNotifier.operation,
                         enabled: !busy,
@@ -227,7 +228,8 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet> {
                         operation: NotesTransferOperation.exportMarkdown,
                         icon: Icons.text_snippet_outlined,
                         label: 'Export Markdown',
-                        description: 'Share notes with Markdown formatting',
+                        description:
+                            'Share Active and Archive; Trash is excluded',
                         state: transferState,
                         activeOperation: transferNotifier.operation,
                         enabled: !busy,
@@ -242,7 +244,8 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet> {
                         operation: NotesTransferOperation.importBackup,
                         icon: Icons.file_open_outlined,
                         label: 'Import backup',
-                        description: 'Append notes from a JSON backup',
+                        description:
+                            'Append copies as Active; reminders are cleared',
                         state: transferState,
                         activeOperation: transferNotifier.operation,
                         enabled: !busy,

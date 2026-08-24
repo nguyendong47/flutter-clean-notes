@@ -19,7 +19,8 @@ void main() {
         reminder: DateTime.utc(2026, 8, 24, 7, 30),
       );
 
-      final payload = NoteExportFormatter.toJson([note]);
+      final backup = AllStatusNotesBackup.fromAllStatuses([note]);
+      final payload = NoteExportFormatter.toJson(backup);
       final restored = NoteExportFormatter.fromJson(payload).single;
 
       expect(restored.id, note.id);
@@ -44,7 +45,7 @@ void main() {
         'status': 1,
         'reminder': '2026-08-24T07:30:00.000Z',
       });
-      expect(NoteExportFormatter.toJson([note]), payload);
+      expect(NoteExportFormatter.toJson(backup), payload);
     });
 
     test('accepts legacy comma-delimited backup tags', () {
@@ -186,24 +187,31 @@ void main() {
 
   group('NoteExportFormatter readable exports', () {
     test('uses an explicit message when text export has no notes', () {
-      expect(NoteExportFormatter.toText(const []), 'No notes to export.');
+      expect(
+        NoteExportFormatter.toText(
+          ReadableNotesExport.fromAllStatuses(const []),
+        ),
+        'No notes to export.',
+      );
     });
 
     test('preserves authored Markdown and escapes generated metadata only', () {
-      final markdown = NoteExportFormatter.toMarkdown([
-        Note(
-          title: 'Plan\r\n## injected #1',
-          content: '''## Existing heading
+      final markdown = NoteExportFormatter.toMarkdown(
+        ReadableNotesExport.fromAllStatuses([
+          Note(
+            title: 'Plan\r\n## injected #1',
+            content: '''## Existing heading
 **bold** and [link](https://example.com)
 - [ ] checklist
 | A | B |
 | - | - |
 `code *literal*`''',
-          color: 0,
-          createdAt: DateTime.utc(2026, 8, 23),
-          tags: const ['work|urgent', 'multi\nline'],
-        ),
-      ]);
+            color: 0,
+            createdAt: DateTime.utc(2026, 8, 23),
+            tags: const ['work|urgent', 'multi\nline'],
+          ),
+        ]),
+      );
 
       expect(markdown, '''# Plan \\#\\# injected \\#1
 

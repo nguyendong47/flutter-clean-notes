@@ -112,6 +112,33 @@ void main() {
     expect(find.byType(SafeArea), findsWidgets);
   });
 
+  testWidgets('transfer rows disclose scope before platform work', (
+    tester,
+  ) async {
+    await _pumpMore(tester);
+    const disclosures = {
+      'more-row-export-text': 'Share Active and Archive; Trash is excluded',
+      'more-row-backup-json': 'Includes Active, Archive, and Trash',
+      'more-row-export-markdown': 'Share Active and Archive; Trash is excluded',
+      'more-row-import-backup':
+          'Append copies as Active; reminders are cleared',
+    };
+
+    for (final entry in disclosures.entries) {
+      final row = find.byKey(Key(entry.key));
+      expect(
+        find.descendant(of: row, matching: find.text(entry.value)),
+        findsOneWidget,
+        reason: entry.key,
+      );
+      expect(
+        tester.getSemantics(row).getSemanticsData().value,
+        entry.value,
+        reason: entry.key,
+      );
+    }
+  });
+
   testWidgets('idle More and Tag routes dismiss from the scrim in order', (
     tester,
   ) async {
@@ -834,19 +861,19 @@ const _moreRowSemantics = {
   ),
   'more-row-export-text': (
     label: 'Export text',
-    value: 'Share a readable text copy',
+    value: 'Share Active and Archive; Trash is excluded',
   ),
   'more-row-backup-json': (
     label: 'Backup JSON',
-    value: 'Share a restorable backup file',
+    value: 'Includes Active, Archive, and Trash',
   ),
   'more-row-export-markdown': (
     label: 'Export Markdown',
-    value: 'Share notes with Markdown formatting',
+    value: 'Share Active and Archive; Trash is excluded',
   ),
   'more-row-import-backup': (
     label: 'Import backup',
-    value: 'Append notes from a JSON backup',
+    value: 'Append copies as Active; reminders are cleared',
   ),
 };
 

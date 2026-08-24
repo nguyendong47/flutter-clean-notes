@@ -285,6 +285,63 @@ void main() {
     },
   );
 
+  test(
+    'readable exports include Active and Archive while excluding Trash',
+    () async {
+      // Mutation caught: passing the all-status collection directly to a
+      // readable formatter would expose the trashed note in either payload.
+      final gateway = _FakeNotesTransferGateway();
+      final repository = InMemoryNoteRepository.seeded([
+        _note(1, NoteStatus.active, const []),
+        _note(2, NoteStatus.archived, const []),
+        _note(3, NoteStatus.trashed, const []),
+      ]);
+      final container = _container(gateway: gateway, repository: repository);
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+
+      expect(
+        await container.read(notesTransferProvider.notifier).exportText(),
+        NotesTransferResult.completed,
+      );
+      expect(gateway.lastSharedText, contains('Note 1'));
+      expect(gateway.lastSharedText, contains('Note 2'));
+      expect(gateway.lastSharedText, isNot(contains('Note 3')));
+
+      expect(
+        await container.read(notesTransferProvider.notifier).exportMarkdown(),
+        NotesTransferResult.completed,
+      );
+      expect(gateway.lastSharedText, contains('Note 1'));
+      expect(gateway.lastSharedText, contains('Note 2'));
+      expect(gateway.lastSharedText, isNot(contains('Note 3')));
+    },
+  );
+
+  test('JSON backup includes Active, Archive, and Trash', () async {
+    final gateway = _FakeNotesTransferGateway();
+    final repository = InMemoryNoteRepository.seeded([
+      _note(1, NoteStatus.active, const []),
+      _note(2, NoteStatus.archived, const []),
+      _note(3, NoteStatus.trashed, const []),
+    ]);
+    final container = _container(gateway: gateway, repository: repository);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    expect(
+      await container.read(notesTransferProvider.notifier).backupJson(),
+      NotesTransferResult.completed,
+    );
+    final payload = jsonDecode(gateway.lastSharedText!) as List<Object?>;
+    final statuses = payload
+        .cast<Map<String, Object?>>()
+        .map((note) => note['status'])
+        .toList(growable: false);
+
+    expect(statuses, [0, 1, 2]);
+  });
+
   test('dismissed share cancels and clears prior settled success', () async {
     final gateway = _FakeNotesTransferGateway();
     final container = _container(gateway: gateway);
@@ -345,13 +402,13 @@ void main() {
   );
 
   test(
-    'valid import appends while clearing imported identity and reminder',
+    'import appends archived and trashed entries as Active copies without reminders',
     () async {
       final gateway = _FakeNotesTransferGateway()
         ..pickedJson = jsonEncode([
           {
             'id': 99,
-            'title': 'Imported note',
+            'title': 'Imported archive',
             'content': 'Safe append',
             'color': 17,
             'createdAt': '2026-08-22T10:00:00.000Z',
@@ -359,6 +416,17 @@ void main() {
             'tags': 'backup,work',
             'status': 1,
             'reminder': '2026-08-24T08:00:00.000Z',
+          },
+          {
+            'id': 100,
+            'title': 'Imported trash',
+            'content': 'Safe append from Trash',
+            'color': 18,
+            'createdAt': '2026-08-23T10:00:00.000Z',
+            'isPinned': 0,
+            'tags': ['backup', 'trash'],
+            'status': 2,
+            'reminder': '2026-08-25T08:00:00.000Z',
           },
         ]);
       final repository = InMemoryNoteRepository.seeded(sampleNotes);
@@ -372,19 +440,30 @@ void main() {
           .importBackup();
 
       expect(result, NotesTransferResult.completed);
-      final imported = repository.notes.singleWhere(
-        (note) => note.title == 'Imported note',
+      final importedArchive = repository.notes.singleWhere(
+        (note) => note.title == 'Imported archive',
       );
-      expect(imported.id, isNot(99));
-      expect(imported.status, NoteStatus.active);
-      expect(imported.reminder, isNull);
-      expect(imported.isPinned, isTrue);
-      expect(imported.tags, ['backup', 'work']);
+      final importedTrash = repository.notes.singleWhere(
+        (note) => note.title == 'Imported trash',
+      );
+      expect(importedArchive.id, isNot(99));
+      expect(importedTrash.id, isNot(100));
+      expect([
+        importedArchive.status,
+        importedTrash.status,
+      ], everyElement(NoteStatus.active));
+      expect([
+        importedArchive.reminder,
+        importedTrash.reminder,
+      ], everyElement(isNull));
+      expect(importedArchive.isPinned, isTrue);
+      expect(importedArchive.tags, ['backup', 'work']);
+      expect(importedTrash.tags, ['backup', 'trash']);
       expect(repository.notes.map((note) => note.id), containsAll(existingIds));
-      expect(repository.notes, hasLength(sampleNotes.length + 1));
+      expect(repository.notes, hasLength(sampleNotes.length + 2));
       final outcome = container.read(notesTransferProvider).requireValue!;
       expect(outcome.operation, NotesTransferOperation.importBackup);
-      expect(outcome.importedCount, 1);
+      expect(outcome.importedCount, 2);
     },
   );
 

@@ -11,10 +11,10 @@
 | --- | --- | --- |
 | Note storage | ID, title, content, color, creation time, pin state, tags, status, and optional reminder time | Stored in the app's local `notes_database.db` SQLite database. Desktop uses the application-support directory and sqflite FFI; other targets use the sqflite database path. |
 | Theme preference | System, light, or dark selection | Stored locally through platform shared preferences. |
-| Text export | Note titles, content, and tags | Sent to the operating-system share sheet only after the user selects **Export text**. The destination selected in that sheet controls subsequent handling. |
-| Markdown export | Note titles, content, and tags | A generated `notes.md` file is sent to the operating-system share sheet only after the user selects **Export Markdown**. |
-| JSON backup | Note IDs, titles, content, tags, color, creation time, pin state, status, and reminder time | A generated `notes_backup.json` file is sent to the operating-system share sheet only after the user selects **Backup JSON**. |
-| JSON import | The fields accepted by the JSON backup format | The user selects one `.json` file through the platform file picker. The app rejects an empty selection and payloads over 10 MB, validates the JSON, then imports the notes in one SQLite transaction. Imported entries are copies: title, content, tags, color, creation time, and pin state are retained, while each entry receives a fresh ID, active status, and no reminder. |
+| Text export | Titles, content, and tags from Active and Archive notes only | Sent to the operating-system share sheet only after the user selects **Export text**. Trash is excluded. The destination selected in that sheet controls subsequent handling. |
+| Markdown export | Titles, content, and tags from Active and Archive notes only | A generated `notes.md` file is sent to the operating-system share sheet only after the user selects **Export Markdown**. Trash is excluded. |
+| JSON backup | IDs, titles, content, tags, color, creation time, pin state, status, and reminder time from Active, Archive, and Trash | A generated `notes_backup.json` file containing every status is sent to the operating-system share sheet only after the user selects **Backup JSON**. |
+| JSON import | The fields accepted by the JSON backup format | The user selects one `.json` file through the platform file picker. The app rejects an empty selection and payloads over 10 MB, validates the JSON, then imports the notes in one SQLite transaction. Import is not a byte-for-byte restore: entries are appended as copies. Title, content, tags, color, creation time, and pin state are retained, while each copy receives a fresh ID, active status, and no reminder. |
 | Android managed backup | App-private files, databases, preferences, and related storage domains | The main manifest disables Android managed backup, and Android 12+ data-extraction rules exclude every supported domain from both cloud backup and device-to-device transfer. Manual JSON export is the app-supported recovery path. OEM transfer behavior still requires physical-device evidence. |
 | Reminders | Opaque local note ID and generic notification copy | Scheduling hands the generic title **Clean Notes**, generic body **Open Clean Notes to view your reminder.**, and an opaque `note:v1:<id>` payload to the platform notification service. The app does not put note title or content in those fields, and Android requests private notification visibility. Android and Apple code paths handle tap/open. Snooze actions are Android-only; Apple targets have no Darwin snooze categories unless a future release adds them. Permission, delivery, action, process-death, and reboot behavior require device verification. |
 
@@ -26,6 +26,10 @@ This code review is not a contractual guarantee that no data leaves a device:
 the OS share/file-picker services, notification service, selected share target,
 managed backup behavior on non-Android targets, OEM transfer implementations,
 and future dependencies remain separate boundaries.
+
+The More sheet displays these scopes before starting platform share or file
+picker work: readable exports exclude Trash, JSON backup includes every status,
+and import appends Active copies with reminders cleared.
 
 ## Retention and deletion
 
