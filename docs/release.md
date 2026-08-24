@@ -1,9 +1,12 @@
 # Release Readiness
 
-This is the tracked release checklist. Check an item only when its evidence is
-attached to the release record for the exact commit and version being shipped.
-Current identifiers and versions are observations from the checked-in files,
-not approved production values.
+This is the tracked store/submission release checklist. Check an item only when
+its evidence is attached to the release record for the exact commit and version
+being shipped. Engineering branch merge readiness is recorded separately in the
+[Project Sync / Handoff](superpowers/handoff.md); merging a reviewed branch does
+not approve, waive, or complete any unchecked store gate here. Current
+identifiers and versions are observations from the checked-in files, not
+approved production values.
 
 ## Current identity snapshot
 
@@ -35,6 +38,7 @@ $env:CLEAN_NOTES_FLUTTER_ROOT = 'C:\path\to\flutter'
 $env:CLEAN_NOTES_BUNDLETOOL_JAR = 'C:\path\to\bundletool-all-1.18.3.jar'
 dart run tool/verify_android_release_signing.dart --build-positive-release-artifacts
 dart run build_runner build
+git diff --exit-code -- '*.g.dart'
 dart format --output=none --set-exit-if-changed lib test integration_test tool
 flutter analyze
 flutter test --concurrency=1
@@ -60,17 +64,47 @@ track a machine-specific `org.gradle.java.home`; select the JDK through process
 `JAVA_HOME` instead. Verify these invariants again after integrating this work
 with any Android build-hygiene change.
 
+### Hosted CI evidence
+
+`.github/workflows/quality.yml` is configured for pull requests and pushes to
+`main`, with read-only contents permission, concurrency cancellation, timeouts,
+checksum-verified Flutter `3.41.4`/Dart `3.11.1`, and checksum-verified Temurin
+`17.0.20+8` on Ubuntu. Ubuntu enforces locked resolution, generated-code drift,
+format, fatal analysis, serial tests, local-resource Web release, Android debug,
+and clean tree.
+Windows enforces datasource/migration tests, Windows release, and clean tree.
+
+- [ ] **[OWNER: Engineering/Release]** Attach a successful hosted run for the
+  exact release commit, including its URL and both job logs. Configuration review
+  or local parity is not a hosted pass; no current unpublished-branch run is
+  claimed here.
+
 Build only the platforms approved for the release. Typical artifact commands are
 `flutter build appbundle --release`, `flutter build ipa --release` (macOS/Xcode
 required), `flutter build windows --release`, `flutter build macos --release`,
-`flutter build linux --release`, and `flutter build web --release`. Archive the
+`flutter build linux --release`, and
+`flutter build web --release --no-web-resources-cdn`. Archive the
 exact commands and hashes of submitted artifacts.
 
-Web is a supported release candidate when the exact release build includes
-`sqflite_sw.js` and `sqlite3.wasm` and passes the browser runtime and persistence
-checks in [the QA matrix](qa.md). Candidate support does not by itself approve Web
-as a shipping target; record product/release-owner approval and the deployment
-origin with the release evidence.
+Web is a supported release candidate when the exact release build includes same-
+origin Flutter engine resources, `sqflite_sw.js`, `sqlite3.wasm`, bundled Roboto,
+and the five QA-covered Noto fallback shards; points `fontFallbackBaseUrl` at the
+deployment origin; makes no third-party Flutter CDN, `fonts.gstatic.com`, or other
+Google font request in the tested flow; and passes the browser runtime and
+persistence checks in [the QA matrix](qa.md). The fallback set is intentionally
+not a complete Unicode corpus: an unbundled glyph may return a same-origin 404 and
+render as tofu but must not egress. Retain the recorded
+[Roboto provenance](../assets/fonts/README.md)
+and [fallback provenance](../web/fallback_fonts/README.md). Candidate support does
+not by itself approve Web as a shipping target; record product/release-owner
+approval, deployment origin, and deployed CSP with the release evidence.
+
+Apple dependency resolution and build proof must run on macOS with Flutter
+`3.41.4`, Xcode, and CocoaPods. Let Flutter generate any missing platform
+`Podfile` during the macOS-hosted build and inspect the resulting pod resolution;
+do not fabricate or copy a Podfile from Windows. Follow the
+[Apple CocoaPods QA gate](qa.md#apple-cocoapods-gate) before approving iOS or
+macOS as a shipping target.
 
 ## Identity, signing, and versioning
 
@@ -283,6 +317,30 @@ process-scoped secret environment variables when the build finishes.
 - [ ] **[OWNER: Release]** Install signed release artifacts on clean devices and
   verify upgrade from the last public version without data loss.
 
+## Apple toolchain and CocoaPods
+
+- [ ] **[OWNER: Apple Engineering]** On macOS, pin Flutter `3.41.4` and record
+  Xcode, Ruby, and CocoaPods versions. Run the one-time `flutter clean` required
+  after adopting the Apple dependency pin, resolve dependencies with
+  `flutter pub get --enforce-lockfile`, then run the iOS release build without
+  signing and with `--no-pub`; allow Flutter to generate the missing `Podfile`,
+  then inspect pod/plugin resolution, iOS deployment target `15.0`, generated
+  files, and `git status` against the exact candidate.
+- [ ] **[OWNER: Apple Engineering/Security]** Verify locked resolution uses
+  `path_provider_foundation 2.5.1`, excludes `objective_c`, and registers
+  `PathProviderPlugin`. The pin mitigates the `2.6.0` native-asset/IPA regressions
+  tracked by [Flutter issue 186794](https://github.com/flutter/flutter/issues/186794)
+  and [Flutter issue 187752](https://github.com/flutter/flutter/issues/187752); it
+  does not replace a clean Xcode/CocoaPods build, signed archive validation, or
+  physical-device launch test.
+- [ ] **[OWNER: Apple Engineering]** If macOS ships, run the corresponding macOS
+  Flutter/CocoaPods build on macOS and verify the checked-in deployment target,
+  plugin integration, entitlements, and generated dependency state.
+- [ ] **[OWNER: Apple Engineering/Release]** Resolve the generated-file policy
+  before freezing the candidate, then produce the signed archive/device evidence.
+  A Podfile fabricated on Windows and a Windows-only Flutter analysis are both
+  invalid substitutes for this gate.
+
 ## Store listing and policy
 
 - [ ] **[OWNER: Product/Marketing]** Approve name, short/long descriptions,
@@ -295,15 +353,48 @@ process-scoped secret environment variables when the build finishes.
 - [ ] **[OWNER: Product/Legal]** Convert the
   [technical privacy draft](privacy.md) into approved public disclosures and
   store data-safety/privacy answers. Resolve every owner decision in that draft.
+- [ ] **[OWNER: Product/Legal/QA]** Approve and verify transfer disclosure:
+  native targets use the OS share surface; Web uses Web Share or file download
+  without mail fallback; JSON import/export is capped at 10 MiB UTF-8 plus the
+  documented semantic, nesting, and structural limits.
 - [ ] **[OWNER: Accessibility/QA]** Record accessibility evidence and any known
-  limitations represented in the listing or release notes.
+  limitations represented in the listing or release notes. Include 3x text,
+  semantic headings/routes, live loading/success/error announcements, screen-
+  reader traversal, high contrast, and reduced motion.
+- [ ] **[OWNER: Product/Legal/QA]** Verify More opens the bundled `/privacy`
+  disclosure without an additional network request after the app has loaded and
+  its copy matches the approved public privacy/data-safety answers. The bundled
+  page does not replace the active public privacy and support URLs required by
+  the stores.
+- [ ] **[OWNER: Product/Design/QA]** Capture light/dark cold-launch evidence for
+  Android before 12, Android 12+, iPhone, and iPad. Verify the Aurora native
+  splash hands off without a stale template frame or flash. Web splash generation
+  is intentionally disabled and must not be represented as a native launch screen.
 
 ## Notifications and platform permissions
 
-Reminder delivery is blocked from release until every applicable gate below has
-fresh evidence for the signed candidate. These are required outcomes, not claims
-that the current branch or generated manifest already satisfies them.
+Reminder creation/scheduling is implemented only for Android, iOS, and macOS.
+Web, Windows, and Linux must ship without **Add reminder**, with an accessible
+unavailable disclosure and a clear-only path for any stored reminder. Do not
+claim scheduling support for those targets or submit notification capability
+declarations for behavior the app does not expose.
 
+On supported targets, optional notification initialization must not block app
+startup. The next schedule/cancel operation retries one coalesced initialization
+attempt, recovers on success, and otherwise returns only a sanitized unavailable
+failure. Schema v7 commits a generation-tagged schedule/cancel command with each
+reminder-bearing add, reminder-changing update/clear, permanent delete/cleanup,
+or accepted snooze; other note mutations enqueue nothing. It serially drains
+commands and selectively reconciles native pending
+notifications after startup without requesting permission or globally resetting
+them. Reminder delivery remains blocked from release until every applicable
+gate below has fresh evidence for the signed candidate. These are required
+outcomes, not claims that the current branch or generated manifest already
+satisfies them.
+
+- [ ] **[OWNER: Product/QA]** Approve the support matrix and verify Web, Windows,
+  and Linux expose no scheduling action, announce unavailable status accessibly,
+  and can clear a stored reminder without attempting a new schedule.
 - [ ] **[OWNER: Android Engineering]** Attach the release merged-manifest excerpt
   proving it contains `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`,
   `ScheduledNotificationReceiver`, `ScheduledNotificationBootReceiver`, and
@@ -334,11 +425,21 @@ that the current branch or generated manifest already satisfies them.
   are added in a future release; Android snooze expectations do not apply.
 - [ ] **[OWNER: Product/Legal]** Approve the generic lock-screen reminder copy,
   private-visibility behavior, actions, and platform override disclosure.
+- [ ] **[OWNER: Engineering/QA]** Prove the schema-v7 durable outbox, exact-
+  generation acknowledgement, cancel-before-schedule, selective startup audit,
+  and process-kill recovery cases in
+  [QA](qa.md#durable-reminder-recovery-gate). The implementation blocker is
+  closed in source; signed physical-device/plugin/OS evidence remains a release
+  gate and must not be replaced by unit tests.
 - [ ] **[OWNER: Release/Engineering]** Confirm whether any beta, sideload, or
   public build ever scheduled reminders. For a true first release, clear old
   internal QA installs. Otherwise, prove upgrade behavior with pending reminders
-  and ship a reviewed migration or cleanup outcome; the current code parses a
-  delivered legacy payload but does not migrate pending legacy schedules.
+  on signed devices. Open routes legacy/v1/v2 payloads by note ID. Startup
+  conservatively preserves a legacy/v1 pending notification only while its SQLite
+  note is still generation 0 with a non-null reminder—even if expired. It cancels
+  missing-note or cleared-reminder entries and reconciles an advanced note from
+  its current SQLite generation/reminder state. Verify this behavior against every
+  distributed baseline.
 
 ## Android backup and native compatibility
 
@@ -378,13 +479,27 @@ that the current branch or generated manifest already satisfies them.
   artifacts. Verify SQLite FFI on each shipping desktop target through
   `sqflite_common_ffi` and its current native asset path.
 
+### Time-bounded Kotlin risk acceptance
+
+| Field | Recorded disposition |
+| --- | --- |
+| Advisory | [GHSA-r937-wjx7-w2jp / CVE-2026-53914](https://github.com/advisories/GHSA-r937-wjx7-w2jp) reports Kotlin before `2.4.20` affected by unsafe deserialization in build-cache metadata. This project pins Kotlin Gradle Plugin `2.2.20`, so the version remains affected and is **not patched**. |
+| Reviewed reachability | The [upstream fix](https://github.com/JetBrains/kotlin/commit/bf51df665b458fda7c3eaf436c4d88dc119d7ec6) targets KAPT incremental-cache deserialization. This project applies no KAPT plugin or annotation processors and sets `kotlin.incremental=false`, so the reviewed KAPT path is not exercised by the checked-in build. Gradle build caching remains enabled; this record does not claim otherwise. |
+| Disposition | Temporarily accepted for the current engineering candidate, subject to the owner and expiry below. This is reachability-based risk acceptance, not a claim that the dependency is fixed. |
+| Owner | Engineering / Release |
+| Expiry | `2026-09-30` |
+| Required exit | Before expiry, upgrade to a Flutter/AGP-compatible stable Kotlin `2.4.20` or later and rerun locked resolution, Android builds, the complete signing verifier, full automated tests, SBOM/advisory scans, and exact-candidate review. If that cannot be completed, renew or reject the risk explicitly; silence or an expired record blocks release. |
+
 ## Rollback and recovery
 
 - [ ] **[OWNER: Release]** Preserve the last approved signed artifact, symbols,
   store metadata, source SHA, dependency resolution, and signing access.
 - [ ] **[OWNER: Data/Engineering]** Prove database upgrades from schema versions
-  1, 2, 3, and 4 to current version 5. There is no documented downgrade migration;
-  treat rollback to a binary expecting an older schema as unsafe until tested.
+  1 through 6 to current version 7, including the deterministic `json:` tag
+  rewrite, JSON-looking legacy literals, generation-0 initialization, empty v6-to-
+  v7 outbox, and no-op preservation of a pending v7 command. There is no
+  documented downgrade migration; treat rollback from v7 to a binary expecting
+  an older schema as unsafe until tested.
 - [ ] **[OWNER: Product/Support]** Document user backup guidance, known import
   limitations, Android's manual-JSON recovery model, incident communication,
   support intake, and recovery steps.

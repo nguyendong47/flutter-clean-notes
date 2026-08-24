@@ -20,7 +20,13 @@
 - Riverpod providers use annotations and generated .g.dart files; never edit generated files manually.
 - After every annotated-provider change, run 'dart run build_runner build'.
 - Preserve desktop sqflite FFI initialization and the mobile database path split.
-- The current SQLite schema is version 5; this redesign does not change it.
+- Historical planning assumption: the SQLite schema was version 5 when this plan
+  was approved, and the redesign task did not intend to change it. Later reviewed
+  corrections introduced schema version 6 for explicit tag encoding and version
+  7 for durable reminder generations/outbox reconciliation. Current persistence
+  invariants live in [AGENTS.md](../../../AGENTS.md), migration verification
+  lives in [QA](../../qa.md), and operational status lives in the
+  [Project Sync / Handoff](../handoff.md).
 - Preserve every existing user feature and notification-service test.
 - Light and dark themes are equal targets.
 - Normal text contrast is at least 4.5:1; large text and non-text controls are at least 3:1.
@@ -1193,11 +1199,62 @@ snippets above wherever they differ.
   Active copies with fresh IDs and cleared reminders. `NoteExportFormatter`,
   `NotesTransferGateway`, the Riverpod transfer controller, and `ImportNotes`
   retain their formatter, platform, orchestration, and domain boundaries.
+- JSON import and export share a 10 MiB UTF-8 ceiling plus note, field, title,
+  body, tag, nesting-depth, and structural-complexity limits. Over-limit export
+  fails before platform handoff. Native targets use the OS share surface; Web
+  uses Web Share when available or downloads `notes.txt`, `notes.md`, or
+  `notes_backup.json`, with mail fallback disabled.
 - Android uses the dedicated monochrome `ic_stat_clean_notes` notification small
   icon retained by `res/raw/keep.xml`. When reminder cancellation fails after a
   permanent deletion commits, the note remains deleted and the UI offers only a
   sanitized, coalesced cancellation retry; retry never repeats deletion or
   recreates the note.
+- Schema v7 adds `notes.reminderGeneration` and `reminder_outbox`. A reminder-
+  bearing add, reminder-changing update/clear, permanent delete/cleanup, or
+  accepted snooze commits its replacement schedule/cancel command atomically with
+  SQLite state; other note mutations enqueue none. The
+  coordinator serializes drains, cancels before schedule, rechecks supersession,
+  and acknowledges only the exact current generation. Startup selectively audits
+  native pending notifications and drains with existing permission only; it does
+  not globally reset notifications or prompt at launch. Version-2 generation
+  guards audit and snooze, while Open routes by note ID for v2/v1/legacy. A
+  legacy/v1 pending notification remains compatible only while its SQLite note is
+  still generation 0 with a non-null reminder, even if expired; an advanced note
+  is reconciled from its current SQLite generation/reminder state, and stale
+  legacy snooze cannot resurrect a cleared reminder.
+- Bootstrap creates the shared provider container before notification
+  initialization, attaches the snooze action handler before initialization, and
+  runs durable reminder reconciliation after the first frame. Editor and metadata
+  surfaces use three-way reminder merging so stale UI state cannot overwrite a
+  concurrent snooze.
+- Once the app is loaded, the bundled `/privacy` route is reachable from More
+  without an additional network request. Semantic headings/routes, live status/
+  error regions, and compact layouts are verified through 3x text scaling.
+  Android and iOS use the generated Aurora light/dark native splash (including
+  Android 12); Web splash generation stays disabled.
+- The canonical Web build uses `--no-web-resources-cdn`, serves CanvasKit/engine
+  resources from the deployment origin, bundles official Roboto, and points
+  Flutter's dynamic fallback at five same-origin Noto shards covering the editor
+  QA sample. Browser QA must observe no Flutter CDN or Google font request in that
+  flow. This is intentionally not a complete Unicode corpus: another unsupported
+  glyph may return a same-origin 404 and render as tofu but cannot egress. The
+  deployment requirement means this is not an offline first-install claim.
+
+### CI and Apple dependency addendum
+
+- `.github/workflows/quality.yml` runs on pull requests and `main` pushes with
+  read-only contents permission, concurrency cancellation, timeouts, checksum-
+  verified Flutter `3.41.4`/Dart `3.11.1`, and checksum-verified Temurin 17 on
+  Ubuntu. It covers locked resolution, codegen drift, format, fatal analysis,
+  serial tests, a local-resource Web release, an Android debug build, Windows
+  SQLite migrations/FFI and release, plus clean-tree checks. Configuration is not
+  hosted-run evidence; the exact candidate still requires an attached successful
+  run.
+- `path_provider_foundation` is pinned to `2.5.1` to avoid the affected `2.6.0`
+  `objective_c` native-asset/IPA path. The next Apple archive after adopting this
+  pin must run one `flutter clean`, then complete locked resolution and macOS/
+  Xcode/CocoaPods build/archive/device verification. Windows cannot close that
+  gate.
 
 ### Final verification contract
 
@@ -1207,9 +1264,13 @@ workers can contend for shared plugin and filesystem state:
 ~~~text
 flutter pub get --enforce-lockfile
 dart run build_runner build
-dart format --output=none --set-exit-if-changed lib test integration_test
+git diff --exit-code -- '*.g.dart'
+dart format --output=none --set-exit-if-changed lib test integration_test tool
 flutter analyze
 flutter test --concurrency=1
+flutter build web --release --no-web-resources-cdn
+flutter build windows --release
+flutter build apk --debug
 git diff --check
 ~~~
 
