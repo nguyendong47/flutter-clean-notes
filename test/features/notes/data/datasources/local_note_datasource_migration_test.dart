@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -321,6 +322,60 @@ void main() {
     ]);
   });
 
+  test(
+    'reopens an existing v6 file without mutating its prefixed tag bytes',
+    () async {
+      const persistedTags =
+          r'json:["finance,2026","snow-\u96ea","quote\"tag","json:[\"nested\"]"]';
+      await _writeFixture(
+        supportDirectory,
+        version: 6,
+        rows: const [
+          {
+            'id': 51,
+            'title': 'Current v6',
+            'content': 'Already migrated tag storage',
+            'color': 17,
+            'createdAt': '2026-08-24T10:11:12.000Z',
+            'isPinned': 1,
+            'tags': persistedTags,
+            'status': 0,
+            'reminder': null,
+          },
+        ],
+      );
+      final databaseFile = File(
+        path.join(supportDirectory.path, 'notes_database.db'),
+      );
+      final fixtureBytes = await databaseFile.readAsBytes();
+
+      final firstDataSource = LocalNoteDataSourceImpl();
+      final firstDatabase = await firstDataSource.database;
+      openedDatabases.add(firstDatabase);
+      await _expectCurrentSchema(firstDatabase);
+      final firstRawTags = (await _storedTags(firstDatabase)).single! as String;
+      expect(utf8.encode(firstRawTags), utf8.encode(persistedTags));
+      expect((await firstDataSource.getNotes()).single.tags, [
+        'finance,2026',
+        'snow-雪',
+        'quote"tag',
+        r'json:["nested"]',
+      ]);
+      await firstDatabase.close();
+      expect(await databaseFile.readAsBytes(), fixtureBytes);
+
+      final restartedDataSource = LocalNoteDataSourceImpl();
+      final restartedDatabase = await restartedDataSource.database;
+      openedDatabases.add(restartedDatabase);
+      await _expectCurrentSchema(restartedDatabase);
+      final restartedRawTags =
+          (await _storedTags(restartedDatabase)).single! as String;
+      expect(utf8.encode(restartedRawTags), utf8.encode(persistedTags));
+      await restartedDatabase.close();
+      expect(await databaseFile.readAsBytes(), fixtureBytes);
+    },
+  );
+
   test('creates a fresh empty v6 file with the exact current schema', () async {
     final dataSource = LocalNoteDataSourceImpl();
     final database = await dataSource.database;
@@ -638,6 +693,19 @@ const _schemaByVersion = <int, String>{
     )
   ''',
   5: '''
+    CREATE TABLE notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      color INTEGER NOT NULL,
+      createdAt TEXT NOT NULL,
+      isPinned INTEGER NOT NULL DEFAULT 0,
+      tags TEXT NOT NULL DEFAULT '',
+      status INTEGER NOT NULL DEFAULT 0,
+      reminder TEXT
+    )
+  ''',
+  6: '''
     CREATE TABLE notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
