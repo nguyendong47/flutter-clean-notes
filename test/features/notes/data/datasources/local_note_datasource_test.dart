@@ -5,6 +5,220 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
+  test(
+    'adding a reminder commits its note generation and schedule command together',
+    () async {
+      sqfliteFfiInit();
+      final database = await databaseFactoryFfi.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      addTearDown(database.close);
+      await _createNotesTable(database);
+      final dataSource = LocalNoteDataSourceImpl(database: database);
+      final reminder = DateTime.utc(2030, 1, 15, 11, 15);
+
+      final id = await dataSource.addNote(
+        NoteModel(
+          title: 'Durable reminder',
+          content: '',
+          color: 1,
+          createdAt: DateTime.utc(2030, 1, 15),
+          reminder: reminder,
+        ),
+      );
+
+      final note = (await database.query(
+        'notes',
+        where: 'id = ?',
+        whereArgs: [id],
+      )).single;
+      final command = (await database.query('reminder_outbox')).single;
+      expect(note['reminderGeneration'], command['generation']);
+      expect(command, containsPair('noteId', id));
+      expect(command, containsPair('operation', 'schedule'));
+      expect(command, containsPair('scheduledAt', reminder.toIso8601String()));
+    },
+  );
+
+  test('adding a reminder rolls back when its command insert fails', () async {
+    sqfliteFfiInit();
+    final database = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
+    addTearDown(database.close);
+    await _createNotesTable(database);
+    await database.execute('''
+      CREATE TRIGGER reject_schedule
+      BEFORE INSERT ON reminder_outbox
+      WHEN NEW.operation = 'schedule'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced schedule failure');
+      END
+    ''');
+    final dataSource = LocalNoteDataSourceImpl(database: database);
+
+    await expectLater(
+      dataSource.addNote(_note(reminder: DateTime.utc(2030, 1, 15, 11))),
+      throwsA(anything),
+    );
+
+    expect(await database.query('notes'), isEmpty);
+    expect(await database.query('reminder_outbox'), isEmpty);
+  });
+
+  test(
+    'changing a reminder supersedes the prior generation atomically',
+    () async {
+      sqfliteFfiInit();
+      final database = await databaseFactoryFfi.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      addTearDown(database.close);
+      await _createNotesTable(database);
+      final dataSource = LocalNoteDataSourceImpl(database: database);
+      final first = DateTime.utc(2030, 1, 15, 11);
+      final second = DateTime.utc(2030, 1, 15, 12);
+      final id = await dataSource.addNote(_note(reminder: first));
+      final firstGeneration = (await database.query(
+        'notes',
+        columns: const ['reminderGeneration'],
+      )).single['reminderGeneration'];
+
+      expect(await dataSource.updateNote(_note(id: id, reminder: second)), 1);
+
+      final note = (await database.query('notes')).single;
+      final commands = await database.query('reminder_outbox');
+      expect(commands, hasLength(1));
+      expect(commands.single['generation'], isNot(firstGeneration));
+      expect(note['reminderGeneration'], commands.single['generation']);
+      expect(commands.single['operation'], 'schedule');
+      expect(commands.single['scheduledAt'], second.toIso8601String());
+    },
+  );
+
+  test('an unchanged reminder does not churn its generation', () async {
+    sqfliteFfiInit();
+    final database = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
+    addTearDown(database.close);
+    await _createNotesTable(database);
+    final dataSource = LocalNoteDataSourceImpl(database: database);
+    final reminder = DateTime.utc(2030, 1, 15, 11);
+    final id = await dataSource.addNote(_note(reminder: reminder));
+    final before = (await database.query('reminder_outbox')).single;
+
+    expect(
+      await dataSource.updateNote(
+        _note(id: id, title: 'Changed title', reminder: reminder),
+      ),
+      1,
+    );
+
+    expect((await database.query('reminder_outbox')).single, before);
+  });
+
+  test('clearing a reminder replaces schedule with cancel', () async {
+    sqfliteFfiInit();
+    final database = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
+    addTearDown(database.close);
+    await _createNotesTable(database);
+    final dataSource = LocalNoteDataSourceImpl(database: database);
+    final id = await dataSource.addNote(
+      _note(reminder: DateTime.utc(2030, 1, 15, 11)),
+    );
+
+    expect(await dataSource.updateNote(_note(id: id)), 1);
+
+    final note = (await database.query('notes')).single;
+    final command = (await database.query('reminder_outbox')).single;
+    expect(note['reminder'], isNull);
+    expect(note['reminderGeneration'], command['generation']);
+    expect(command['operation'], 'cancel');
+    expect(command['scheduledAt'], isNull);
+  });
+
+  test('deleting a note leaves one durable cancel command', () async {
+    sqfliteFfiInit();
+    final database = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
+    addTearDown(database.close);
+    await _createNotesTable(database);
+    final dataSource = LocalNoteDataSourceImpl(database: database);
+    final id = await dataSource.addNote(_note());
+
+    expect(await dataSource.deleteNote(id), 1);
+
+    expect(await database.query('notes'), isEmpty);
+    final command = (await database.query('reminder_outbox')).single;
+    expect(command['noteId'], id);
+    expect(command['operation'], 'cancel');
+    expect(command['scheduledAt'], isNull);
+  });
+
+  test('delete rolls back when its cancel command cannot be written', () async {
+    sqfliteFfiInit();
+    final database = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
+    addTearDown(database.close);
+    await _createNotesTable(database);
+    final dataSource = LocalNoteDataSourceImpl(database: database);
+    final id = await dataSource.addNote(_note());
+    await database.execute('''
+      CREATE TRIGGER reject_cancel
+      BEFORE INSERT ON reminder_outbox
+      WHEN NEW.operation = 'cancel'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced cancel failure');
+      END
+    ''');
+
+    await expectLater(dataSource.deleteNote(id), throwsA(anything));
+
+    expect(
+      await database.query('notes', where: 'id = ?', whereArgs: [id]),
+      hasLength(1),
+    );
+  });
+
+  test('trash cleanup commits one cancel command per deleted note', () async {
+    sqfliteFfiInit();
+    final database = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
+    addTearDown(database.close);
+    await _createNotesTable(database);
+    final dataSource = LocalNoteDataSourceImpl(database: database);
+    final first = await dataSource.addNote(
+      _note(createdAt: DateTime.utc(2020), status: NoteStatus.trashed),
+    );
+    final second = await dataSource.addNote(
+      _note(createdAt: DateTime.utc(2020, 1, 2), status: NoteStatus.trashed),
+    );
+    await dataSource.addNote(_note(createdAt: DateTime.utc(2020)));
+
+    expect(await dataSource.cleanupTrash(), 2);
+
+    final commands = await database.query(
+      'reminder_outbox',
+      orderBy: 'noteId ASC',
+    );
+    expect(commands.map((row) => row['noteId']), [first, second]);
+    expect(commands.map((row) => row['operation']), everyElement('cancel'));
+  });
+
   test('persists and reloads a comma-bearing tag without ambiguity', () async {
     sqfliteFfiInit();
     final database = await databaseFactoryFfi.openDatabase(
@@ -179,8 +393,26 @@ void main() {
   );
 }
 
-Future<void> _createNotesTable(Database database) {
-  return database.execute('''
+NoteModel _note({
+  int? id,
+  String title = 'Note',
+  DateTime? createdAt,
+  NoteStatus status = NoteStatus.active,
+  DateTime? reminder,
+}) {
+  return NoteModel(
+    id: id,
+    title: title,
+    content: '',
+    color: 1,
+    createdAt: createdAt ?? DateTime.utc(2030, 1, 15),
+    status: status,
+    reminder: reminder,
+  );
+}
+
+Future<void> _createNotesTable(Database database) async {
+  await database.execute('''
       CREATE TABLE notes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
@@ -190,7 +422,22 @@ Future<void> _createNotesTable(Database database) {
         isPinned INTEGER NOT NULL DEFAULT 0,
         tags TEXT NOT NULL DEFAULT '',
         status INTEGER NOT NULL DEFAULT 0,
-        reminder TEXT
+        reminder TEXT,
+        reminderGeneration INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+  await database.execute('''
+      CREATE TABLE reminder_outbox (
+        generation INTEGER PRIMARY KEY AUTOINCREMENT,
+        noteId INTEGER,
+        operation TEXT NOT NULL
+          CHECK (operation IN ('schedule', 'cancel')),
+        scheduledAt TEXT,
+        CHECK (
+          (operation = 'schedule' AND noteId IS NOT NULL AND scheduledAt IS NOT NULL)
+          OR
+          (operation = 'cancel' AND noteId IS NOT NULL AND scheduledAt IS NULL)
+        )
       )
     ''');
 }

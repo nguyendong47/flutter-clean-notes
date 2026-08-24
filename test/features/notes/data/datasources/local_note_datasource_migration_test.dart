@@ -43,7 +43,32 @@ void main() {
     }
   });
 
-  test('upgrades a v1 file to v6 and preserves the legacy row', () async {
+  test('creates a fresh v7 database with an empty reminder outbox', () async {
+    final dataSource = LocalNoteDataSourceImpl();
+    final database = await dataSource.database;
+    openedDatabases.add(database);
+
+    expect(await database.getVersion(), 7);
+    final noteColumns = await database.rawQuery('PRAGMA table_xinfo(notes)');
+    expect(
+      noteColumns.singleWhere(
+        (column) => column['name'] == 'reminderGeneration',
+      ),
+      containsPair('dflt_value', '0'),
+    );
+    final outboxColumns = await database.rawQuery(
+      'PRAGMA table_xinfo(reminder_outbox)',
+    );
+    expect(outboxColumns.map((column) => column['name']), [
+      'generation',
+      'noteId',
+      'operation',
+      'scheduledAt',
+    ]);
+    expect(await database.query('reminder_outbox'), isEmpty);
+  });
+
+  test('upgrades a v1 file to v7 and preserves the legacy row', () async {
     await _writeFixture(
       supportDirectory,
       version: 1,
@@ -75,7 +100,7 @@ void main() {
     expect(await _storedTags(openedDatabases.last), ['json:[]']);
   });
 
-  test('upgrades a v2 file to v6 without losing its pinned value', () async {
+  test('upgrades a v2 file to v7 without losing its pinned value', () async {
     await _writeFixture(
       supportDirectory,
       version: 2,
@@ -108,7 +133,7 @@ void main() {
     expect(await _storedTags(openedDatabases.last), ['json:[]']);
   });
 
-  test('upgrades a v3 file to v6 and keeps legacy tags readable', () async {
+  test('upgrades a v3 file to v7 and keeps legacy tags readable', () async {
     await _writeFixture(
       supportDirectory,
       version: 3,
@@ -144,7 +169,7 @@ void main() {
     ]);
   });
 
-  test('upgrades a v4 file to v6 and preserves every note status', () async {
+  test('upgrades a v4 file to v7 and preserves every note status', () async {
     await _writeFixture(
       supportDirectory,
       version: 4,
@@ -227,7 +252,7 @@ void main() {
   });
 
   test(
-    'upgrades a deployed v5 file to v6 without changing its rich row',
+    'upgrades a deployed v5 file to v7 without changing its rich row',
     () async {
       await _writeFixture(
         supportDirectory,
@@ -267,7 +292,7 @@ void main() {
     },
   );
 
-  test('v6 migration preserves JSON-looking v5 tags as literal text', () async {
+  test('v7 migration preserves JSON-looking v5 tags as literal text', () async {
     await _writeFixture(
       supportDirectory,
       version: 5,
@@ -322,28 +347,61 @@ void main() {
     ]);
   });
 
+  test('migrates v6 once then reopens without mutating v7 bytes', () async {
+    const persistedTags =
+        r'json:["finance,2026","snow-\u96ea","quote\"tag","json:[\"nested\"]"]';
+    await _writeFixture(
+      supportDirectory,
+      version: 6,
+      rows: const [
+        {
+          'id': 51,
+          'title': 'Current v6',
+          'content': 'Already migrated tag storage',
+          'color': 17,
+          'createdAt': '2026-08-24T10:11:12.000Z',
+          'isPinned': 1,
+          'tags': persistedTags,
+          'status': 0,
+          'reminder': null,
+        },
+      ],
+    );
+    final databaseFile = File(
+      path.join(supportDirectory.path, 'notes_database.db'),
+    );
+    final firstDataSource = LocalNoteDataSourceImpl();
+    final firstDatabase = await firstDataSource.database;
+    openedDatabases.add(firstDatabase);
+    await _expectCurrentSchema(firstDatabase);
+    expect(await _storedReminderGenerations(firstDatabase), [0]);
+    expect(await firstDatabase.query('reminder_outbox'), isEmpty);
+    final firstRawTags = (await _storedTags(firstDatabase)).single! as String;
+    expect(utf8.encode(firstRawTags), utf8.encode(persistedTags));
+    expect((await firstDataSource.getNotes()).single.tags, [
+      'finance,2026',
+      'snow-雪',
+      'quote"tag',
+      r'json:["nested"]',
+    ]);
+    await firstDatabase.close();
+    final migratedBytes = await databaseFile.readAsBytes();
+
+    final restartedDataSource = LocalNoteDataSourceImpl();
+    final restartedDatabase = await restartedDataSource.database;
+    openedDatabases.add(restartedDatabase);
+    await _expectCurrentSchema(restartedDatabase);
+    final restartedRawTags =
+        (await _storedTags(restartedDatabase)).single! as String;
+    expect(utf8.encode(restartedRawTags), utf8.encode(persistedTags));
+    await restartedDatabase.close();
+    expect(await databaseFile.readAsBytes(), migratedBytes);
+  });
+
   test(
-    'reopens an existing v6 file without mutating its prefixed tag bytes',
+    'reopens a fresh v7 file without mutating its pending command',
     () async {
-      const persistedTags =
-          r'json:["finance,2026","snow-\u96ea","quote\"tag","json:[\"nested\"]"]';
-      await _writeFixture(
-        supportDirectory,
-        version: 6,
-        rows: const [
-          {
-            'id': 51,
-            'title': 'Current v6',
-            'content': 'Already migrated tag storage',
-            'color': 17,
-            'createdAt': '2026-08-24T10:11:12.000Z',
-            'isPinned': 1,
-            'tags': persistedTags,
-            'status': 0,
-            'reminder': null,
-          },
-        ],
-      );
+      await _writeV7Fixture(supportDirectory);
       final databaseFile = File(
         path.join(supportDirectory.path, 'notes_database.db'),
       );
@@ -353,13 +411,14 @@ void main() {
       final firstDatabase = await firstDataSource.database;
       openedDatabases.add(firstDatabase);
       await _expectCurrentSchema(firstDatabase);
-      final firstRawTags = (await _storedTags(firstDatabase)).single! as String;
-      expect(utf8.encode(firstRawTags), utf8.encode(persistedTags));
-      expect((await firstDataSource.getNotes()).single.tags, [
-        'finance,2026',
-        'snow-雪',
-        'quote"tag',
-        r'json:["nested"]',
+      expect(await _storedReminderGenerations(firstDatabase), [7]);
+      expect(await firstDatabase.query('reminder_outbox'), [
+        {
+          'generation': 7,
+          'noteId': 70,
+          'operation': 'schedule',
+          'scheduledAt': '2031-01-15T11:15:00.000Z',
+        },
       ]);
       await firstDatabase.close();
       expect(await databaseFile.readAsBytes(), fixtureBytes);
@@ -368,15 +427,13 @@ void main() {
       final restartedDatabase = await restartedDataSource.database;
       openedDatabases.add(restartedDatabase);
       await _expectCurrentSchema(restartedDatabase);
-      final restartedRawTags =
-          (await _storedTags(restartedDatabase)).single! as String;
-      expect(utf8.encode(restartedRawTags), utf8.encode(persistedTags));
+      expect(await restartedDatabase.query('reminder_outbox'), hasLength(1));
       await restartedDatabase.close();
       expect(await databaseFile.readAsBytes(), fixtureBytes);
     },
   );
 
-  test('creates a fresh empty v6 file with the exact current schema', () async {
+  test('creates a fresh empty v7 file with the exact current schema', () async {
     final dataSource = LocalNoteDataSourceImpl();
     final database = await dataSource.database;
     openedDatabases.add(database);
@@ -423,6 +480,10 @@ void main() {
       'reminder': DateTime.utc(2027, 8, 24, 9, 10, 11),
     });
     expect(await _storedTags(secondDatabase), ['json:["shared","live"]']);
+    final pending = await secondDataSource.pendingReminderCommands();
+    expect(pending, hasLength(1));
+    expect(pending.single.noteId, id);
+    expect(pending.single.scheduledAt, DateTime.utc(2027, 8, 24, 9, 10, 11));
   });
 }
 
@@ -447,6 +508,8 @@ Future<List<NoteModel>> _upgradeAndRestart(
   final firstDatabase = await firstDataSource.database;
   openedDatabases.add(firstDatabase);
   await _expectCurrentSchema(firstDatabase);
+  expect(await _storedReminderGenerations(firstDatabase), everyElement(0));
+  expect(await firstDatabase.query('reminder_outbox'), isEmpty);
   final beforeRestart = await _readAllStatuses(firstDataSource);
 
   await firstDatabase.close();
@@ -482,8 +545,17 @@ Future<List<Object?>> _storedTags(Database database) async {
   return rows.map((row) => row['tags']).toList();
 }
 
+Future<List<Object?>> _storedReminderGenerations(Database database) async {
+  final rows = await database.query(
+    'notes',
+    columns: const ['reminderGeneration'],
+    orderBy: 'id ASC',
+  );
+  return rows.map((row) => row['reminderGeneration']).toList();
+}
+
 Future<void> _expectCurrentSchema(Database database) async {
-  expect(await database.getVersion(), 6);
+  expect(await database.getVersion(), 7);
   final objects = await database.rawQuery('''
     SELECT type, name, tbl_name, sql
     FROM sqlite_master
@@ -501,10 +573,23 @@ Future<void> _expectCurrentSchema(Database database) async {
         )
         .toList(),
     [
+      {
+        'type': 'index',
+        'name': 'reminder_outbox_note_generation',
+        'tbl_name': 'reminder_outbox',
+      },
       {'type': 'table', 'name': 'notes', 'tbl_name': 'notes'},
+      {
+        'type': 'table',
+        'name': 'reminder_outbox',
+        'tbl_name': 'reminder_outbox',
+      },
     ],
   );
-  final normalizedCreateSql = (objects.single['sql'] as String)
+  final notesObject = objects.singleWhere(
+    (object) => object['name'] == 'notes',
+  );
+  final normalizedCreateSql = (notesObject['sql'] as String)
       .toLowerCase()
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
@@ -532,7 +617,7 @@ Future<void> _expectCurrentSchema(Database database) async {
   final tableList = await database.rawQuery("PRAGMA table_list('notes')");
   expect(tableList, hasLength(1));
   expect(tableList.single['type'], 'table');
-  expect(tableList.single['ncol'], 9);
+  expect(tableList.single['ncol'], 10);
   expect(tableList.single['wr'], 0);
   expect(tableList.single['strict'], 0);
   expect(await database.rawQuery('PRAGMA foreign_key_list(notes)'), isEmpty);
@@ -619,13 +704,110 @@ Future<void> _expectCurrentSchema(Database database) async {
       'pk': 0,
       'hidden': 0,
     },
+    {
+      'cid': 9,
+      'name': 'reminderGeneration',
+      'type': 'INTEGER',
+      'notnull': 1,
+      'dflt_value': '0',
+      'pk': 0,
+      'hidden': 0,
+    },
   ]);
   expect(
     await database.rawQuery('PRAGMA index_list(notes)'),
     isEmpty,
     reason:
-        'The v6 table uses its INTEGER PRIMARY KEY rowid, not a side index.',
+        'The notes table uses its INTEGER PRIMARY KEY rowid, not a side index.',
   );
+  expect(await database.rawQuery('PRAGMA table_xinfo(reminder_outbox)'), [
+    {
+      'cid': 0,
+      'name': 'generation',
+      'type': 'INTEGER',
+      'notnull': 0,
+      'dflt_value': null,
+      'pk': 1,
+      'hidden': 0,
+    },
+    {
+      'cid': 1,
+      'name': 'noteId',
+      'type': 'INTEGER',
+      'notnull': 0,
+      'dflt_value': null,
+      'pk': 0,
+      'hidden': 0,
+    },
+    {
+      'cid': 2,
+      'name': 'operation',
+      'type': 'TEXT',
+      'notnull': 1,
+      'dflt_value': null,
+      'pk': 0,
+      'hidden': 0,
+    },
+    {
+      'cid': 3,
+      'name': 'scheduledAt',
+      'type': 'TEXT',
+      'notnull': 0,
+      'dflt_value': null,
+      'pk': 0,
+      'hidden': 0,
+    },
+  ]);
+  final indexes = await database.rawQuery('PRAGMA index_list(reminder_outbox)');
+  expect(indexes, hasLength(1));
+  expect(indexes.single['name'], 'reminder_outbox_note_generation');
+}
+
+Future<void> _writeV7Fixture(Directory supportDirectory) async {
+  final databasePath = path.join(supportDirectory.path, 'notes_database.db');
+  final database = await databaseFactoryFfi.openDatabase(
+    databasePath,
+    options: OpenDatabaseOptions(singleInstance: false),
+  );
+  try {
+    await database.execute(_schemaByVersion[7]!);
+    await database.execute('''
+      CREATE TABLE reminder_outbox (
+        generation INTEGER PRIMARY KEY AUTOINCREMENT,
+        noteId INTEGER,
+        operation TEXT NOT NULL CHECK (operation IN ('schedule', 'cancel')),
+        scheduledAt TEXT,
+        CHECK (
+          (operation = 'schedule' AND noteId IS NOT NULL AND scheduledAt IS NOT NULL)
+          OR
+          (operation = 'cancel' AND noteId IS NOT NULL AND scheduledAt IS NULL)
+        )
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX reminder_outbox_note_generation
+      ON reminder_outbox(noteId, generation)
+    ''');
+    await database.insert('notes', {
+      'id': 70,
+      'title': 'Fresh v7',
+      'content': 'Pending command survives reopen',
+      'color': 17,
+      'createdAt': '2031-01-15T10:15:00.000Z',
+      'tags': 'json:[]',
+      'reminder': '2031-01-15T11:15:00.000Z',
+      'reminderGeneration': 7,
+    });
+    await database.insert('reminder_outbox', {
+      'generation': 7,
+      'noteId': 70,
+      'operation': 'schedule',
+      'scheduledAt': '2031-01-15T11:15:00.000Z',
+    });
+    await database.execute('PRAGMA user_version = 7');
+  } finally {
+    await database.close();
+  }
 }
 
 Future<void> _writeFixture(
@@ -716,6 +898,20 @@ const _schemaByVersion = <int, String>{
       tags TEXT NOT NULL DEFAULT '',
       status INTEGER NOT NULL DEFAULT 0,
       reminder TEXT
+    )
+  ''',
+  7: '''
+    CREATE TABLE notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      color INTEGER NOT NULL,
+      createdAt TEXT NOT NULL,
+      isPinned INTEGER NOT NULL DEFAULT 0,
+      tags TEXT NOT NULL DEFAULT '',
+      status INTEGER NOT NULL DEFAULT 0,
+      reminder TEXT,
+      reminderGeneration INTEGER NOT NULL DEFAULT 0
     )
   ''',
 };
