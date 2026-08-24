@@ -1177,6 +1177,10 @@ snippets above wherever they differ.
   `appThemeProvider.future` before the first frame, and passes the same container
   to `UncontrolledProviderScope`. Missing, invalid, or unreadable saved modes
   fall back to `ThemeMode.system`, and the theme provider stays alive.
+- Reselecting the active Home, Search, or Library destination preserves that
+  branch's query, filters, nested location, and scroll state. This reviewed
+  behavior supersedes Task 7's older reset-on-reselection `initialLocation`
+  snippet.
 - Editor dirty state compares title, body, color, ordered tags, and reminder.
   Top-bar Back, system Back, and route pops share one explicit discard guard;
   **Keep editing** is the safe default. A clean iOS edge-back gesture remains

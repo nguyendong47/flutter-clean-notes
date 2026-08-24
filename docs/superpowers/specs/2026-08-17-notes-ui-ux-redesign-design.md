@@ -104,7 +104,7 @@ The mobile shell uses a floating bottom navigation bar with four destinations:
 
 A raised central **New note** control sits between Search and Library. It opens the editor as a primary action and is not a fifth navigation destination.
 
-The bottom navigation stays within safe areas and never obscures scrollable content. `go_router` remains responsible for navigation and deep links. Back behavior follows platform expectations: the editor returns to its source view, nested sheets dismiss before routes, and a clean editor preserves the native iOS edge-back gesture. A dirty editor synchronously vetoes route pop and requires an explicit discard decision.
+The bottom navigation stays within safe areas and never obscures scrollable content. `go_router` remains responsible for navigation and deep links. Reselecting the current shell destination preserves that branch's query, filters, nested location, and scroll state. Back behavior follows platform expectations: the editor returns to its source view, nested sheets dismiss before routes, and a clean editor preserves the native iOS edge-back gesture. A dirty editor synchronously vetoes route pop and requires an explicit discard decision.
 
 ## Screen designs
 
