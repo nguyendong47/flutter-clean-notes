@@ -8,72 +8,53 @@ import 'package:share_plus/share_plus.dart' hide XFile;
 
 enum NotesShareResult { completed, dismissed, unavailable }
 
+typedef JsonFilePicker =
+    Future<List<PlatformFile>?> Function({
+      required FileType type,
+      required List<String> allowedExtensions,
+    });
+
 class NotesTransferGateway {
   const NotesTransferGateway({
     @visibleForTesting Future<ShareResult> Function(ShareParams)? share,
-  }) : _share = share;
+    @visibleForTesting JsonFilePicker? pickJsonFiles,
+  }) : _share = share,
+       _pickJsonFiles = pickJsonFiles;
 
   final Future<ShareResult> Function(ShareParams)? _share;
+  final JsonFilePicker? _pickJsonFiles;
 
   /// Caps decode and JSON parsing memory for imports on mobile devices.
   static const int _maxImportBytes = 10 * 1024 * 1024;
 
   Future<String?> pickJsonText() async {
-    final FilePickerResult? result;
+    final List<PlatformFile>? result;
     try {
-      result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['json'],
-        allowMultiple: false,
-        withData: kIsWeb,
-      );
+      final picker = _pickJsonFiles;
+      result = picker == null
+          ? await _pickSingleJsonFile()
+          : await picker(
+              type: FileType.custom,
+              allowedExtensions: const ['json'],
+            );
     } catch (_) {
       throw const FormatException('Could not open the file picker. Try again.');
     }
     if (result == null) return null;
-    if (result.files.length != 1) {
+    if (result.length != 1) {
       throw const FormatException('Choose one JSON backup file.');
     }
 
-    final file = result.files.single;
-    final bytes = file.bytes;
-    final XFile xFile;
-    if (bytes != null) {
+    final file = result.single;
+
+    try {
+      _checkImportSize(await file.length());
+      final bytes = await file.readAsBytes();
       if (bytes.isEmpty) {
         throw const FormatException('The selected backup file is empty.');
       }
       _checkImportSize(bytes.length);
-      xFile = XFile.fromData(
-        bytes,
-        name: file.name,
-        length: bytes.length,
-        mimeType: 'application/json',
-      );
-    } else if (!kIsWeb) {
-      final path = file.path;
-      if (path == null || path.trim().isEmpty) {
-        throw const FormatException(
-          'The selected backup file could not be read.',
-        );
-      }
-      xFile = XFile(
-        path,
-        name: file.name,
-        length: file.size > 0 ? file.size : null,
-      );
-    } else {
-      throw const FormatException(
-        'The selected backup file could not be read.',
-      );
-    }
-
-    try {
-      if (bytes == null) _checkImportSize(await xFile.length());
-      var text = await xFile.readAsString(encoding: utf8);
-      if (bytes != null) {
-        text = utf8.decode(bytes, allowMalformed: false);
-      }
-      _checkImportSize(utf8.encode(text).length);
+      var text = utf8.decode(bytes, allowMalformed: false);
       if (text.startsWith('\uFEFF')) text = text.substring(1);
       if (text.trim().isEmpty) {
         throw const FormatException('The selected backup file is empty.');
@@ -90,6 +71,14 @@ class NotesTransferGateway {
         'The selected backup file could not be read.',
       );
     }
+  }
+
+  static Future<List<PlatformFile>?> _pickSingleJsonFile() async {
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: const ['json'],
+    );
+    return file == null ? null : [file];
   }
 
   static void _checkImportSize(int byteLength) {

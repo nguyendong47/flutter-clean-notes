@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
@@ -94,46 +95,62 @@ void main() {
   test(
     'platform picker returns null on cancellation and configures JSON',
     () async {
-      final picker = _FakeFilePicker();
-      FilePicker.platform = picker;
+      final picker = _FakeJsonFilePicker();
+      final gateway = NotesTransferGateway(pickJsonFiles: picker.call);
 
-      expect(await const NotesTransferGateway().pickJsonText(), isNull);
+      expect(await gateway.pickJsonText(), isNull);
       expect(picker.type, FileType.custom);
       expect(picker.allowedExtensions, ['json']);
-      expect(picker.allowMultiple, isFalse);
     },
   );
 
   test(
     'platform picker accepts unknown-size byte data and strips BOM',
     () async {
-      final picker = _FakeFilePicker()
-        ..result = FilePickerResult([
-          PlatformFile(
+      final picker = _FakeJsonFilePicker()
+        ..result = [
+          _FakePlatformFile.memory(
             name: 'backup.json',
-            size: 0,
             bytes: Uint8List.fromList([0xEF, 0xBB, 0xBF, 0x5B, 0x5D]),
+            reportedLength: 0,
           ),
-        ]);
-      FilePicker.platform = picker;
+        ];
+      final gateway = NotesTransferGateway(pickJsonFiles: picker.call);
 
-      expect(await const NotesTransferGateway().pickJsonText(), '[]');
+      expect(await gateway.pickJsonText(), '[]');
     },
   );
 
+  test('platform picker accepts exactly 10 MiB of UTF-8 data', () async {
+    const maxImportBytes = 10 * 1024 * 1024;
+    final bytes = Uint8List(maxImportBytes)..fillRange(0, maxImportBytes, 0x20);
+    bytes[0] = 0x5B;
+    bytes[maxImportBytes - 1] = 0x5D;
+    final file = _FakePlatformFile.memory(name: 'backup.json', bytes: bytes);
+    final picker = _FakeJsonFilePicker()..result = [file];
+    final gateway = NotesTransferGateway(pickJsonFiles: picker.call);
+
+    final text = await gateway.pickJsonText();
+
+    expect(text, isNotNull);
+    expect(utf8.encode(text!).length, maxImportBytes);
+    expect(text.codeUnitAt(0), 0x5B);
+    expect(text.codeUnitAt(text.length - 1), 0x5D);
+    expect(file.lengthCalls, 1);
+    expect(file.readAsBytesCalls, 1);
+  });
+
   test('platform picker bounds unknown-size imports by actual bytes', () async {
-    final picker = _FakeFilePicker()
-      ..result = FilePickerResult([
-        PlatformFile(
-          name: 'backup.json',
-          size: 0,
-          bytes: Uint8List(10 * 1024 * 1024 + 1)..fillRange(0, 1, 0x5B),
-        ),
-      ]);
-    FilePicker.platform = picker;
+    final file = _FakePlatformFile.memory(
+      name: 'backup.json',
+      bytes: Uint8List(10 * 1024 * 1024 + 1)..fillRange(0, 1, 0x5B),
+      reportedLength: 0,
+    );
+    final picker = _FakeJsonFilePicker()..result = [file];
+    final gateway = NotesTransferGateway(pickJsonFiles: picker.call);
 
     await expectLater(
-      const NotesTransferGateway().pickJsonText(),
+      gateway.pickJsonText(),
       throwsA(
         isA<FormatException>().having(
           (error) => error.message,
@@ -142,6 +159,7 @@ void main() {
         ),
       ),
     );
+    expect(file.readAsBytesCalls, 1);
   });
 
   test('platform picker accepts an unknown-size path-backed file', () async {
@@ -151,27 +169,87 @@ void main() {
     addTearDown(() => directory.delete(recursive: true));
     final file = File('${directory.path}${Platform.pathSeparator}backup.json');
     await file.writeAsString('[{"title":"path backed"}]');
-    final picker = _FakeFilePicker()
-      ..result = FilePickerResult([
-        PlatformFile(name: 'backup.json', size: 0, path: file.path),
-      ]);
-    FilePicker.platform = picker;
-
-    expect(
-      await const NotesTransferGateway().pickJsonText(),
-      '[{"title":"path backed"}]',
+    final pickedFile = _FakePlatformFile.path(
+      name: 'backup.json',
+      path: file.path,
+      reportedLength: 0,
     );
+    final picker = _FakeJsonFilePicker()..result = [pickedFile];
+    final gateway = NotesTransferGateway(pickJsonFiles: picker.call);
+
+    expect(await gateway.pickJsonText(), '[{"title":"path backed"}]');
+    expect(pickedFile.lengthCalls, 1);
+    expect(pickedFile.readAsBytesCalls, 1);
+  });
+
+  test('platform picker rejects a path-backed file over 10 MiB', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'notes-transfer-gateway-large-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}${Platform.pathSeparator}backup.json');
+    final randomAccessFile = await file.open(mode: FileMode.write);
+    await randomAccessFile.truncate(10 * 1024 * 1024 + 1);
+    await randomAccessFile.close();
+    final pickedFile = _FakePlatformFile.path(
+      name: 'backup.json',
+      path: file.path,
+    );
+    final picker = _FakeJsonFilePicker()..result = [pickedFile];
+    final gateway = NotesTransferGateway(pickJsonFiles: picker.call);
+
+    await expectLater(
+      gateway.pickJsonText(),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'The selected backup file is too large. Choose a file up to 10 MB.',
+        ),
+      ),
+    );
+    expect(pickedFile.lengthCalls, 1);
+    expect(pickedFile.readAsBytesCalls, 0);
+  });
+
+  test('platform picker rejects multiple selected backup files', () async {
+    final first = _FakePlatformFile.memory(
+      name: 'first.json',
+      bytes: Uint8List.fromList(utf8.encode('[]')),
+    );
+    final second = _FakePlatformFile.memory(
+      name: 'second.json',
+      bytes: Uint8List.fromList(utf8.encode('[]')),
+    );
+    final picker = _FakeJsonFilePicker()..result = [first, second];
+    final gateway = NotesTransferGateway(pickJsonFiles: picker.call);
+
+    await expectLater(
+      gateway.pickJsonText(),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Choose one JSON backup file.',
+        ),
+      ),
+    );
+    expect(first.lengthCalls, 0);
+    expect(first.readAsBytesCalls, 0);
+    expect(second.lengthCalls, 0);
+    expect(second.readAsBytesCalls, 0);
   });
 
   test('platform picker rejects actual empty data after reading it', () async {
-    final picker = _FakeFilePicker()
-      ..result = FilePickerResult([
-        PlatformFile(name: 'backup.json', size: 0, bytes: Uint8List(0)),
-      ]);
-    FilePicker.platform = picker;
+    final file = _FakePlatformFile.memory(
+      name: 'backup.json',
+      bytes: Uint8List(0),
+    );
+    final picker = _FakeJsonFilePicker()..result = [file];
+    final gateway = NotesTransferGateway(pickJsonFiles: picker.call);
 
     await expectLater(
-      const NotesTransferGateway().pickJsonText(),
+      gateway.pickJsonText(),
       throwsA(
         isA<FormatException>().having(
           (error) => error.message,
@@ -180,15 +258,17 @@ void main() {
         ),
       ),
     );
+    expect(file.lengthCalls, 1);
+    expect(file.readAsBytesCalls, 1);
   });
 
   test('platform picker exceptions are replaced with safe user copy', () async {
-    final picker = _FakeFilePicker()
+    final picker = _FakeJsonFilePicker()
       ..error = StateError(r'plugin leaked C:\private\backup.json');
-    FilePicker.platform = picker;
+    final gateway = NotesTransferGateway(pickJsonFiles: picker.call);
 
     await expectLater(
-      const NotesTransferGateway().pickJsonText(),
+      gateway.pickJsonText(),
       throwsA(
         isA<FormatException>()
             .having(
@@ -208,17 +288,15 @@ void main() {
   test(
     'platform picker converts invalid input into readable format errors',
     () async {
-      final picker = _FakeFilePicker();
-      FilePicker.platform = picker;
-      const gateway = NotesTransferGateway();
+      final picker = _FakeJsonFilePicker();
+      final gateway = NotesTransferGateway(pickJsonFiles: picker.call);
 
-      picker.result = FilePickerResult([
-        PlatformFile(
+      picker.result = [
+        _FakePlatformFile.memory(
           name: 'backup.json',
-          size: 2,
           bytes: Uint8List.fromList([0xC3, 0x28]),
         ),
-      ]);
+      ];
       await expectLater(
         gateway.pickJsonText(),
         throwsA(
@@ -230,9 +308,9 @@ void main() {
         ),
       );
 
-      picker.result = FilePickerResult([
-        PlatformFile(name: 'backup.json', size: 5),
-      ]);
+      picker.result = [
+        _FakePlatformFile.unreadable(name: 'backup.json', reportedLength: 5),
+      ];
       await expectLater(
         gateway.pickJsonText(),
         throwsA(
@@ -922,33 +1000,102 @@ class _FakeNotesTransferGateway extends NotesTransferGateway {
   }
 }
 
-class _FakeFilePicker extends FilePicker {
-  FilePickerResult? result;
+class _FakeJsonFilePicker {
+  List<PlatformFile>? result;
   Object? error;
   FileType? type;
   List<String>? allowedExtensions;
-  bool? allowMultiple;
 
-  @override
-  Future<FilePickerResult?> pickFiles({
-    String? dialogTitle,
-    String? initialDirectory,
-    FileType type = FileType.any,
-    List<String>? allowedExtensions,
-    Function(FilePickerStatus)? onFileLoading,
-    bool allowCompression = true,
-    int compressionQuality = 30,
-    bool allowMultiple = false,
-    bool withData = false,
-    bool withReadStream = false,
-    bool lockParentWindow = false,
-    bool readSequential = false,
+  Future<List<PlatformFile>?> call({
+    required FileType type,
+    required List<String> allowedExtensions,
   }) async {
     if (error case final error?) throw error;
     this.type = type;
     this.allowedExtensions = allowedExtensions;
-    this.allowMultiple = allowMultiple;
     return result;
+  }
+}
+
+final class _FakePlatformFile extends PlatformFile {
+  _FakePlatformFile.memory({
+    required this.name,
+    required Uint8List bytes,
+    int? reportedLength,
+  }) : _bytes = bytes,
+       _reportedLength = reportedLength ?? bytes.length,
+       _readError = null,
+       uri = Uri(scheme: 'memory', path: '/$name');
+
+  _FakePlatformFile.path({
+    required this.name,
+    required String path,
+    int? reportedLength,
+  }) : _bytes = null,
+       _reportedLength = reportedLength,
+       _readError = null,
+       uri = Uri.file(path, windows: Platform.isWindows);
+
+  _FakePlatformFile.unreadable({
+    required this.name,
+    required int reportedLength,
+  }) : _bytes = null,
+       _reportedLength = reportedLength,
+       _readError = StateError('Unreadable fake platform file'),
+       uri = Uri(scheme: 'memory', path: '/$name');
+
+  @override
+  final String name;
+
+  @override
+  final Uri uri;
+
+  final Uint8List? _bytes;
+  final int? _reportedLength;
+  final Object? _readError;
+
+  int lengthCalls = 0;
+  int readAsBytesCalls = 0;
+
+  @override
+  XFile get xFile {
+    final bytes = _bytes;
+    if (bytes != null) {
+      return XFile.fromData(
+        bytes,
+        name: name,
+        length: bytes.length,
+        mimeType: 'application/json',
+      );
+    }
+    final filePath = path;
+    return XFile(filePath ?? uri.toString(), name: name);
+  }
+
+  @override
+  Future<int> length() async {
+    lengthCalls += 1;
+    final reportedLength = _reportedLength;
+    if (reportedLength != null) return reportedLength;
+    final filePath = path;
+    if (filePath == null) throw StateError('Fake file has no readable path');
+    return File(filePath).length();
+  }
+
+  @override
+  Future<Uint8List> readAsBytes() async {
+    readAsBytesCalls += 1;
+    if (_readError case final error?) throw error;
+    final bytes = _bytes;
+    if (bytes != null) return bytes;
+    final filePath = path;
+    if (filePath == null) throw StateError('Fake file has no readable path');
+    return File(filePath).readAsBytes();
+  }
+
+  @override
+  Stream<Uint8List> readAsByteStream() async* {
+    yield await readAsBytes();
   }
 }
 
