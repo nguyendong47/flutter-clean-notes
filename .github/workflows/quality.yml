@@ -179,6 +179,8 @@ jobs:
           flutter test --no-pub --concurrency=1
           test/features/notes/data/datasources/local_note_datasource_test.dart
           test/features/notes/data/datasources/local_note_datasource_migration_test.dart
+          test/features/notes/data/datasources/reminder_outbox_datasource_test.dart
+          test/features/notes/data/reminder_outbox_process_death_test.dart
 
       - name: Build Windows release
         run: flutter build windows --release --no-pub
