@@ -73,6 +73,7 @@ class _ExistingNoteRoutePageState extends ConsumerState<ExistingNoteRoutePage> {
               icon: Icons.error_outline_rounded,
               onClose: widget.onClose,
               onRetry: () => ref.invalidate(notesProvider),
+              announceTitle: true,
             ),
             data: (notes) => _notFound(),
           );
@@ -114,6 +115,7 @@ class _RouteStateScaffold extends StatelessWidget {
     super.key,
     this.loading = false,
     this.onRetry,
+    this.announceTitle = false,
   });
 
   final String title;
@@ -122,6 +124,7 @@ class _RouteStateScaffold extends StatelessWidget {
   final VoidCallback onClose;
   final bool loading;
   final VoidCallback? onRetry;
+  final bool announceTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -155,11 +158,16 @@ class _RouteStateScaffold extends StatelessWidget {
                         else
                           Icon(icon, size: 48, color: colorScheme.primary),
                         const SizedBox(height: 20),
-                        Text(
-                          title,
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w800),
+                        Semantics(
+                          container: true,
+                          header: true,
+                          liveRegion: announceTitle,
+                          child: Text(
+                            title,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Text(

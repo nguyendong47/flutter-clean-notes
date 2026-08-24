@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_clean_notes/app/widgets/aurora_background.dart';
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/library_segmented_control.dart';
@@ -53,6 +54,9 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
     final selectedNotes = ref.watch(
       notesByStatusProvider(_statusFor(_section)),
     );
+    final supportsReminderScheduling = ref
+        .watch(noteReminderGatewayProvider)
+        .supportsScheduling;
     final visibleNotes = notesState.hasError && notesState.hasValue
         ? selectedNotes
               .where((note) => !_committedDeletedNoteIds.contains(note.id))
@@ -69,11 +73,15 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               _ContentSliver(
-                child: Text(
-                  'Library',
-                  key: const Key('notes-library-heading'),
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
+                child: Semantics(
+                  header: true,
+                  namesRoute: true,
+                  child: Text(
+                    'Library',
+                    key: const Key('notes-library-heading'),
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ),
@@ -110,6 +118,7 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
                     onTrash: _trash,
                     onRestore: _restore,
                     onDelete: _requestDelete,
+                    supportsReminderScheduling: supportsReminderScheduling,
                   ),
               ],
               const SliverPadding(
@@ -525,11 +534,14 @@ class _LibraryEmptyState extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  content.title,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+                Semantics(
+                  header: true,
+                  child: Text(
+                    content.title,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -541,8 +553,8 @@ class _LibraryEmptyState extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 18),
-                SizedBox(
-                  height: 48,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
                   child: FilledButton(
                     onPressed: onShowNotes,
                     child: Text(content.action),

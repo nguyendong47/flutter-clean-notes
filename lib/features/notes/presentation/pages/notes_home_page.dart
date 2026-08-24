@@ -9,6 +9,7 @@ import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/widgets/aurora_background.dart';
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/glass_note_card.dart';
@@ -54,6 +55,9 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
     final homeNotes = ref.watch(homeNotesProvider);
     final tags = ref.watch(homeTagsProvider);
     final selectedTag = ref.watch(selectedTagProvider);
+    final supportsReminderScheduling = ref
+        .watch(noteReminderGatewayProvider)
+        .supportsScheduling;
     final pinned = homeNotes.where((note) => note.isPinned).toList();
     final unpinned = homeNotes.where((note) => !note.isPinned).toList();
     final hasVisibleData = notesState.hasValue;
@@ -95,6 +99,7 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
                     onTrash: _trash,
                     onRestore: _restore,
                     onDelete: _delete,
+                    supportsReminderScheduling: supportsReminderScheduling,
                   ),
                 ),
               if (hasVisibleData && pinned.isNotEmpty)
@@ -106,6 +111,7 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
               else if (homeNotes.isEmpty)
                 NotesEmptyState(
                   onCreate: _createNote,
+                  supportsReminderScheduling: supportsReminderScheduling,
                   title: notesState.requireValue.isEmpty
                       ? 'Create your first note'
                       : 'No active notes',
@@ -120,6 +126,7 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
                   onTrash: _trash,
                   onRestore: _restore,
                   onDelete: _delete,
+                  supportsReminderScheduling: supportsReminderScheduling,
                 ),
               const SliverPadding(
                 key: Key('notes-home-bottom-padding'),
@@ -332,10 +339,13 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                greeting,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
+              Semantics(
+                header: true,
+                child: Text(
+                  greeting,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               const SizedBox(height: 4),
@@ -509,6 +519,7 @@ class _PinnedSection extends StatelessWidget {
     required this.onTrash,
     required this.onRestore,
     required this.onDelete,
+    required this.supportsReminderScheduling,
     super.key,
   });
 
@@ -519,6 +530,7 @@ class _PinnedSection extends StatelessWidget {
   final Future<void> Function(Note note) onTrash;
   final Future<void> Function(Note note) onRestore;
   final Future<void> Function(Note note) onDelete;
+  final bool supportsReminderScheduling;
 
   @override
   Widget build(BuildContext context) {
@@ -547,6 +559,7 @@ class _PinnedSection extends StatelessWidget {
           GlassNoteCard(
             key: ValueKey('pinned-note-card-${notes[index].id}'),
             note: notes[index],
+            supportsReminderScheduling: supportsReminderScheduling,
             onOpen: () => onOpen(notes[index]),
             onTogglePin: () => onTogglePin(notes[index]),
             onArchive: () => onArchive(notes[index]),

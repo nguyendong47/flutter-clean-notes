@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_clean_notes/app/widgets/aurora_background.dart';
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/search_focus_request.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
@@ -72,6 +73,9 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
     final tags = ref.watch(homeTagsProvider);
     final selectedTag = ref.watch(selectedTagProvider);
     final sort = ref.watch(sortOrderProvider);
+    final supportsReminderScheduling = ref
+        .watch(noteReminderGatewayProvider)
+        .supportsScheduling;
     final viewState = _resolveSearchViewState(
       notesState: notesState,
       query: query,
@@ -112,10 +116,13 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
               },
               itemBuilder: (context, index) {
                 if (index == 0) {
-                  return Text(
-                    'Search',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
+                  return Semantics(
+                    header: true,
+                    namesRoute: true,
+                    child: Text(
+                      'Search',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(fontWeight: FontWeight.w800),
                     ),
                   );
                 }
@@ -155,6 +162,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
                     width: double.infinity,
                     child: GlassNoteCard(
                       note: note,
+                      supportsReminderScheduling: supportsReminderScheduling,
                       onOpen: () => _openNote(note),
                       onTogglePin: () => _togglePin(note),
                       onArchive: () => _archive(note),
@@ -552,8 +560,9 @@ class _InitialErrorState extends StatelessWidget {
       icon: Icons.cloud_off_outlined,
       title: 'Could not load notes',
       body: 'Please try again in a moment.',
-      action: SizedBox(
-        height: 48,
+      announceTitle: true,
+      action: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
         child: FilledButton(onPressed: onRetry, child: const Text('Try again')),
       ),
     );
@@ -577,31 +586,40 @@ class _CachedErrorNotice extends StatelessWidget {
         padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 8, 8),
         blur: 14,
         opacity: 0.78,
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ExcludeSemantics(
-              child: Icon(
-                Icons.cloud_off_outlined,
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Could not refresh notes. Showing saved notes.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ExcludeSemantics(
+                  child: Icon(
+                    Icons.cloud_off_outlined,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Could not refresh notes. Showing saved notes.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            SizedBox(
-              height: 48,
-              child: TextButton(
-                key: const Key('notes-search-cached-error-retry'),
-                onPressed: onRetry,
-                child: const Text('Retry'),
+            const SizedBox(height: 8),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: TextButton(
+                  key: const Key('notes-search-cached-error-retry'),
+                  onPressed: onRetry,
+                  child: const Text('Retry'),
+                ),
               ),
             ),
           ],
@@ -620,8 +638,8 @@ class _NoNotesState extends StatelessWidget {
       icon: Icons.note_add_outlined,
       title: 'No notes yet',
       body: 'Create a note, then come back here to find it quickly.',
-      action: SizedBox(
-        height: 48,
+      action: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
         child: FilledButton.icon(
           onPressed: () => context.push('/note/new'),
           icon: const Icon(Icons.add),
@@ -718,16 +736,16 @@ class _NoMatchesState extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: [
-          SizedBox(
-            height: 48,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
             child: FilledButton(
               onPressed: onClear,
               child: const Text('Clear search'),
             ),
           ),
           if (hasFilters)
-            SizedBox(
-              height: 48,
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
               child: TextButton(
                 onPressed: onResetFilters,
                 child: const Text('Reset filters'),
@@ -772,12 +790,14 @@ class _CenteredState extends StatelessWidget {
     required this.title,
     required this.body,
     required this.action,
+    this.announceTitle = false,
   });
 
   final IconData icon;
   final String title;
   final String body;
   final Widget action;
+  final bool announceTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -790,11 +810,16 @@ class _CenteredState extends StatelessWidget {
             child: Icon(icon, size: 40, color: theme.colorScheme.primary),
           ),
           const SizedBox(height: 16),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+          Semantics(
+            container: true,
+            header: true,
+            liveRegion: announceTitle,
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           const SizedBox(height: 8),

@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_search_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/search_focus_request.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/glass_note_card.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../helpers/fake_note_reminder_gateway.dart';
 import '../../../helpers/in_memory_note_repository.dart';
 import '../../../helpers/note_fixtures.dart';
 
@@ -28,6 +30,9 @@ void main() {
     expect(find.text('Suggested tags'), findsOneWidget);
     expect(find.byKey(const Key('suggested-tag-work')), findsOneWidget);
     expect(find.text(sampleNote.title), findsNothing);
+    final heading = tester.getSemantics(find.text('Search')).getSemanticsData();
+    expect(heading.flagsCollection.isHeader, isTrue);
+    expect(heading.flagsCollection.namesRoute, isTrue);
 
     final fieldSemantics = find.bySemanticsLabel(
       RegExp(r'^Search notes and tags$'),
@@ -871,6 +876,113 @@ void main() {
     expect(find.text('Search your thoughts'), findsNothing);
   });
 
+  testWidgets('unsupported search result exposes stored reminder metadata', (
+    tester,
+  ) async {
+    await _pumpSearch(
+      tester,
+      repository: InMemoryNoteRepository.seeded(sampleNotes),
+      reminderGateway: FakeNoteReminderGateway(supportsScheduling: false),
+    );
+    await tester.enterText(
+      find.byKey(const Key('notes-search-field')),
+      'Aurora',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Stored reminder · Aug 18, 9:00 AM'), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(find.bySemanticsLabel('Open note Aurora design'))
+          .value,
+      contains(
+        'Stored reminder date Aug 18, 9:00 AM. '
+        'Notifications unavailable on this device',
+      ),
+    );
+  });
+
+  for (final textScale in [2.0, 3.0]) {
+    testWidgets(
+      'critical search CTAs reflow at 320x640 with ${textScale}x text',
+      (tester) async {
+        final failed = InMemoryNoteRepository.seeded(const [])
+          ..getError = StateError('read failed');
+        await _pumpSearch(
+          tester,
+          repository: failed,
+          size: const Size(320, 640),
+          textScaler: TextScaler.linear(textScale),
+        );
+        await tester.ensureVisible(find.text('Could not load notes'));
+        await tester.pump();
+        final errorTitleFinder = find.bySemanticsLabel('Could not load notes');
+        expect(errorTitleFinder, findsOneWidget);
+        final errorTitle = tester
+            .getSemantics(errorTitleFinder)
+            .getSemanticsData();
+        expect(errorTitle.flagsCollection.isHeader, isTrue);
+        expect(errorTitle.flagsCollection.isLiveRegion, isTrue);
+        final retry = find.widgetWithText(FilledButton, 'Try again');
+        await _revealInSearch(tester, retry);
+        expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
+        if (textScale == 3) {
+          expect(tester.getSize(retry).height, greaterThan(48));
+        }
+        expect(
+          tester
+              .getSemantics(retry)
+              .getSemanticsData()
+              .hasAction(SemanticsAction.tap),
+          isTrue,
+        );
+        expect(tester.takeException(), isNull, reason: 'error ${textScale}x');
+
+        await _pumpSearch(
+          tester,
+          repository: InMemoryNoteRepository.seeded(const []),
+          size: const Size(320, 640),
+          textScaler: TextScaler.linear(textScale),
+        );
+        final create = find.widgetWithText(FilledButton, 'Create note');
+        await _revealInSearch(tester, create);
+        expect(tester.getSize(create).height, greaterThanOrEqualTo(48));
+        if (textScale == 3) {
+          expect(tester.getSize(create).height, greaterThan(48));
+        }
+        expect(tester.takeException(), isNull, reason: 'empty ${textScale}x');
+
+        final cached = InMemoryNoteRepository.seeded(sampleNotes);
+        final container = await _pumpSearch(
+          tester,
+          repository: cached,
+          size: const Size(320, 640),
+          textScaler: TextScaler.linear(textScale),
+        );
+        cached.getError = StateError('refresh failed');
+        container.invalidate(notesProvider);
+        await expectLater(
+          container.read(notesProvider.future),
+          throwsStateError,
+        );
+        await tester.pumpAndSettle();
+        final recovery = find.byKey(
+          const Key('notes-search-cached-error-retry'),
+        );
+        await _revealInSearch(tester, recovery);
+        expect(tester.getSize(recovery).height, greaterThanOrEqualTo(48));
+        if (textScale == 3) {
+          expect(tester.getSize(recovery).height, greaterThan(48));
+        }
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'recovery ${textScale}x',
+        );
+      },
+    );
+  }
+
   testWidgets('adapts at 320 with scaled text in both Aurora themes', (
     tester,
   ) async {
@@ -1032,6 +1144,7 @@ Future<ProviderContainer> _pumpSearch(
   bool disableAnimations = false,
   EdgeInsets viewInsets = EdgeInsets.zero,
   ValueChanged<Note>? onOpenNote,
+  FakeNoteReminderGateway? reminderGateway,
   bool settle = true,
 }) async {
   tester.view.physicalSize = size;
@@ -1042,7 +1155,11 @@ Future<ProviderContainer> _pumpSearch(
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        noteRepositoryProvider.overrideWithValue(repository),
+        if (reminderGateway != null)
+          noteReminderGatewayProvider.overrideWithValue(reminderGateway),
+      ],
       child: MaterialApp(
         theme: AuroraTheme.light(),
         darkTheme: AuroraTheme.dark(),
@@ -1064,6 +1181,14 @@ Future<ProviderContainer> _pumpSearch(
   return ProviderScope.containerOf(
     tester.element(find.byType(NotesSearchPage)),
   );
+}
+
+Future<void> _revealInSearch(WidgetTester tester, Finder target) async {
+  for (var attempt = 0; attempt < 8 && target.evaluate().isEmpty; attempt++) {
+    await tester.drag(find.byType(ListView), const Offset(0, -160));
+    await tester.pump();
+  }
+  expect(target, findsOneWidget);
 }
 
 Future<void> _pumpShell(

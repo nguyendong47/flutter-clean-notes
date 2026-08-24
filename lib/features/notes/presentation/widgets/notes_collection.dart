@@ -14,6 +14,7 @@ class NotesCollection extends StatelessWidget {
     required this.onTrash,
     required this.onRestore,
     required this.onDelete,
+    required this.supportsReminderScheduling,
     super.key,
   });
 
@@ -24,6 +25,7 @@ class NotesCollection extends StatelessWidget {
   final Future<void> Function(Note note) onTrash;
   final Future<void> Function(Note note) onRestore;
   final Future<void> Function(Note note) onDelete;
+  final bool supportsReminderScheduling;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +47,7 @@ class NotesCollection extends StatelessWidget {
               return GlassNoteCard(
                 key: ValueKey('note-card-${note.id ?? note.title}'),
                 note: note,
+                supportsReminderScheduling: supportsReminderScheduling,
                 onOpen: () => onOpen(note),
                 onTogglePin: () => onTogglePin(note),
                 onArchive: () => onArchive(note),

@@ -7,6 +7,7 @@ import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_home_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_state_view.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +15,7 @@ import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../helpers/in_memory_note_repository.dart';
+import '../../../helpers/fake_note_reminder_gateway.dart';
 import '../../../helpers/note_fixtures.dart';
 
 void main() {
@@ -31,6 +33,8 @@ void main() {
 
     final pinnedSection = find.byKey(const Key('pinned-notes-section'));
     final collection = find.byKey(const Key('notes-collection'));
+    final greeting = find.textContaining(RegExp(r'^Good '));
+    expect(tester.getSemantics(greeting).flagsCollection.isHeader, isTrue);
     expect(
       find.descendant(of: pinnedSection, matching: find.text(sampleNote.title)),
       findsOneWidget,
@@ -160,6 +164,40 @@ void main() {
     expect(created, isTrue);
   });
 
+  testWidgets(
+    'unsupported reminders keep empty copy and stored metadata honest',
+    (tester) async {
+      final unsupported = FakeNoteReminderGateway(supportsScheduling: false);
+      await _pumpHome(
+        tester,
+        repository: InMemoryNoteRepository.seeded(const []),
+        reminderGateway: unsupported,
+      );
+
+      expect(
+        find.textContaining(RegExp('reminder', caseSensitive: false)),
+        findsNothing,
+      );
+
+      await _pumpHome(
+        tester,
+        repository: InMemoryNoteRepository.seeded(sampleNotes),
+        reminderGateway: unsupported,
+      );
+
+      expect(find.text('Stored reminder · Aug 18, 9:00 AM'), findsOneWidget);
+      expect(
+        tester
+            .getSemantics(find.bySemanticsLabel('Open note Aurora design'))
+            .value,
+        contains(
+          'Stored reminder date Aug 18, 9:00 AM. '
+          'Notifications unavailable on this device',
+        ),
+      );
+    },
+  );
+
   testWidgets('active-empty state does not claim the notebook is empty', (
     tester,
   ) async {
@@ -192,12 +230,61 @@ void main() {
     expect(find.textContaining('connection'), findsNothing);
     final retry = find.widgetWithText(FilledButton, 'Try again');
     expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
+    final errorTitle = tester
+        .getSemantics(find.bySemanticsLabel('Could not load notes'))
+        .getSemanticsData();
+    expect(errorTitle.flagsCollection.isHeader, isTrue);
+    expect(errorTitle.flagsCollection.isLiveRegion, isTrue);
+    expect(
+      tester
+          .getSemantics(retry)
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
 
     repository.getError = null;
     await tester.tap(retry);
     await tester.pumpAndSettle();
     expect(find.byType(NotesEmptyState), findsOneWidget);
   });
+
+  for (final textScale in [2.0, 3.0]) {
+    testWidgets(
+      'critical home CTAs reflow at 320x640 with ${textScale}x text',
+      (tester) async {
+        await _pumpHome(
+          tester,
+          repository: InMemoryNoteRepository.seeded(const []),
+          size: const Size(320, 640),
+          textScaler: TextScaler.linear(textScale),
+        );
+        final create = find.widgetWithText(FilledButton, 'Create note');
+        await _revealInHome(tester, create);
+        expect(tester.getSize(create).height, greaterThanOrEqualTo(48));
+        if (textScale == 3) {
+          expect(tester.getSize(create).height, greaterThan(48));
+        }
+        expect(tester.takeException(), isNull, reason: 'empty ${textScale}x');
+
+        final failed = InMemoryNoteRepository.seeded(const [])
+          ..getError = StateError('read failed');
+        await _pumpHome(
+          tester,
+          repository: failed,
+          size: const Size(320, 640),
+          textScaler: TextScaler.linear(textScale),
+        );
+        final retry = find.widgetWithText(FilledButton, 'Try again');
+        await _revealInHome(tester, retry);
+        expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
+        if (textScale == 3) {
+          expect(tester.getSize(retry).height, greaterThan(48));
+        }
+        expect(tester.takeException(), isNull, reason: 'error ${textScale}x');
+      },
+    );
+  }
 
   testWidgets(
     'failed retry without cached notes announces a sanitized load error',
@@ -812,6 +899,7 @@ Future<ProviderContainer> _pumpHome(
   TextScaler textScaler = TextScaler.noScaling,
   ThemeMode themeMode = ThemeMode.light,
   ThemeModeStore? themeStore,
+  FakeNoteReminderGateway? reminderGateway,
   VoidCallback? onOpenSearch,
   VoidCallback? onCreateNote,
   bool settle = true,
@@ -826,6 +914,8 @@ Future<ProviderContainer> _pumpHome(
     ProviderScope(
       overrides: [
         noteRepositoryProvider.overrideWithValue(repository),
+        if (reminderGateway != null)
+          noteReminderGatewayProvider.overrideWithValue(reminderGateway),
         if (themeStore != null)
           themeModeStoreProvider.overrideWithValue(themeStore),
       ],
@@ -849,6 +939,14 @@ Future<ProviderContainer> _pumpHome(
   }
 
   return ProviderScope.containerOf(tester.element(find.byType(NotesHomePage)));
+}
+
+Future<void> _revealInHome(WidgetTester tester, Finder target) async {
+  for (var attempt = 0; attempt < 8 && target.evaluate().isEmpty; attempt++) {
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -160));
+    await tester.pump();
+  }
+  expect(target, findsOneWidget);
 }
 
 void _expectStableChrome() {

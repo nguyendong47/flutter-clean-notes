@@ -41,6 +41,11 @@ void main() {
     await _pumpLibrary(tester, repository: repository);
 
     _expectStableChrome();
+    final heading = tester
+        .getSemantics(find.byKey(const Key('notes-library-heading')))
+        .getSemanticsData();
+    expect(heading.flagsCollection.isHeader, isTrue);
+    expect(heading.flagsCollection.namesRoute, isTrue);
     final control = tester.widget<LibrarySegmentedControl>(
       find.byType(LibrarySegmentedControl),
     );
@@ -64,6 +69,32 @@ void main() {
     expect(find.text('Archived launch notes'), findsOneWidget);
     expect(find.text('Discarded draft'), findsNothing);
     expect(repository.cleanupCalls, 0);
+  });
+
+  testWidgets('unsupported library card exposes stored reminder metadata', (
+    tester,
+  ) async {
+    final archived = sampleNotes[3].copyWith(
+      reminder: DateTime.utc(2026, 8, 18, 9),
+    );
+    await _pumpLibrary(
+      tester,
+      repository: _ControlledNoteRepository.seeded([archived]),
+      reminderGateway: FakeNoteReminderGateway(supportsScheduling: false),
+    );
+
+    expect(find.text('Stored reminder · Aug 18, 9:00 AM'), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(
+            find.bySemanticsLabel('Open note Archived launch notes'),
+          )
+          .value,
+      contains(
+        'Stored reminder date Aug 18, 9:00 AM. '
+        'Notifications unavailable on this device',
+      ),
+    );
   });
 
   testWidgets('switches to Trash in place without route or scroll reset', (
@@ -678,12 +709,61 @@ void main() {
     expect(find.byType(NotesErrorState), findsOneWidget);
     final retry = find.widgetWithText(FilledButton, 'Try again');
     expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
+    final errorTitle = tester
+        .getSemantics(find.bySemanticsLabel('Could not load notes'))
+        .getSemanticsData();
+    expect(errorTitle.flagsCollection.isHeader, isTrue);
+    expect(errorTitle.flagsCollection.isLiveRegion, isTrue);
+    expect(
+      tester
+          .getSemantics(retry)
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
 
     failed.getError = null;
     await tester.tap(retry);
     await tester.pumpAndSettle();
     expect(find.text('No archived notes'), findsOneWidget);
   });
+
+  for (final textScale in [2.0, 3.0]) {
+    testWidgets(
+      'critical Library CTAs reflow at 320x640 with ${textScale}x text',
+      (tester) async {
+        await _pumpLibrary(
+          tester,
+          repository: _ControlledNoteRepository.seeded(const []),
+          size: const Size(320, 640),
+          textScaler: TextScaler.linear(textScale),
+        );
+        final browse = find.widgetWithText(FilledButton, 'Browse notes');
+        await _revealInLibrary(tester, browse);
+        expect(tester.getSize(browse).height, greaterThanOrEqualTo(48));
+        if (textScale == 3) {
+          expect(tester.getSize(browse).height, greaterThan(48));
+        }
+        expect(tester.takeException(), isNull, reason: 'empty ${textScale}x');
+
+        final failed = _ControlledNoteRepository.seeded(const [])
+          ..getError = StateError('read failed');
+        await _pumpLibrary(
+          tester,
+          repository: failed,
+          size: const Size(320, 640),
+          textScaler: TextScaler.linear(textScale),
+        );
+        final retry = find.widgetWithText(FilledButton, 'Try again');
+        await _revealInLibrary(tester, retry);
+        expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
+        if (textScale == 3) {
+          expect(tester.getSize(retry).height, greaterThan(48));
+        }
+        expect(tester.takeException(), isNull, reason: 'error ${textScale}x');
+      },
+    );
+  }
 
   testWidgets(
     'cached refresh Retry is a semantic keyboard action and keeps cards',
@@ -990,6 +1070,14 @@ Future<ProviderContainer> _pumpLibrary(
   return ProviderScope.containerOf(
     tester.element(find.byType(NotesLibraryPage)),
   );
+}
+
+Future<void> _revealInLibrary(WidgetTester tester, Finder target) async {
+  for (var attempt = 0; attempt < 8 && target.evaluate().isEmpty; attempt++) {
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -160));
+    await tester.pump();
+  }
+  expect(target, findsOneWidget);
 }
 
 void _expectStableChrome() {

@@ -212,6 +212,7 @@ Future<void> _pumpCard(
   Future<void> Function()? onTrash,
   Future<void> Function()? onRestore,
   Future<void> Function()? onDelete,
+  bool supportsReminderScheduling = true,
 }) async {
   tester.view.physicalSize = const Size(360, 900);
   tester.view.devicePixelRatio = 1;
@@ -232,6 +233,7 @@ Future<void> _pumpCard(
             child: GlassNoteCard(
               key: const Key('tested-glass-note-card'),
               note: note,
+              supportsReminderScheduling: supportsReminderScheduling,
               onOpen: onOpen ?? () {},
               onTogglePin: onTogglePin ?? _complete,
               onArchive: onArchive ?? _complete,
@@ -271,6 +273,7 @@ Future<void> _pumpCards(WidgetTester tester, List<Note> notes) async {
                     child: GlassNoteCard(
                       key: ValueKey('semantic-note-${note.id}'),
                       note: note,
+                      supportsReminderScheduling: true,
                       onOpen: () {},
                       onTogglePin: _complete,
                       onArchive: _complete,

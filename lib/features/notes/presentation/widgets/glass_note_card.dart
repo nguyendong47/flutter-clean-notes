@@ -16,6 +16,7 @@ class GlassNoteCard extends StatefulWidget {
     required this.onTrash,
     required this.onRestore,
     required this.onDelete,
+    required this.supportsReminderScheduling,
     super.key,
   });
 
@@ -26,6 +27,7 @@ class GlassNoteCard extends StatefulWidget {
   final Future<void> Function() onTrash;
   final Future<void> Function() onRestore;
   final Future<void> Function() onDelete;
+  final bool supportsReminderScheduling;
 
   @override
   State<GlassNoteCard> createState() => _GlassNoteCardState();
@@ -64,6 +66,7 @@ class _GlassNoteCardState extends State<GlassNoteCard> {
       preview,
       _dateFormat,
       _reminderFormat,
+      widget.supportsReminderScheduling,
     );
 
     return DecoratedBox(
@@ -105,6 +108,8 @@ class _GlassNoteCardState extends State<GlassNoteCard> {
                             preview: preview,
                             dateFormat: _dateFormat,
                             reminderFormat: _reminderFormat,
+                            supportsReminderScheduling:
+                                widget.supportsReminderScheduling,
                           ),
                         ),
                       ),
@@ -211,6 +216,7 @@ class _CardContent extends StatelessWidget {
     required this.preview,
     required this.dateFormat,
     required this.reminderFormat,
+    required this.supportsReminderScheduling,
   });
 
   final Note note;
@@ -218,6 +224,7 @@ class _CardContent extends StatelessWidget {
   final String preview;
   final DateFormat dateFormat;
   final DateFormat reminderFormat;
+  final bool supportsReminderScheduling;
 
   @override
   Widget build(BuildContext context) {
@@ -281,8 +288,12 @@ class _CardContent extends StatelessWidget {
             ),
             if (note.reminder case final reminder?)
               _Metadata(
-                icon: Icons.notifications_none,
-                label: reminderFormat.format(reminder),
+                icon: supportsReminderScheduling
+                    ? Icons.notifications_none
+                    : Icons.notifications_off_outlined,
+                label: supportsReminderScheduling
+                    ? reminderFormat.format(reminder)
+                    : 'Stored reminder · ${reminderFormat.format(reminder)}',
               ),
           ],
         ),
@@ -359,6 +370,7 @@ String _noteSemanticValue(
   String preview,
   DateFormat dateFormat,
   DateFormat reminderFormat,
+  bool supportsReminderScheduling,
 ) {
   final visibleTags = note.tags.take(2).toList(growable: false);
   final hiddenTagCount = note.tags.length - visibleTags.length;
@@ -370,7 +382,11 @@ String _noteSemanticValue(
     if (note.isPinned) 'Pinned',
     'Created ${dateFormat.format(note.createdAt)}',
     if (note.reminder case final reminder?)
-      'Reminder ${reminderFormat.format(reminder)}',
+      if (supportsReminderScheduling)
+        'Reminder ${reminderFormat.format(reminder)}'
+      else
+        'Stored reminder date ${reminderFormat.format(reminder)}. '
+            'Notifications unavailable on this device',
   ].join('. ');
 }
 

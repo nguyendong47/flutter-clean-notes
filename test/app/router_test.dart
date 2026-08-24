@@ -300,6 +300,14 @@ void main() {
       final retry = find.byKey(const Key('existing-note-retry'));
       expect(retry, findsOneWidget);
       expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
+      final errorTitle = tester
+          .getSemantics(find.bySemanticsLabel('Could not open note'))
+          .getSemanticsData();
+      expect(errorTitle.flagsCollection.isHeader, isTrue);
+      expect(errorTitle.flagsCollection.isLiveRegion, isTrue);
+      final routeTitle = tester.getSemantics(find.text('Notes'));
+      expect(routeTitle.flagsCollection.isHeader, isTrue);
+      expect(routeTitle.flagsCollection.namesRoute, isTrue);
       failing.getError = null;
       await tester.tap(retry);
       await tester.pumpAndSettle();

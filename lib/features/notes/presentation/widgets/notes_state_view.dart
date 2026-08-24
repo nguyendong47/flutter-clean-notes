@@ -73,10 +73,12 @@ class NotesEmptyState extends StatelessWidget {
     required this.onCreate,
     super.key,
     this.title = 'Create your first note',
+    this.supportsReminderScheduling = true,
   });
 
   final VoidCallback onCreate;
   final String title;
+  final bool supportsReminderScheduling;
 
   @override
   Widget build(BuildContext context) {
@@ -94,24 +96,29 @@ class NotesEmptyState extends StatelessWidget {
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: 12),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            Semantics(
+              header: true,
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
             ),
             const SizedBox(height: 6),
             Text(
-              'Capture an idea, plan, or reminder and keep it close.',
+              supportsReminderScheduling
+                  ? 'Capture an idea, plan, or reminder and keep it close.'
+                  : 'Capture an idea or plan and keep it close.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 18),
-            SizedBox(
-              height: 48,
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
               child: FilledButton.icon(
                 onPressed: onCreate,
                 icon: const Icon(Icons.add),
@@ -146,12 +153,17 @@ class NotesErrorState extends StatelessWidget {
               color: Theme.of(context).colorScheme.error,
             ),
             const SizedBox(height: 12),
-            Text(
-              'Could not load notes',
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            Semantics(
+              container: true,
+              header: true,
+              liveRegion: true,
+              child: Text(
+                'Could not load notes',
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
             ),
             const SizedBox(height: 6),
             Text(
@@ -162,8 +174,8 @@ class NotesErrorState extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
-            SizedBox(
-              height: 48,
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
               child: FilledButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
