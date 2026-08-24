@@ -69,6 +69,7 @@ final class ReminderCoordinator implements ReminderSyncCoordinator {
   @override
   Future<void> reconcileAtStartup() {
     return _serialize(() async {
+      await _recoverGatewayOnce();
       Object? auditError;
       StackTrace? auditStackTrace;
       if (_gateway.supportsScheduling) {
@@ -82,7 +83,10 @@ final class ReminderCoordinator implements ReminderSyncCoordinator {
       }
 
       try {
-        await _drain(permissionPolicy: ReminderPermissionPolicy.existingOnly);
+        await _drain(
+          permissionPolicy: ReminderPermissionPolicy.existingOnly,
+          recoverGateway: false,
+        );
       } catch (error, stackTrace) {
         auditError ??= error;
         auditStackTrace ??= stackTrace;
@@ -96,7 +100,9 @@ final class ReminderCoordinator implements ReminderSyncCoordinator {
   Future<void> _drain({
     int? noteId,
     required ReminderPermissionPolicy permissionPolicy,
+    bool recoverGateway = true,
   }) async {
+    if (recoverGateway) await _recoverGatewayOnce();
     final attempted = <int>{};
     Object? firstError;
     StackTrace? firstStackTrace;
@@ -120,9 +126,9 @@ final class ReminderCoordinator implements ReminderSyncCoordinator {
           switch (command.operation) {
             case ReminderCommandOperation.schedule:
               final scheduledAt = command.scheduledAt;
-              if (scheduledAt == null || !scheduledAt.isAfter(_now())) {
-                await _gateway.cancel(command.noteId);
-              } else {
+              await _gateway.cancel(command.noteId);
+              if (!await _repository.isCurrent(command.generation)) continue;
+              if (scheduledAt != null && scheduledAt.isAfter(_now())) {
                 await _gateway.schedule(
                   command,
                   permissionPolicy: permissionPolicy,
@@ -145,6 +151,14 @@ final class ReminderCoordinator implements ReminderSyncCoordinator {
 
     if (firstError != null) {
       Error.throwWithStackTrace(firstError, firstStackTrace!);
+    }
+  }
+
+  Future<void> _recoverGatewayOnce() async {
+    if (!_gateway.supportsScheduling) return;
+    final recovery = _gateway;
+    if (recovery is ReminderNotificationRecovery) {
+      await (recovery as ReminderNotificationRecovery).recoverForReminderSync();
     }
   }
 

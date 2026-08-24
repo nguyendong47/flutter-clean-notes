@@ -9,9 +9,11 @@ void main() {
   final now = DateTime.utc(2030, 1, 15, 10);
 
   test('applies and acknowledges a current schedule command', () async {
+    final events = <String>[];
     final repository = _FakeOutboxRepository()
       ..put(_schedule(1, noteId: 7, at: now.add(const Duration(hours: 1))));
-    final gateway = _FakeReminderNotificationGateway();
+    final gateway = _FakeReminderNotificationGateway(events: events)
+      ..nativeGenerations[7] = 0;
     final coordinator = ReminderCoordinator(
       repository: repository,
       gateway: gateway,
@@ -21,12 +23,80 @@ void main() {
     await coordinator.drain();
 
     expect(gateway.scheduled.single.command.generation, 1);
+    expect(events, ['cancel:7', 'schedule:7']);
+    expect(gateway.nativeGenerations, {7: 1});
     expect(
       gateway.scheduled.single.policy,
       ReminderPermissionPolicy.requestIfNeeded,
     );
     expect(repository.commands, isEmpty);
   });
+
+  test(
+    'failed replacement clears native predecessor and keeps successor',
+    () async {
+      final failure = StateError('native replacement failed');
+      final events = <String>[];
+      final successor = _schedule(
+        2,
+        noteId: 7,
+        at: now.add(const Duration(hours: 2)),
+      );
+      final repository = _FakeOutboxRepository()..put(successor);
+      final gateway = _FakeReminderNotificationGateway(events: events)
+        ..nativeGenerations[7] = 1
+        ..scheduleErrors[7] = failure;
+      final coordinator = ReminderCoordinator(
+        repository: repository,
+        gateway: gateway,
+        now: () => now,
+      );
+
+      await expectLater(coordinator.drain(), throwsA(same(failure)));
+
+      expect(events, ['cancel:7', 'schedule:7']);
+      expect(gateway.nativeGenerations, isEmpty);
+      expect(repository.commands, [successor]);
+    },
+  );
+
+  test(
+    'successor created after native cancel skips the stale schedule',
+    () async {
+      final events = <String>[];
+      final repository = _FakeOutboxRepository()
+        ..put(_schedule(1, noteId: 7, at: now.add(const Duration(hours: 1))));
+      final gateway = _FakeReminderNotificationGateway(events: events)
+        ..nativeGenerations[7] = 0;
+      final cancelled = Completer<void>();
+      final releaseCancel = Completer<void>();
+      gateway.cancelHooks[7] = () async {
+        cancelled.complete();
+        await releaseCancel.future;
+      };
+      final coordinator = ReminderCoordinator(
+        repository: repository,
+        gateway: gateway,
+        now: () => now,
+      );
+
+      final drain = coordinator.drain();
+      await cancelled.future;
+      repository.put(
+        _schedule(2, noteId: 7, at: now.add(const Duration(hours: 2))),
+      );
+      gateway.cancelHooks.remove(7);
+      releaseCancel.complete();
+      await drain;
+
+      expect(gateway.scheduled.map((attempt) => attempt.command.generation), [
+        2,
+      ]);
+      expect(events, ['cancel:7', 'cancel:7', 'schedule:7']);
+      expect(gateway.nativeGenerations, {7: 2});
+      expect(repository.commands, isEmpty);
+    },
+  );
 
   test('a failed schedule does not starve a later cancellation', () async {
     final denied = _PermissionDenied();
@@ -41,9 +111,18 @@ void main() {
       now: () => now,
     );
 
-    await expectLater(coordinator.drain(), throwsA(same(denied)));
+    await expectLater(
+      coordinator.drain(
+        permissionPolicy: ReminderPermissionPolicy.existingOnly,
+      ),
+      throwsA(same(denied)),
+    );
 
-    expect(gateway.cancelled, [8]);
+    expect(gateway.cancelled, [7, 8]);
+    expect(
+      gateway.scheduled.single.policy,
+      ReminderPermissionPolicy.existingOnly,
+    );
     expect(repository.commands.map((command) => command.generation), [1]);
   });
 
@@ -114,7 +193,7 @@ void main() {
       );
 
       expect(accepted, isTrue);
-      expect(events, ['persist:7', 'schedule:7']);
+      expect(events, ['persist:7', 'cancel:7', 'schedule:7']);
       expect(
         gateway.scheduled.single.policy,
         ReminderPermissionPolicy.existingOnly,
@@ -144,7 +223,7 @@ void main() {
 
       await coordinator.reconcileAtStartup();
 
-      expect(events, ['pending', 'reconcile', 'schedule:8']);
+      expect(events, ['pending', 'reconcile', 'cancel:8', 'schedule:8']);
       expect(
         gateway.scheduled.single.policy,
         ReminderPermissionPolicy.existingOnly,
@@ -289,8 +368,10 @@ final class _FakeReminderNotificationGateway
   final List<({ReminderCommand command, ReminderPermissionPolicy policy})>
   scheduled = [];
   final List<int> cancelled = [];
+  final Map<int, int> nativeGenerations = {};
   final Map<int, Object> scheduleErrors = {};
   final Map<int, Future<void> Function()> scheduleHooks = {};
+  final Map<int, Future<void> Function()> cancelHooks = {};
   Completer<void>? cancelGate;
   int _concurrentOperations = 0;
   int maxConcurrentOperations = 0;
@@ -299,6 +380,8 @@ final class _FakeReminderNotificationGateway
   Future<void> cancel(int noteId) => _track(() async {
     cancelled.add(noteId);
     events?.add('cancel:$noteId');
+    nativeGenerations.remove(noteId);
+    await cancelHooks[noteId]?.call();
     final gate = cancelGate;
     if (gate != null) await gate.future;
   });
@@ -319,6 +402,7 @@ final class _FakeReminderNotificationGateway
     await scheduleHooks[command.generation]?.call();
     final error = scheduleErrors[command.noteId];
     if (error != null) throw error;
+    nativeGenerations[command.noteId] = command.generation;
   });
 
   Future<void> _track(Future<void> Function() operation) async {

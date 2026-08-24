@@ -27,6 +27,7 @@ NoteReminderGateway noteReminderGateway(Ref ref) {
   final coordinator = ref.watch(reminderCoordinatorProvider);
   return NotificationNoteReminderGateway(
     ref.watch(notificationServiceProvider),
-    synchronize: ({noteId}) => coordinator.drain(noteId: noteId),
+    synchronize: ({required noteId, required permissionPolicy}) =>
+        coordinator.drain(noteId: noteId, permissionPolicy: permissionPolicy),
   );
 }

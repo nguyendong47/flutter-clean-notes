@@ -208,6 +208,12 @@ NoteStatus _statusForMode(NoteMode mode) {
   };
 }
 
+final class NoteReminderEditBaseline {
+  const NoteReminderEditBaseline(this.value);
+
+  final DateTime? value;
+}
+
 @riverpod
 class NotesNotifier extends _$NotesNotifier {
   Future<void> _mutationQueue = Future<void>.value();
@@ -304,12 +310,12 @@ class NotesNotifier extends _$NotesNotifier {
   Future<void> updateNote(
     Note note, {
     DateTime Function()? now,
-    DateTime? persistedReminder,
+    NoteReminderEditBaseline? reminderBaseline,
     bool forceReminderReconciliation = false,
   }) async {
     final requestedNote = _persistedSnapshot(note);
-    var reminderBeforeUpdate = persistedReminder;
-    if (reminderBeforeUpdate == null) {
+    var reminderBeforeUpdate = reminderBaseline?.value;
+    if (reminderBaseline == null) {
       for (final currentNote in state.value ?? const <Note>[]) {
         if (currentNote.id == requestedNote.id) {
           reminderBeforeUpdate = currentNote.reminder;
@@ -320,7 +326,20 @@ class NotesNotifier extends _$NotesNotifier {
     Note? persistedNote;
     try {
       await _mutate(() async {
-        final reminder = requestedNote.reminder;
+        var effectiveNote = requestedNote;
+        if (reminderBaseline != null &&
+            requestedNote.reminder == reminderBaseline.value) {
+          for (final currentNote in await _fetchAllNotes()) {
+            if (currentNote.id == requestedNote.id) {
+              reminderBeforeUpdate = currentNote.reminder;
+              effectiveNote = requestedNote.copyWith(
+                reminder: currentNote.reminder,
+              );
+              break;
+            }
+          }
+        }
+        final reminder = effectiveNote.reminder;
         final currentTime = now?.call() ?? DateTime.now();
         final reminderChanged = reminder != reminderBeforeUpdate;
         final shouldReconcileReminder =
@@ -331,17 +350,18 @@ class NotesNotifier extends _$NotesNotifier {
           throw const InvalidNoteReminderException();
         }
         final updated = await ref.read(updateNoteUsecaseProvider)(
-          requestedNote,
+          effectiveNote,
         );
         if (updated != 1) {
           throw StateError('The note no longer exists.');
         }
-        persistedNote = requestedNote;
-        final id = requestedNote.id;
+        persistedNote = effectiveNote;
+        final id = effectiveNote.id;
         if (id != null && shouldReconcileReminder) {
           final gateway = ref.read(noteReminderGatewayProvider);
-          await gateway.cancel(id);
-          if (reminder != null && reminder.isAfter(currentTime)) {
+          if (reminder == null) {
+            await gateway.cancel(id);
+          } else {
             await gateway.schedule(persistedNote!);
           }
         }
@@ -360,6 +380,50 @@ class NotesNotifier extends _$NotesNotifier {
       }
       Error.throwWithStackTrace(error, stackTrace);
     }
+  }
+
+  Future<bool> snoozeReminderFromNotification({
+    required int noteId,
+    required int? expectedGeneration,
+    required int delayMinutes,
+  }) {
+    final keepAlive = ref.keepAlive();
+    final result = _mutationQueue.then((_) async {
+      Object? snoozeError;
+      StackTrace? snoozeStackTrace;
+      var accepted = false;
+      try {
+        accepted = await ref
+            .read(reminderCoordinatorProvider)
+            .snooze(
+              noteId: noteId,
+              expectedGeneration: expectedGeneration,
+              delayMinutes: delayMinutes,
+            );
+      } catch (error, stackTrace) {
+        snoozeError = error;
+        snoozeStackTrace = stackTrace;
+      }
+
+      try {
+        state = AsyncData(await _fetchAllNotes());
+      } catch (refreshError, refreshStackTrace) {
+        state = AsyncError<List<Note>>(refreshError, refreshStackTrace);
+        if (snoozeError == null) {
+          Error.throwWithStackTrace(refreshError, refreshStackTrace);
+        }
+      }
+
+      if (snoozeError != null) {
+        Error.throwWithStackTrace(snoozeError, snoozeStackTrace!);
+      }
+      return accepted;
+    });
+    _mutationQueue = result.then<void>(
+      (_) => keepAlive.close(),
+      onError: (Object _, StackTrace _) => keepAlive.close(),
+    );
+    return result;
   }
 
   Future<void> importBackup(List<Note> notes) {

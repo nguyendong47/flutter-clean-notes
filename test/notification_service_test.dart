@@ -368,6 +368,63 @@ void main() {
         },
       );
 
+      test(
+        'existing-only schedule recovers a transient init failure without prompting',
+        () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          addTearDown(() => debugDefaultTargetPlatformOverride = null);
+          var permissionChecks = 0;
+          final service = NotificationService(
+            plugin: fakePlugin,
+            now: () => now,
+            requestPermission: () async {
+              permissionRequests += 1;
+              return true;
+            },
+            checkPermission: () async {
+              permissionChecks += 1;
+              return true;
+            },
+          );
+          fakePlugin.initializationError = StateError('transient init failure');
+          await _captureFlutterErrors(service.init);
+          fakePlugin.initializationError = null;
+          final command = ReminderCommand(
+            generation: 18,
+            noteId: 1,
+            operation: ReminderCommandOperation.schedule,
+            scheduledAt: now.add(const Duration(hours: 1)),
+          );
+
+          await service.schedule(
+            command,
+            permissionPolicy: ReminderPermissionPolicy.existingOnly,
+          );
+
+          expect(fakePlugin.initializeCalls, 2);
+          expect(permissionChecks, 1);
+          expect(permissionRequests, 0);
+          expect(fakePlugin.zonedScheduleCalls.single.payload, 'note:v2:1:18');
+        },
+      );
+
+      test('pending inventory recovers a transient init failure', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        fakePlugin.initializationError = StateError('transient init failure');
+        await _captureFlutterErrors(notificationService.init);
+        fakePlugin
+          ..initializationError = null
+          ..pendingRequests = const [
+            PendingNotificationRequest(1, null, null, 'note:v2:1:19'),
+          ];
+
+        final pending = await notificationService.pendingNotifications();
+
+        expect(fakePlugin.initializeCalls, 2);
+        expect(pending.single.generation, 19);
+      });
+
       test('existing-only denial leaves native schedule untouched', () async {
         final service = NotificationService(
           plugin: fakePlugin,

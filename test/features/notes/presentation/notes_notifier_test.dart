@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
+import 'package:flutter_clean_notes/features/notes/domain/services/reminder_coordinator.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/invalid_note_reminder_exception.dart';
@@ -17,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../helpers/fake_note_reminder_gateway.dart';
 import '../../../helpers/in_memory_note_repository.dart';
 import '../../../helpers/note_fixtures.dart';
+import '../../../helpers/repository_snooze_coordinator.dart';
 
 const _notificationsChannel = MethodChannel(
   'dexterous.com/flutter/local_notifications',
@@ -692,7 +694,7 @@ void main() {
   });
 
   test(
-    'update commits before cancelling and scheduling its reminder',
+    'update commits before asking the durable gateway to reschedule',
     () async {
       final events = <String>[];
       final note = sampleNote.copyWith(
@@ -711,7 +713,7 @@ void main() {
 
       await container.read(notesProvider.notifier).updateNote(changed);
 
-      expect(events.take(3), ['update:1', 'cancel:1', 'schedule:1']);
+      expect(events.take(2), ['update:1', 'schedule:1']);
       expect(gateway.scheduled.single.title, 'Changed');
     },
   );
@@ -836,6 +838,79 @@ void main() {
     expect(gateway.events, isEmpty);
   });
 
+  test('accepted notification snooze refreshes the warm notes cache', () async {
+    final originalReminder = DateTime.utc(2030, 1, 15, 11);
+    final snoozedAt = DateTime.utc(2030, 1, 15, 11, 15);
+    final original = sampleNote.copyWith(reminder: originalReminder);
+    final repository = InMemoryNoteRepository.seeded([original]);
+    final coordinator = RepositorySnoozeCoordinator(
+      repository: repository,
+      snoozedAt: snoozedAt,
+    );
+    final container = _container(
+      repository,
+      FakeNoteReminderGateway(),
+      coordinator: coordinator,
+    );
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    final accepted = await container
+        .read(notesProvider.notifier)
+        .snoozeReminderFromNotification(
+          noteId: original.id!,
+          expectedGeneration: 17,
+          delayMinutes: 15,
+        );
+
+    expect(accepted, isTrue);
+    expect(repository.notes.single.reminder, snoozedAt);
+    expect(
+      container.read(notesProvider).requireValue.single.reminder,
+      snoozedAt,
+    );
+  });
+
+  test(
+    'post-commit snooze failure still refreshes cache before rethrowing',
+    () async {
+      final failure = StateError('native drain failed');
+      final snoozedAt = DateTime.utc(2030, 1, 15, 11, 15);
+      final repository = InMemoryNoteRepository.seeded([
+        sampleNote.copyWith(reminder: DateTime.utc(2030, 1, 15, 11)),
+      ]);
+      final coordinator = RepositorySnoozeCoordinator(
+        repository: repository,
+        snoozedAt: snoozedAt,
+        afterCommitError: failure,
+      );
+      final container = _container(
+        repository,
+        FakeNoteReminderGateway(),
+        coordinator: coordinator,
+      );
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+
+      await expectLater(
+        container
+            .read(notesProvider.notifier)
+            .snoozeReminderFromNotification(
+              noteId: sampleNote.id!,
+              expectedGeneration: 17,
+              delayMinutes: 15,
+            ),
+        throwsA(same(failure)),
+      );
+
+      expect(repository.notes.single.reminder, snoozedAt);
+      expect(
+        container.read(notesProvider).requireValue.single.reminder,
+        snoozedAt,
+      );
+    },
+  );
+
   test(
     'forced reconciliation reschedules an unchanged future reminder',
     () async {
@@ -855,11 +930,11 @@ void main() {
           .updateNote(
             original.copyWith(title: 'Retry reminder'),
             now: () => now,
-            persistedReminder: reminder,
+            reminderBaseline: NoteReminderEditBaseline(reminder),
             forceReminderReconciliation: true,
           );
 
-      expect(events, ['update:1', 'cancel:1', 'schedule:1']);
+      expect(events, ['update:1', 'schedule:1']);
       expect(gateway.scheduled.single.reminder, reminder);
     },
   );
@@ -881,7 +956,7 @@ void main() {
         notifier.updateNote(
           original.copyWith(title: 'Retry after reminder elapsed'),
           now: () => now,
-          persistedReminder: original.reminder,
+          reminderBaseline: NoteReminderEditBaseline(original.reminder),
           forceReminderReconciliation: true,
         ),
         throwsA(isA<InvalidNoteReminderException>()),
@@ -897,8 +972,8 @@ void main() {
     // Mutation caught: leaving notesProvider as plain AsyncData while an
     // update is committed but its reminder side effect is still pending.
     final repository = InMemoryNoteRepository.seeded(sampleNotes);
-    final cancelGate = Completer<void>();
-    final gateway = FakeNoteReminderGateway()..cancelGate = cancelGate;
+    final scheduleGate = Completer<void>();
+    final gateway = FakeNoteReminderGateway()..scheduleGate = scheduleGate;
     final container = _container(repository, gateway);
     addTearDown(container.dispose);
     final subscription = container.listen(
@@ -918,12 +993,12 @@ void main() {
 
     final pending = container.read(notesProvider);
     final committedTitle = repository.notes.first.title;
-    final cancelled = List<int>.of(gateway.cancelled);
-    cancelGate.complete();
+    final scheduledIds = gateway.scheduled.map((note) => note.id).toList();
+    scheduleGate.complete();
     await save;
 
     expect(committedTitle, 'Committed while pending');
-    expect(cancelled, [changed.id]);
+    expect(scheduledIds, [changed.id]);
     expect(pending.isLoading, isTrue);
     expect(pending.value, initial);
     expect(container.read(notesProvider), isA<AsyncData<List<Note>>>());
@@ -1287,7 +1362,6 @@ void main() {
       expect(repository.notes.single.content, 'Latest draft');
       expect(gateway.events, [
         'schedule:${exception.persistedNote.id}',
-        'cancel:${exception.persistedNote.id}',
         'schedule:${exception.persistedNote.id}',
       ]);
     },
@@ -1549,12 +1623,15 @@ void main() {
 
 ProviderContainer _container(
   InMemoryNoteRepository repository,
-  FakeNoteReminderGateway gateway,
-) {
+  FakeNoteReminderGateway gateway, {
+  ReminderSyncCoordinator? coordinator,
+}) {
   return ProviderContainer(
     overrides: [
       noteRepositoryProvider.overrideWithValue(repository),
       noteReminderGatewayProvider.overrideWithValue(gateway),
+      if (coordinator != null)
+        reminderCoordinatorProvider.overrideWithValue(coordinator),
     ],
   );
 }

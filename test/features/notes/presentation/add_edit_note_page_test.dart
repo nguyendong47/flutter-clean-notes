@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
+import 'package:flutter_clean_notes/features/notes/domain/services/reminder_coordinator.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/add_edit_note_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
@@ -16,9 +17,171 @@ import 'package:go_router/go_router.dart';
 import '../../../helpers/fake_note_reminder_gateway.dart';
 import '../../../helpers/in_memory_note_repository.dart';
 import '../../../helpers/note_fixtures.dart';
+import '../../../helpers/repository_snooze_coordinator.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('background snooze survives an unrelated editor save', (
+    tester,
+  ) async {
+    final original = sampleNote.copyWith(
+      reminder: DateTime.utc(2030, 1, 15, 11),
+    );
+    final snoozedAt = DateTime.utc(2030, 1, 15, 11, 15);
+    final repository = InMemoryNoteRepository.seeded([original]);
+    final coordinator = RepositorySnoozeCoordinator(
+      repository: repository,
+      snoozedAt: snoozedAt,
+    );
+    final harness = await _pumpEditor(
+      tester,
+      note: original,
+      repository: repository,
+      coordinator: coordinator,
+    );
+
+    await harness.container
+        .read(notesProvider.notifier)
+        .snoozeReminderFromNotification(
+          noteId: original.id!,
+          expectedGeneration: 17,
+          delayMinutes: 15,
+        );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('editor-metadata-button')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('11:15 AM'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('metadata-apply')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('editor-title-field')),
+      'Title edited after snooze',
+    );
+    await tester.tap(find.byKey(const Key('editor-done-button')));
+    await tester.pumpAndSettle();
+
+    expect(repository.notes.single.title, 'Title edited after snooze');
+    expect(repository.notes.single.reminder, snoozedAt);
+    expect(harness.closeCount.value, 1);
+  });
+
+  testWidgets('background snooze alone does not dirty the editor', (
+    tester,
+  ) async {
+    final original = sampleNote.copyWith(
+      reminder: DateTime.utc(2030, 1, 15, 11),
+    );
+    final repository = InMemoryNoteRepository.seeded([original]);
+    final harness = await _pumpEditor(
+      tester,
+      note: original,
+      repository: repository,
+      coordinator: RepositorySnoozeCoordinator(
+        repository: repository,
+        snoozedAt: DateTime.utc(2030, 1, 15, 11, 15),
+      ),
+    );
+
+    await harness.container
+        .read(notesProvider.notifier)
+        .snoozeReminderFromNotification(
+          noteId: original.id!,
+          expectedGeneration: 17,
+          delayMinutes: 15,
+        );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('editor-back-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('discard-changes-dialog')), findsNothing);
+    expect(harness.closeCount.value, 1);
+  });
+
+  testWidgets('local reminder edit wins over a later background snooze', (
+    tester,
+  ) async {
+    final original = sampleNote.copyWith(
+      reminder: DateTime.utc(2030, 1, 15, 11),
+    );
+    final repository = InMemoryNoteRepository.seeded([original]);
+    final harness = await _pumpEditor(
+      tester,
+      note: original,
+      repository: repository,
+      coordinator: RepositorySnoozeCoordinator(
+        repository: repository,
+        snoozedAt: DateTime.utc(2030, 1, 15, 11, 15),
+      ),
+      now: () => DateTime.utc(2030, 1, 15, 10),
+    );
+    await tester.tap(find.byKey(const Key('editor-metadata-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('metadata-clear-reminder')));
+    await tester.tap(find.byKey(const Key('metadata-apply')));
+    await tester.pumpAndSettle();
+
+    await harness.container
+        .read(notesProvider.notifier)
+        .snoozeReminderFromNotification(
+          noteId: original.id!,
+          expectedGeneration: 17,
+          delayMinutes: 15,
+        );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('editor-metadata-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Add reminder'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('metadata-apply')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('editor-done-button')));
+    await tester.pumpAndSettle();
+
+    expect(repository.notes.single.reminder, isNull);
+    expect(harness.closeCount.value, 1);
+  });
+
+  testWidgets('unchanged open metadata sheet preserves a background snooze', (
+    tester,
+  ) async {
+    final original = sampleNote.copyWith(
+      reminder: DateTime.utc(2030, 1, 15, 11),
+    );
+    final snoozedAt = DateTime.utc(2030, 1, 15, 11, 15);
+    final repository = InMemoryNoteRepository.seeded([original]);
+    final harness = await _pumpEditor(
+      tester,
+      note: original,
+      repository: repository,
+      coordinator: RepositorySnoozeCoordinator(
+        repository: repository,
+        snoozedAt: snoozedAt,
+      ),
+    );
+    await tester.tap(find.byKey(const Key('editor-metadata-button')));
+    await tester.pumpAndSettle();
+
+    await harness.container
+        .read(notesProvider.notifier)
+        .snoozeReminderFromNotification(
+          noteId: original.id!,
+          expectedGeneration: 17,
+          delayMinutes: 15,
+        );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('metadata-apply')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('editor-title-field')),
+      'Edited after sheet closed',
+    );
+    await tester.tap(find.byKey(const Key('editor-done-button')));
+    await tester.pumpAndSettle();
+
+    expect(repository.notes.single.title, 'Edited after sheet closed');
+    expect(repository.notes.single.reminder, snoozedAt);
+    expect(harness.closeCount.value, 1);
+  });
 
   testWidgets('empty save shows a live inline error and focuses Title', (
     tester,
@@ -679,23 +842,39 @@ void main() {
     final repository = _RecordingRepository([sampleNote]);
     final harness = await _pumpEditor(
       tester,
-      note: sampleNote.copyWith(reminder: null),
+      note: sampleNote,
       repository: repository,
       gateway: gateway,
     );
 
-    await tester.tap(find.byKey(const Key('editor-done-button')));
-    await tester.pump();
+    await tester.tap(find.byKey(const Key('editor-metadata-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('metadata-clear-reminder')));
+    await tester.tap(find.byKey(const Key('metadata-apply')));
+    await tester.pumpAndSettle();
 
-    expect(gateway.cancelled, [sampleNote.id]);
-    expect(repository.updateCalls, 1);
-    expect(find.byKey(const Key('editor-save-progress')), findsOneWidget);
-    expect(find.byType(AddEditNotePage), findsOneWidget);
-    expect(harness.closeCount.value, 0);
+    await tester.tap(find.byKey(const Key('editor-done-button')));
+    for (var pump = 0; pump < 10 && gateway.cancelled.isEmpty; pump += 1) {
+      await tester.pump();
+    }
+    await tester.pump();
+    final cancelled = List<int>.of(gateway.cancelled);
+    final updateCalls = repository.updateCalls;
+    final progressVisible = find
+        .byKey(const Key('editor-save-progress'))
+        .evaluate()
+        .isNotEmpty;
+    final editorVisible = find.byType(AddEditNotePage).evaluate().isNotEmpty;
+    final closeCountWhilePending = harness.closeCount.value;
 
     cancelGate.complete();
     await tester.pumpAndSettle();
 
+    expect(cancelled, [sampleNote.id]);
+    expect(updateCalls, 1);
+    expect(progressVisible, isTrue);
+    expect(editorVisible, isTrue);
+    expect(closeCountWhilePending, 0);
     expect(harness.closeCount.value, 1);
   });
 
@@ -821,7 +1000,6 @@ void main() {
       expect(stored.content, 'Latest exact draft');
       expect(gateway.events, [
         'schedule:$allocatedId',
-        'cancel:$allocatedId',
         'schedule:$allocatedId',
       ]);
       expect(harness.closeCount.value, 1);
@@ -1544,6 +1722,7 @@ Future<_EditorHarness> _pumpEditor(
   Note? note,
   InMemoryNoteRepository? repository,
   FakeNoteReminderGateway? gateway,
+  ReminderSyncCoordinator? coordinator,
   Size size = const Size(375, 812),
   ThemeData? theme,
   TextScaler textScaler = TextScaler.noScaling,
@@ -1563,6 +1742,8 @@ Future<_EditorHarness> _pumpEditor(
     overrides: [
       noteRepositoryProvider.overrideWithValue(resolvedRepository),
       noteReminderGatewayProvider.overrideWithValue(resolvedGateway),
+      if (coordinator != null)
+        reminderCoordinatorProvider.overrideWithValue(coordinator),
     ],
   );
   await container.read(notesProvider.future);

@@ -97,12 +97,16 @@ void main() {
       _note(now.add(const Duration(hours: 1))),
     );
     final original = (await firstDataSource.pendingReminderCommands()).single;
-    final deniedGateway = _NativeStoreGateway()..denyScheduling = true;
+    final nativeStore = <int, ReminderCommand>{};
+    final deniedGateway = _NativeStoreGateway(nativeStore: nativeStore);
     final firstCoordinator = ReminderCoordinator(
       repository: ReminderOutboxRepositoryImpl(firstDataSource),
       gateway: deniedGateway,
       now: () => now,
     );
+    await firstCoordinator.drain();
+    expect(nativeStore[id], original);
+    deniedGateway.denyScheduling = true;
 
     await expectLater(
       firstCoordinator.snooze(
@@ -114,13 +118,14 @@ void main() {
     );
     final snoozed = (await firstDataSource.pendingReminderCommands()).single;
     expect(snoozed.scheduledAt, now.add(const Duration(minutes: 15)));
+    expect(nativeStore, isEmpty);
     await firstDatabase.close();
 
     final restartedDatabase = await fixture.open();
     final restartedDataSource = LocalNoteDataSourceImpl(
       database: restartedDatabase,
     );
-    final restartedGateway = _NativeStoreGateway();
+    final restartedGateway = _NativeStoreGateway(nativeStore: nativeStore);
     final restartedCoordinator = ReminderCoordinator(
       repository: ReminderOutboxRepositoryImpl(restartedDataSource),
       gateway: restartedGateway,
@@ -148,10 +153,13 @@ NoteModel _note(DateTime reminder) => NoteModel(
 final class _PermissionDenied implements Exception {}
 
 final class _NativeStoreGateway implements ReminderNotificationGateway {
+  _NativeStoreGateway({Map<int, ReminderCommand>? nativeStore})
+    : byId = nativeStore ?? <int, ReminderCommand>{};
+
   @override
   bool get supportsScheduling => true;
 
-  final Map<int, ReminderCommand> byId = {};
+  final Map<int, ReminderCommand> byId;
   final List<ReminderCommand> scheduled = [];
   bool throwAfterScheduling = false;
   bool denyScheduling = false;

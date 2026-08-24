@@ -53,41 +53,48 @@ void main() {
     'bootstrap attaches durable snooze before notification cold-launch handling',
     (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       final events = <String>[];
       final plugin = _ColdSnoozePlugin(events);
       final notifications = NotificationService(plugin: plugin);
       final coordinator = _FakeReminderSyncCoordinator(events);
-      late ProviderContainer container;
+      final repository = InMemoryNoteRepository.seeded(sampleNotes)
+        ..getErrorAtCall = 1;
+      ProviderContainer? container;
+      try {
+        await app.bootstrapApplication(
+          notificationService: notifications,
+          initializeDatabase: () {},
+          createContainer: (service) {
+            events.add('container');
+            container = ProviderContainer(
+              overrides: [
+                notificationServiceProvider.overrideWithValue(service),
+                noteRepositoryProvider.overrideWithValue(repository),
+                reminderCoordinatorProvider.overrideWithValue(coordinator),
+                themeModeStoreProvider.overrideWithValue(
+                  _CountingThemeModeStore(ThemeMode.system),
+                ),
+              ],
+            );
+            return container!;
+          },
+          runApplication: (_) {
+            events.add('run');
+            runApp(const SizedBox.shrink());
+          },
+        );
 
-      await app.bootstrapApplication(
-        notificationService: notifications,
-        initializeDatabase: () {},
-        createContainer: (service) {
-          events.add('container');
-          container = ProviderContainer(
-            overrides: [
-              notificationServiceProvider.overrideWithValue(service),
-              reminderCoordinatorProvider.overrideWithValue(coordinator),
-              themeModeStoreProvider.overrideWithValue(
-                _CountingThemeModeStore(ThemeMode.system),
-              ),
-            ],
-          );
-          return container;
-        },
-        runApplication: (_) {
-          events.add('run');
-          runApp(const SizedBox.shrink());
-        },
-      );
-
-      expect(events.take(4), ['container', 'init', 'snooze:7:17:15', 'run']);
-      tester.binding.scheduleFrame();
-      await tester.pump();
-      await tester.pump();
-      expect(events, contains('reconcile'));
-      container.dispose();
-      debugDefaultTargetPlatformOverride = null;
+        expect(events.take(4), ['container', 'init', 'snooze:7:17:15', 'run']);
+        tester.binding.scheduleFrame();
+        await tester.pump();
+        await tester.pump();
+        expect(events, contains('reconcile'));
+        expect(container!.read(notesProvider).hasError, isFalse);
+      } finally {
+        container?.dispose();
+        debugDefaultTargetPlatformOverride = null;
+      }
     },
   );
 
@@ -106,7 +113,7 @@ void main() {
           'private-reconcile-stack-marker',
         ),
       );
-      late ProviderContainer container;
+      ProviderContainer? container;
       final diagnostics = <FlutterErrorDetails>[];
       final previousErrorHandler = FlutterError.onError;
       FlutterError.onError = diagnostics.add;
@@ -118,13 +125,16 @@ void main() {
             container = ProviderContainer(
               overrides: [
                 notificationServiceProvider.overrideWithValue(service),
+                noteRepositoryProvider.overrideWithValue(
+                  InMemoryNoteRepository.seeded(sampleNotes),
+                ),
                 reminderCoordinatorProvider.overrideWithValue(coordinator),
                 themeModeStoreProvider.overrideWithValue(
                   _CountingThemeModeStore(ThemeMode.system),
                 ),
               ],
             );
-            return container;
+            return container!;
           },
           runApplication: (_) => runApp(const SizedBox.shrink()),
         );
@@ -134,6 +144,7 @@ void main() {
       } finally {
         FlutterError.onError = previousErrorHandler;
         debugDefaultTargetPlatformOverride = null;
+        container?.dispose();
       }
 
       expect(diagnostics, hasLength(1));
@@ -148,7 +159,6 @@ void main() {
         details.stack.toString(),
         isNot(contains('private-reconcile-stack-marker')),
       );
-      container.dispose();
     },
   );
 
@@ -208,12 +218,14 @@ void main() {
       expect(find.byType(MaterialApp), findsOneWidget);
       expect(find.byType(NotesHomePage), findsOneWidget);
       expect(find.byKey(const Key('notes-home-header')), findsOneWidget);
-      expect(diagnostics, hasLength(1));
-      expect(diagnostics.single.library, 'notification service');
-      final renderedDiagnostic = diagnostics.single.toString();
-      expect(renderedDiagnostic, contains('Notifications are unavailable'));
-      expect(renderedDiagnostic, isNot(contains(privateFailure)));
-      expect(renderedDiagnostic, isNot(contains('private-credential')));
+      expect(diagnostics, hasLength(2));
+      for (final diagnostic in diagnostics) {
+        expect(diagnostic.library, 'notification service');
+        final renderedDiagnostic = diagnostic.toString();
+        expect(renderedDiagnostic, contains('Notifications are unavailable'));
+        expect(renderedDiagnostic, isNot(contains(privateFailure)));
+        expect(renderedDiagnostic, isNot(contains('private-credential')));
+      }
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));

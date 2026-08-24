@@ -50,6 +50,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
   late DateTime? _reminder;
   late DateTime? _persistedReminder;
   late _EditorSnapshot _cleanSnapshot;
+  late final ProviderSubscription<AsyncValue<List<Note>>> _notesSubscription;
   bool _previewMode = false;
   bool _saving = false;
   bool _closed = false;
@@ -91,6 +92,9 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     _cleanSnapshot = _currentSnapshot();
     _titleController.addListener(_handleDraftChanged);
     _contentController.addListener(_handleDraftChanged);
+    _notesSubscription = ref.listenManual(notesProvider, (_, next) {
+      _mergePersistedReminder(next.value);
+    });
   }
 
   @override
@@ -108,6 +112,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
   @override
   void dispose() {
     _route?.unregisterPopEntry(this);
+    _notesSubscription.close();
     canPopNotifier.dispose();
     _titleController.removeListener(_handleDraftChanged);
     _contentController.removeListener(_handleDraftChanged);
@@ -677,6 +682,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
   }
 
   Future<void> _openMetadata() async {
+    final reminderAtSheetOpen = _reminder;
     final value = await showModalBottomSheet<NoteMetadataValue>(
       context: context,
       isScrollControlled: true,
@@ -695,10 +701,13 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
       ),
     );
     if (!mounted || value == null) return;
+    final resolvedReminder = value.reminder == reminderAtSheetOpen
+        ? _reminder
+        : value.reminder;
     setState(() {
       _selectedColor = value.color;
       _tags = List<String>.of(value.tags);
-      _reminder = value.reminder;
+      _reminder = resolvedReminder;
       _isDirty = _currentSnapshot() != _cleanSnapshot;
     });
     _syncCanPop();
@@ -760,7 +769,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
         await notifier.updateNote(
           note,
           now: widget.now,
-          persistedReminder: _persistedReminder,
+          reminderBaseline: NoteReminderEditBaseline(_persistedReminder),
           forceReminderReconciliation: reconciliationWasPending,
         );
       }
@@ -963,6 +972,28 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     _discardConfirmed = false;
   }
 
+  void _mergePersistedReminder(List<Note>? notes) {
+    final persistedId = _persistedId;
+    if (!mounted || persistedId == null || notes == null) return;
+    Note? latestNote;
+    for (final note in notes) {
+      if (note.id == persistedId) {
+        latestNote = note;
+        break;
+      }
+    }
+    if (latestNote == null || latestNote.reminder == _persistedReminder) return;
+
+    final hadLocalReminderEdit = _reminder != _persistedReminder;
+    setState(() {
+      _persistedReminder = latestNote!.reminder;
+      if (!hadLocalReminderEdit) _reminder = latestNote.reminder;
+      _cleanSnapshot = _cleanSnapshot.withReminder(latestNote.reminder);
+      _isDirty = _currentSnapshot() != _cleanSnapshot;
+    });
+    _syncCanPop();
+  }
+
   void _syncCanPop() {
     if (!mounted) return;
     final navigatorCanPop = Navigator.of(context).canPop();
@@ -1004,6 +1035,16 @@ class _EditorSnapshot {
   final int color;
   final List<String> tags;
   final DateTime? reminder;
+
+  _EditorSnapshot withReminder(DateTime? reminder) {
+    return _EditorSnapshot(
+      title: title,
+      body: body,
+      color: color,
+      tags: tags,
+      reminder: reminder,
+    );
+  }
 
   @override
   bool operator ==(Object other) {

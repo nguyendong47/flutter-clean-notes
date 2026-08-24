@@ -6,6 +6,8 @@ import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/reminder_command.dart';
 import 'package:flutter_clean_notes/features/notes/domain/repositories/reminder_outbox_repository.dart';
+import 'package:flutter_clean_notes/features/notes/domain/services/reminder_coordinator.dart';
+import 'package:flutter_clean_notes/main.dart' as app;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 // The concrete plugin API exposes this bound but does not re-export it.
 // ignore: depend_on_referenced_packages
@@ -24,6 +26,8 @@ class _PermissionAwarePlugin extends Fake
     implements FlutterLocalNotificationsPlugin {
   final Map<Type, Object> platformImplementations = <Type, Object>{};
   final List<_ScheduleCall> scheduleCalls = <_ScheduleCall>[];
+  final List<int> cancelledIds = <int>[];
+  final Map<int, String?> nativePayloads = <int, String?>{};
 
   Completer<void>? initializeGate;
   Completer<void>? scheduleGate;
@@ -89,6 +93,21 @@ class _PermissionAwarePlugin extends Fake
       if (stackTrace != null) Error.throwWithStackTrace(error, stackTrace);
       throw error;
     }
+    nativePayloads[id] = payload;
+  }
+
+  @override
+  Future<void> cancel(int id, {String? tag}) async {
+    cancelledIds.add(id);
+    nativePayloads.remove(id);
+  }
+
+  @override
+  Future<List<PendingNotificationRequest>> pendingNotificationRequests() async {
+    return [
+      for (final entry in nativePayloads.entries)
+        PendingNotificationRequest(entry.key, null, null, entry.value),
+    ];
   }
 }
 
@@ -286,6 +305,273 @@ void main() {
       expect(plugin.launchDetailsCalls, 1);
       expect(service.supportsReminderScheduling, isTrue);
     });
+
+    test(
+      'startup reconcile recovers init, cold snoozes, and keeps tail usable',
+      () async {
+        final plugin = _PermissionAwarePlugin()
+          ..initializeFailuresRemaining = 1
+          ..launchDetails = NotificationAppLaunchDetails(
+            true,
+            notificationResponse: const NotificationResponse(
+              notificationResponseType:
+                  NotificationResponseType.selectedNotificationAction,
+              id: 7,
+              actionId: 'snooze_15',
+              payload: 'note:v2:7:1',
+            ),
+          );
+        var permissionRequests = 0;
+        var permissionChecks = 0;
+        final service = NotificationService(
+          plugin: plugin,
+          now: () => now,
+          requestPermission: () async {
+            permissionRequests += 1;
+            return true;
+          },
+          checkPermission: () async {
+            permissionChecks += 1;
+            return true;
+          },
+        );
+        final repository = _RecoveryOutboxRepository([
+          _cancelCommand(2, noteId: 8),
+          _scheduleCommand(
+            4,
+            noteId: 9,
+            scheduledAt: now.add(const Duration(hours: 2)),
+          ),
+        ], snoozeGeneration: 3);
+        final coordinator = ReminderCoordinator(
+          repository: repository,
+          gateway: service,
+          now: () => now,
+        );
+        service.attachSnoozeHandler(coordinator.snooze);
+
+        final diagnostics = <FlutterErrorDetails>[];
+        final previousErrorHandler = FlutterError.onError;
+        FlutterError.onError = diagnostics.add;
+        try {
+          await service.init();
+          await coordinator.reconcileAtStartup().timeout(
+            const Duration(seconds: 2),
+          );
+          await coordinator
+              .drain(permissionPolicy: ReminderPermissionPolicy.existingOnly)
+              .timeout(const Duration(seconds: 2));
+        } finally {
+          FlutterError.onError = previousErrorHandler;
+        }
+
+        expect(plugin.initializeCalls, 2);
+        expect(plugin.scheduleCalls.map((call) => call.payload), [
+          'note:v2:9:4',
+          'note:v2:7:3',
+        ]);
+        expect(plugin.cancelledIds, containsAllInOrder([8, 9, 7]));
+        expect(repository.commands, isEmpty);
+        expect(permissionChecks, 2);
+        expect(permissionRequests, 0);
+        expect(diagnostics, hasLength(1));
+        expect(
+          diagnostics.single.exception,
+          isA<NotificationUnavailableException>(),
+        );
+      },
+    );
+
+    test(
+      'startup bounds persistent init recovery across a durable command batch',
+      () async {
+        final plugin = _PermissionAwarePlugin()
+          ..initializeFailuresRemaining = 20;
+        final service = NotificationService(plugin: plugin, now: () => now);
+        final repository = _RecoveryOutboxRepository([
+          _cancelCommand(1, noteId: 1),
+          _scheduleCommand(
+            2,
+            noteId: 2,
+            scheduledAt: now.add(const Duration(hours: 1)),
+          ),
+          _cancelCommand(3, noteId: 3),
+          _scheduleCommand(
+            4,
+            noteId: 4,
+            scheduledAt: now.add(const Duration(hours: 2)),
+          ),
+        ], snoozeGeneration: 5);
+        final coordinator = ReminderCoordinator(
+          repository: repository,
+          gateway: service,
+          now: () => now,
+        );
+        final diagnostics = <FlutterErrorDetails>[];
+        final previousErrorHandler = FlutterError.onError;
+        FlutterError.onError = diagnostics.add;
+        try {
+          await service.init();
+          await expectLater(
+            coordinator.reconcileAtStartup(),
+            throwsA(isA<NotificationUnavailableException>()),
+          );
+        } finally {
+          FlutterError.onError = previousErrorHandler;
+        }
+
+        expect(plugin.initializeCalls, 2);
+        expect(diagnostics, hasLength(2));
+        expect(repository.commands, hasLength(4));
+        expect(plugin.cancelledIds, isEmpty);
+        expect(plugin.scheduleCalls, isEmpty);
+      },
+    );
+
+    test(
+      'startup waits for cold snooze after recovery begins inside reconcile',
+      () async {
+        final plugin = _PermissionAwarePlugin()
+          ..initializeFailuresRemaining = 2
+          ..launchDetails = NotificationAppLaunchDetails(
+            true,
+            notificationResponse: const NotificationResponse(
+              notificationResponseType:
+                  NotificationResponseType.selectedNotificationAction,
+              id: 7,
+              actionId: 'snooze_15',
+              payload: 'note:v2:7:1',
+            ),
+          );
+        final service = NotificationService(
+          plugin: plugin,
+          now: () => now,
+          checkPermission: () async => true,
+        );
+        final snoozeStarted = Completer<void>();
+        final snoozeGate = Completer<void>();
+        final repository = _RecoveryOutboxRepository(
+          const [],
+          snoozeGeneration: 3,
+          snoozeStarted: snoozeStarted,
+          snoozeGate: snoozeGate,
+        );
+        final coordinator = ReminderCoordinator(
+          repository: repository,
+          gateway: service,
+          now: () => now,
+        );
+        service.attachSnoozeHandler(coordinator.snooze);
+        final diagnostics = <FlutterErrorDetails>[];
+        final previousErrorHandler = FlutterError.onError;
+        FlutterError.onError = diagnostics.add;
+        try {
+          await service.init();
+          var startupCompleted = false;
+          final startup = app
+              .synchronizeRemindersAfterStartup(
+                notifications: service,
+                reminderCoordinator: coordinator,
+              )
+              .then((_) => startupCompleted = true);
+
+          await snoozeStarted.future.timeout(const Duration(seconds: 2));
+          expect(startupCompleted, isFalse);
+          expect(plugin.initializeCalls, 3);
+
+          snoozeGate.complete();
+          await startup.timeout(const Duration(seconds: 2));
+        } finally {
+          if (!snoozeGate.isCompleted) snoozeGate.complete();
+          FlutterError.onError = previousErrorHandler;
+        }
+
+        expect(plugin.initializeCalls, 3);
+        expect(plugin.scheduleCalls.single.payload, 'note:v2:7:3');
+        expect(repository.commands, isEmpty);
+        expect(diagnostics, hasLength(2));
+      },
+    );
+
+    test(
+      'public init retry cannot deadlock an overlapping coordinator drain',
+      () async {
+        final plugin = _PermissionAwarePlugin()
+          ..initializeFailuresRemaining = 1
+          ..launchDetails = NotificationAppLaunchDetails(
+            true,
+            notificationResponse: const NotificationResponse(
+              notificationResponseType:
+                  NotificationResponseType.selectedNotificationAction,
+              id: 7,
+              actionId: 'snooze_15',
+              payload: 'note:v2:7:1',
+            ),
+          );
+        final service = NotificationService(
+          plugin: plugin,
+          now: () => now,
+          checkPermission: () async => true,
+        );
+        final snoozeStarted = Completer<void>();
+        final snoozeGate = Completer<void>();
+        final repository = _RecoveryOutboxRepository(
+          [
+            _scheduleCommand(
+              4,
+              noteId: 9,
+              scheduledAt: now.add(const Duration(hours: 2)),
+            ),
+          ],
+          snoozeGeneration: 3,
+          snoozeStarted: snoozeStarted,
+          snoozeGate: snoozeGate,
+        );
+        final coordinator = ReminderCoordinator(
+          repository: repository,
+          gateway: service,
+          now: () => now,
+        );
+        service.attachSnoozeHandler(coordinator.snooze);
+        final diagnostics = <FlutterErrorDetails>[];
+        final previousErrorHandler = FlutterError.onError;
+        FlutterError.onError = diagnostics.add;
+        try {
+          await service.init();
+          final secondInitGate = Completer<void>();
+          plugin.initializeGate = secondInitGate;
+          var retryCompleted = false;
+          final retry = service.init().then((_) => retryCompleted = true);
+          await pumpEventQueue();
+          final overlappingDrain = coordinator.drain(
+            permissionPolicy: ReminderPermissionPolicy.existingOnly,
+          );
+          await pumpEventQueue();
+
+          secondInitGate.complete();
+          await overlappingDrain.timeout(const Duration(seconds: 2));
+          await snoozeStarted.future.timeout(const Duration(seconds: 2));
+          expect(retryCompleted, isFalse);
+
+          snoozeGate.complete();
+          await retry.timeout(const Duration(seconds: 2));
+          await coordinator
+              .drain(permissionPolicy: ReminderPermissionPolicy.existingOnly)
+              .timeout(const Duration(seconds: 2));
+        } finally {
+          if (!snoozeGate.isCompleted) snoozeGate.complete();
+          FlutterError.onError = previousErrorHandler;
+        }
+
+        expect(plugin.initializeCalls, 2);
+        expect(plugin.scheduleCalls.map((call) => call.payload), [
+          'note:v2:9:4',
+          'note:v2:7:3',
+        ]);
+        expect(repository.commands, isEmpty);
+        expect(diagnostics, hasLength(1));
+      },
+    );
 
     test('cold-launch snooze is complete before init completes', () async {
       final plugin = _PermissionAwarePlugin();
@@ -630,4 +916,96 @@ void main() {
       }
     }
   });
+}
+
+ReminderCommand _cancelCommand(int generation, {required int noteId}) {
+  return ReminderCommand(
+    generation: generation,
+    noteId: noteId,
+    operation: ReminderCommandOperation.cancel,
+  );
+}
+
+ReminderCommand _scheduleCommand(
+  int generation, {
+  required int noteId,
+  required DateTime scheduledAt,
+}) {
+  return ReminderCommand(
+    generation: generation,
+    noteId: noteId,
+    operation: ReminderCommandOperation.schedule,
+    scheduledAt: scheduledAt,
+  );
+}
+
+final class _RecoveryOutboxRepository implements ReminderOutboxRepository {
+  _RecoveryOutboxRepository(
+    Iterable<ReminderCommand> initial, {
+    required this.snoozeGeneration,
+    this.snoozeStarted,
+    this.snoozeGate,
+  }) {
+    for (final command in initial) {
+      _commands[command.noteId] = command;
+    }
+  }
+
+  final int snoozeGeneration;
+  final Completer<void>? snoozeStarted;
+  final Completer<void>? snoozeGate;
+  final Map<int, ReminderCommand> _commands = <int, ReminderCommand>{};
+
+  List<ReminderCommand> get commands =>
+      _commands.values.toList()
+        ..sort((left, right) => left.generation.compareTo(right.generation));
+
+  @override
+  Future<bool> acknowledge(int generation) async {
+    final noteIds = [
+      for (final entry in _commands.entries)
+        if (entry.value.generation == generation) entry.key,
+    ];
+    if (noteIds.isEmpty) return false;
+    _commands.remove(noteIds.single);
+    return true;
+  }
+
+  @override
+  Future<bool> isCurrent(int generation) async {
+    return _commands.values.any((command) => command.generation == generation);
+  }
+
+  @override
+  Future<List<ReminderCommand>> pending({int? noteId}) async {
+    return [
+      for (final command in commands)
+        if (noteId == null || command.noteId == noteId) command,
+    ];
+  }
+
+  @override
+  Future<void> reconcile({
+    required List<PendingReminderNotification> pending,
+    required DateTime now,
+  }) async {}
+
+  @override
+  Future<ReminderCommand?> snooze({
+    required int noteId,
+    required int? expectedGeneration,
+    required DateTime scheduledAt,
+  }) async {
+    final started = snoozeStarted;
+    if (started != null && !started.isCompleted) started.complete();
+    await snoozeGate?.future;
+    final command = ReminderCommand(
+      generation: snoozeGeneration,
+      noteId: noteId,
+      operation: ReminderCommandOperation.schedule,
+      scheduledAt: scheduledAt,
+    );
+    _commands[noteId] = command;
+    return command;
+  }
 }

@@ -399,6 +399,46 @@ void main() {
   });
 
   test(
+    'migrated cleared reminder rejects legacy cold snooze before startup audit',
+    () async {
+      await _writeFixture(
+        supportDirectory,
+        version: 6,
+        rows: const [
+          {
+            'id': 52,
+            'title': 'Cleared before upgrade',
+            'content': 'A stale legacy notification still exists natively',
+            'color': 18,
+            'createdAt': '2026-08-24T10:11:12.000Z',
+            'isPinned': 0,
+            'tags': 'json:[]',
+            'status': 0,
+            'reminder': null,
+          },
+        ],
+      );
+      final dataSource = LocalNoteDataSourceImpl();
+      final database = await dataSource.database;
+      openedDatabases.add(database);
+
+      final snoozed = await dataSource.snoozeReminder(
+        noteId: 52,
+        expectedGeneration: null,
+        scheduledAt: DateTime.utc(2030, 1, 15, 11, 15),
+      );
+
+      expect(snoozed, isNull);
+      expect(
+        (await database.query('notes')).single,
+        containsPair('reminder', null),
+      );
+      expect(await _storedReminderGenerations(database), [0]);
+      expect(await database.query('reminder_outbox'), isEmpty);
+    },
+  );
+
+  test(
     'reopens a fresh v7 file without mutating its pending command',
     () async {
       await _writeV7Fixture(supportDirectory);

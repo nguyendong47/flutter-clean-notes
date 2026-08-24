@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
+import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
+import 'package:flutter_clean_notes/features/notes/domain/repositories/reminder_outbox_repository.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/note_reminder_gateway.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -97,4 +99,36 @@ void main() {
       isFalse,
     );
   });
+
+  test(
+    'cleanup sync uses existing permission while user schedule may request',
+    () async {
+      final calls =
+          <({int? noteId, ReminderPermissionPolicy permissionPolicy})>[];
+      final gateway = NotificationNoteReminderGateway(
+        NotificationService(now: DateTime.now),
+        synchronize: ({required noteId, required permissionPolicy}) async {
+          calls.add((noteId: noteId, permissionPolicy: permissionPolicy));
+        },
+      );
+      final note = Note(
+        id: 7,
+        title: 'Reminder policy',
+        content: '',
+        color: 0,
+        createdAt: DateTime.utc(2030),
+        reminder: DateTime.utc(2030, 1, 2),
+      );
+
+      await gateway.schedule(note);
+      await gateway.cancel(note.id!);
+      await gateway.syncPending();
+
+      expect(calls, [
+        (noteId: 7, permissionPolicy: ReminderPermissionPolicy.requestIfNeeded),
+        (noteId: 7, permissionPolicy: ReminderPermissionPolicy.existingOnly),
+        (noteId: null, permissionPolicy: ReminderPermissionPolicy.existingOnly),
+      ]);
+    },
+  );
 }

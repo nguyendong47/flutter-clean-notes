@@ -10,7 +10,9 @@ import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/app/router.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
+import 'package:flutter_clean_notes/features/notes/domain/services/reminder_coordinator.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 
 Future<void> main() => bootstrapApplication();
 
@@ -35,7 +37,34 @@ Future<void> bootstrapApplication({
   var handedOff = false;
   try {
     final reminderCoordinator = container.read(reminderCoordinatorProvider);
-    notifications.attachSnoozeHandler(reminderCoordinator.snooze);
+    notifications.attachSnoozeHandler(({
+      required noteId,
+      required expectedGeneration,
+      required delayMinutes,
+    }) async {
+      final notesSubscription = container.listen(
+        notesProvider,
+        (_, _) {},
+        fireImmediately: true,
+      );
+      try {
+        try {
+          await container.read(notesProvider.future);
+        } catch (_) {
+          // The snooze transaction must still run. Its refresh below gets an
+          // independent chance to recover the presentation cache.
+        }
+        return await container
+            .read(notesProvider.notifier)
+            .snoozeReminderFromNotification(
+              noteId: noteId,
+              expectedGeneration: expectedGeneration,
+              delayMinutes: delayMinutes,
+            );
+      } finally {
+        notesSubscription.close();
+      }
+    });
     await notifications.init();
     await container.read(appThemeProvider.future);
     (runApplication ?? runApp)(
@@ -44,13 +73,33 @@ Future<void> bootstrapApplication({
     handedOff = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(
-        reminderCoordinator.reconcileAtStartup().onError((error, stackTrace) {
+        synchronizeRemindersAfterStartup(
+          notifications: notifications,
+          reminderCoordinator: reminderCoordinator,
+        ).onError((error, stackTrace) {
           _reportReminderReconciliationFailure(error, stackTrace);
         }),
       );
     });
   } finally {
     if (!handedOff) container.dispose();
+  }
+}
+
+@visibleForTesting
+Future<void> synchronizeRemindersAfterStartup({
+  required NotificationService notifications,
+  required ReminderSyncCoordinator reminderCoordinator,
+}) async {
+  try {
+    await notifications.init();
+    await reminderCoordinator.reconcileAtStartup();
+  } finally {
+    // A coordinator-triggered recovery waits only for native readiness so it
+    // cannot deadlock on a cold action queued behind that coordinator. Once
+    // reconciliation releases the lock, finish that action before allowing
+    // the startup task to complete.
+    await notifications.waitForCurrentInitialization();
   }
 }
 

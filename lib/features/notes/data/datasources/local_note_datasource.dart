@@ -342,17 +342,18 @@ class LocalNoteDataSourceImpl implements NotesPersistenceDataSource {
     return db.transaction((transaction) async {
       final rows = await transaction.query(
         _tableName,
-        columns: const ['reminderGeneration'],
+        columns: const ['reminder', 'reminderGeneration'],
         where: 'id = ?',
         whereArgs: [noteId],
         limit: 1,
       );
       if (rows.isEmpty) return null;
+      final hasReminder = rows.single['reminder'] != null;
       final currentGeneration = rows.single['reminderGeneration']! as int;
       final expectedMatches = expectedGeneration == null
           ? currentGeneration == 0
           : currentGeneration == expectedGeneration;
-      if (!expectedMatches) return null;
+      if (!hasReminder || !expectedMatches) return null;
 
       final generation = await _replaceReminderCommand(
         transaction,

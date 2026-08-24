@@ -108,6 +108,28 @@ void main() {
   });
 
   test(
+    'legacy snooze rejects a generation-zero note with no reminder',
+    () async {
+      final fixture = await _Fixture.open();
+      addTearDown(fixture.close);
+      final id = await fixture.database.insert('notes', _note().toJson());
+
+      final result = await fixture.dataSource.snoozeReminder(
+        noteId: id,
+        expectedGeneration: null,
+        scheduledAt: DateTime.utc(2030, 1, 15, 11, 15),
+      );
+
+      expect(result, isNull);
+      expect(
+        (await fixture.database.query('notes')).single,
+        containsPair('reminder', null),
+      );
+      expect(await fixture.dataSource.pendingReminderCommands(), isEmpty);
+    },
+  );
+
+  test(
     'audit preserves ambiguous legacy snooze with generation zero',
     () async {
       final fixture = await _Fixture.open();

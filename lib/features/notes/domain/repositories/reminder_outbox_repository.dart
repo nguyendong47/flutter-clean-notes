@@ -33,3 +33,12 @@ abstract interface class ReminderNotificationGateway {
 
   Future<List<PendingReminderNotification>> pendingNotifications();
 }
+
+/// Optional lifecycle seam for gateways that can recover native availability.
+///
+/// The coordinator invokes this at most once per serialized sync operation so
+/// a persistent native initialization failure cannot cause one retry per
+/// durable command.
+abstract interface class ReminderNotificationRecovery {
+  Future<void> recoverForReminderSync();
+}

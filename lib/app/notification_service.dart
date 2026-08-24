@@ -66,7 +66,8 @@ class NotificationActionFailedException implements Exception {
       'A notification action could not be completed. Open Clean Notes to retry.';
 }
 
-class NotificationService implements ReminderNotificationGateway {
+class NotificationService
+    implements ReminderNotificationGateway, ReminderNotificationRecovery {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService({
     FlutterLocalNotificationsPlugin? plugin,
@@ -107,6 +108,7 @@ class NotificationService implements ReminderNotificationGateway {
   GlobalKey<NavigatorState>? _navigatorKey;
   final ListQueue<Note> _pendingOpens = ListQueue<Note>();
   Future<void>? _initFuture;
+  Future<void>? _nativeReadyFuture;
   bool _flushScheduled = false;
   bool _launchDetailsChecked = false;
   bool _initializationFailed = false;
@@ -133,16 +135,28 @@ class NotificationService implements ReminderNotificationGateway {
   static const String actionSnooze = 'snooze';
   static const String actionOpen = 'open';
 
-  Future<void> init() {
+  Future<void> init() => _startInitialization();
+
+  /// Waits for the current initialization attempt, including its cold-launch
+  /// action, without starting another native retry.
+  Future<void> waitForCurrentInitialization() =>
+      _initFuture ?? Future<void>.value();
+
+  Future<void> _startInitialization() {
     final inFlightOrCompleted = _initFuture;
     if (inFlightOrCompleted != null) return inFlightOrCompleted;
 
+    final nativeReady = Completer<void>();
     late final Future<void> initialization;
-    initialization = _initialize()
+    initialization = _initialize(nativeReady)
         .then<void>((_) => _initializationFailed = false)
         .onError((error, _) {
-          if (identical(_initFuture, initialization)) _initFuture = null;
           _initializationFailed = true;
+          if (!nativeReady.isCompleted) nativeReady.complete();
+          if (identical(_initFuture, initialization)) {
+            _initFuture = null;
+            _nativeReadyFuture = null;
+          }
           final failureType = error.runtimeType.toString();
           FlutterError.reportError(
             FlutterErrorDetails(
@@ -158,19 +172,25 @@ class NotificationService implements ReminderNotificationGateway {
             ),
           );
         });
+    _nativeReadyFuture = nativeReady.future;
     _initFuture = initialization;
     return initialization;
   }
 
   Future<void> _recoverInitializationIfNeeded() async {
     if (!_initializationFailed) return;
-    await init();
+    final initialization = _startInitialization();
+    final nativeReady = _nativeReadyFuture;
+    await (nativeReady ?? initialization);
     if (_initializationFailed) {
       throw const NotificationUnavailableException();
     }
   }
 
-  Future<void> _initialize() async {
+  @override
+  Future<void> recoverForReminderSync() => _recoverInitializationIfNeeded();
+
+  Future<void> _initialize(Completer<void> nativeReady) async {
     tz.initializeTimeZones();
     const android = AndroidInitializationSettings('ic_stat_clean_notes');
     const darwin = DarwinInitializationSettings(
@@ -191,6 +211,10 @@ class NotificationService implements ReminderNotificationGateway {
       settings,
       onDidReceiveNotificationResponse: _handleLiveNotificationResponse,
     );
+    // Native initialization is ready before cold-launch action routing. A
+    // snooze handled below may immediately call back into scheduling.
+    _initializationFailed = false;
+    if (!nativeReady.isCompleted) nativeReady.complete();
 
     if (_launchDetailsChecked || !_supportsNotificationLaunchDetails) return;
     final launchDetails = await _plugin.getNotificationAppLaunchDetails();
@@ -399,10 +423,6 @@ class NotificationService implements ReminderNotificationGateway {
         platform: defaultTargetPlatform,
       );
     }
-    if (_initializationFailed &&
-        permissionPolicy == ReminderPermissionPolicy.existingOnly) {
-      throw const NotificationUnavailableException();
-    }
     await _recoverInitializationIfNeeded();
 
     if (generation != null && !_isValidGeneration(generation)) {
@@ -589,7 +609,6 @@ class NotificationService implements ReminderNotificationGateway {
   @override
   Future<List<PendingReminderNotification>> pendingNotifications() async {
     if (!supportsReminderScheduling) return const [];
-    if (_initializationFailed) throw const NotificationUnavailableException();
     await _recoverInitializationIfNeeded();
     final requests = await _plugin.pendingNotificationRequests();
     return [
