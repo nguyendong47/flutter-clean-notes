@@ -260,6 +260,7 @@ void main() {
         find.byKey(const Key('editor-title-field')),
         'Partially saved editor A',
       );
+      await _clearReminderDraft(tester);
       await tester.tap(find.byKey(const Key('editor-done-button')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('editor-save-error')), findsOneWidget);
@@ -313,6 +314,7 @@ void main() {
         find.byKey(const Key('editor-body-field')),
         'Persisted editor A body',
       );
+      await _clearReminderDraft(tester);
       await tester.tap(find.byKey(const Key('editor-done-button')));
       await tester.pump();
 
@@ -475,6 +477,18 @@ NotificationResponse _openResponse(NotificationService service) {
     actionId: NotificationService.actionOpen,
     payload: service.buildPayload(sampleNote),
   );
+}
+
+Future<void> _clearReminderDraft(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('editor-metadata-button')));
+  await tester.pumpAndSettle();
+  final clearReminder = find.byKey(const Key('metadata-clear-reminder'));
+  await tester.ensureVisible(clearReminder);
+  await tester.tap(clearReminder);
+  final apply = find.byKey(const Key('metadata-apply'));
+  await tester.ensureVisible(apply);
+  await tester.tap(apply);
+  await tester.pumpAndSettle();
 }
 
 String _path(GoRouter router) => router.routeInformationProvider.value.uri.path;

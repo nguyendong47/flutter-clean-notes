@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_clean_notes/app/widgets/aurora_background.dart';
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/invalid_note_reminder_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_save_exception.dart';
@@ -683,6 +684,9 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
       backgroundColor: Colors.transparent,
       builder: (context) => NoteMetadataSheet(
         now: widget.now,
+        supportsReminderScheduling: ref
+            .read(noteReminderGatewayProvider)
+            .supportsScheduling,
         initialValue: NoteMetadataValue(
           color: _selectedColor,
           tags: _tags,

@@ -4,9 +4,14 @@ import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/note_reminder_gateway.dart';
 
 class FakeNoteReminderGateway implements NoteReminderGateway {
-  FakeNoteReminderGateway({List<String>? eventLog}) : _eventLog = eventLog;
+  FakeNoteReminderGateway({
+    this.supportsScheduling = true,
+    List<String>? eventLog,
+  }) : _eventLog = eventLog;
 
   final List<String>? _eventLog;
+  @override
+  final bool supportsScheduling;
   final List<Note> scheduled = [];
   final List<int> cancelled = [];
   final List<String> events = [];

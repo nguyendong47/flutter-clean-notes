@@ -874,7 +874,7 @@ void main() {
         ...sampleNotes.skip(1),
       ]);
       final gateway = FakeNoteReminderGateway()
-        ..scheduleError = StateError('notification failed');
+        ..cancelError = StateError('notification failed');
       final harness = await _pumpRouter(
         tester,
         repository: repository,
@@ -887,12 +887,16 @@ void main() {
         find.byKey(const Key('editor-title-field')),
         'Persisted before pushed close',
       );
+      await _clearReminderDraft(tester);
 
       await tester.tap(find.byKey(const Key('editor-done-button')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('editor-save-error')), findsOneWidget);
       expect(repository.notes, hasLength(sampleNotes.length));
       expect(repository.notes.first.title, 'Persisted before pushed close');
+      expect(repository.notes.first.reminder, isNull);
+      expect(gateway.cancelled, [sampleNote.id]);
+      expect(gateway.scheduled, isEmpty);
 
       await tester.tap(find.byKey(const Key('editor-back-button')));
       expect(
@@ -1272,6 +1276,18 @@ Future<_RouterHarness> _pumpRouter(
 }
 
 String _path(GoRouter router) => router.routeInformationProvider.value.uri.path;
+
+Future<void> _clearReminderDraft(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('editor-metadata-button')));
+  await tester.pumpAndSettle();
+  final clearReminder = find.byKey(const Key('metadata-clear-reminder'));
+  await tester.ensureVisible(clearReminder);
+  await tester.tap(clearReminder);
+  final apply = find.byKey(const Key('metadata-apply'));
+  await tester.ensureVisible(apply);
+  await tester.tap(apply);
+  await tester.pumpAndSettle();
+}
 
 Future<void> _jumpToEnd(WidgetTester tester, Finder scrollView) async {
   final scrollable = find.descendant(

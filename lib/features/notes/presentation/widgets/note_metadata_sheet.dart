@@ -16,9 +16,15 @@ class NoteMetadataValue {
 }
 
 class NoteMetadataSheet extends StatefulWidget {
-  const NoteMetadataSheet({required this.initialValue, this.now, super.key});
+  const NoteMetadataSheet({
+    required this.initialValue,
+    required this.supportsReminderScheduling,
+    this.now,
+    super.key,
+  });
 
   final NoteMetadataValue initialValue;
+  final bool supportsReminderScheduling;
   final DateTime Function()? now;
 
   @override
@@ -66,6 +72,10 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
     final duration = media.disableAnimations
         ? Duration.zero
         : const Duration(milliseconds: 200);
+    final reminderUnavailableMessage = _reminder == null
+        ? 'Reminders aren\u2019t available on this device.'
+        : 'Reminders aren\u2019t available on this device. '
+              'You can clear the saved reminder below.';
 
     return AnimatedPadding(
       duration: duration,
@@ -180,41 +190,57 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 48),
-                        child: OutlinedButton.icon(
-                          key: const Key('metadata-reminder-button'),
-                          onPressed: _pickReminder,
-                          icon: const Icon(Icons.alarm_rounded),
-                          label: Text(
-                            _reminder == null
-                                ? 'Add reminder'
-                                : DateFormat(
-                                    'MMM d, yyyy h:mm a',
-                                  ).format(_reminder!),
-                          ),
-                        ),
-                      ),
-                      if (_reminder != null)
+                  if (widget.supportsReminderScheduling)
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
                         ConstrainedBox(
                           constraints: const BoxConstraints(minHeight: 48),
-                          child: TextButton.icon(
-                            key: const Key('metadata-clear-reminder'),
-                            onPressed: () => setState(() {
-                              _reminder = null;
-                              _reminderError = null;
-                            }),
-                            icon: const Icon(Icons.alarm_off_rounded),
-                            label: const Text('Clear reminder'),
+                          child: OutlinedButton.icon(
+                            key: const Key('metadata-reminder-button'),
+                            onPressed: _pickReminder,
+                            icon: const Icon(Icons.alarm_rounded),
+                            label: Text(
+                              _reminder == null
+                                  ? 'Add reminder'
+                                  : DateFormat(
+                                      'MMM d, yyyy h:mm a',
+                                    ).format(_reminder!),
+                            ),
                           ),
                         ),
+                        if (_reminder != null) _clearReminderButton(),
+                      ],
+                    )
+                  else ...[
+                    Semantics(
+                      key: const Key('metadata-reminder-unavailable'),
+                      label: reminderUnavailableMessage,
+                      excludeSemantics: true,
+                      child: Text(
+                        reminderUnavailableMessage,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    if (_reminder != null) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            DateFormat('MMM d, yyyy h:mm a').format(_reminder!),
+                          ),
+                          _clearReminderButton(),
+                        ],
+                      ),
                     ],
-                  ),
+                  ],
                   if (_reminderError case final error?) ...[
                     const SizedBox(height: 8),
                     Semantics(
@@ -402,6 +428,21 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
       _reminderError = null;
     });
   }
+
+  void _clearReminder() => setState(() {
+    _reminder = null;
+    _reminderError = null;
+  });
+
+  Widget _clearReminderButton() => ConstrainedBox(
+    constraints: const BoxConstraints(minHeight: 48),
+    child: TextButton.icon(
+      key: const Key('metadata-clear-reminder'),
+      onPressed: _clearReminder,
+      icon: const Icon(Icons.alarm_off_rounded),
+      label: const Text('Clear reminder'),
+    ),
+  );
 
   void _cancel() => Navigator.of(context).pop();
 

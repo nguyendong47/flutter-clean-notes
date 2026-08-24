@@ -280,6 +280,63 @@ void main() {
     expect(harness.closeCount.value, 1);
   });
 
+  testWidgets(
+    'unsupported gateway hides scheduling but clears a saved reminder and saves metadata',
+    (tester) async {
+      final existing = sampleNote.copyWith(
+        reminder: DateTime.utc(2030, 1, 15, 10, 30),
+      );
+      final repository = _RecordingRepository([existing]);
+      final gateway = FakeNoteReminderGateway(supportsScheduling: false);
+      final harness = await _pumpEditor(
+        tester,
+        note: existing,
+        repository: repository,
+        gateway: gateway,
+        now: () => DateTime.utc(2030, 1, 15, 10),
+      );
+
+      await tester.tap(find.byKey(const Key('editor-metadata-button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Reminders aren\u2019t available on this device.'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('metadata-reminder-button')), findsNothing);
+      expect(find.byKey(const Key('metadata-clear-reminder')), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(
+          ValueKey('metadata-tint-${Colors.blue.shade100.toARGB32()}'),
+        ),
+      );
+      await tester.enterText(
+        find.byKey(const Key('metadata-tag-field')),
+        'offline',
+      );
+      await tester.tap(find.byKey(const Key('metadata-add-tag')));
+      await tester.tap(find.byKey(const Key('metadata-clear-reminder')));
+      final apply = find.byKey(const Key('metadata-apply'));
+      await tester.ensureVisible(apply);
+      await tester.tap(apply);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('editor-done-button')));
+      await tester.pumpAndSettle();
+
+      expect(repository.updateCalls, 1);
+      expect(repository.notes.single.color, Colors.blue.shade100.toARGB32());
+      expect(repository.notes.single.tags, contains('offline'));
+      expect(repository.notes.single.reminder, isNull);
+      expect(gateway.scheduled, isEmpty);
+      expect(gateway.cancelled, [existing.id]);
+      expect(find.byKey(const Key('editor-save-error')), findsNothing);
+      expect(find.byKey(const Key('editor-retry-button')), findsNothing);
+      expect(harness.closeCount.value, 1);
+    },
+  );
+
   testWidgets('populated fields expose exact programmatic names', (
     tester,
   ) async {

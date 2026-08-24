@@ -79,6 +79,87 @@ void main() {
     expect(result.value?.reminder, isNull);
   });
 
+  testWidgets(
+    'unsupported reminders stay unavailable while tint and tags still apply',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      final result = ValueNotifier<NoteMetadataValue?>(null);
+      addTearDown(result.dispose);
+      await _openSheet(
+        tester,
+        initial: NoteMetadataValue(
+          color: Colors.white,
+          tags: const ['work'],
+          reminder: null,
+        ),
+        result: result,
+        supportsReminderScheduling: false,
+      );
+
+      final unavailable = find.byKey(
+        const Key('metadata-reminder-unavailable'),
+      );
+      expect(unavailable, findsOneWidget);
+      expect(
+        tester.getSemantics(unavailable).label,
+        contains('Reminders aren’t available on this device.'),
+      );
+      expect(find.byKey(const Key('metadata-reminder-button')), findsNothing);
+      expect(find.byKey(const Key('metadata-clear-reminder')), findsNothing);
+
+      final blue = Colors.blue.shade100;
+      await tester.tap(
+        find.byKey(ValueKey('metadata-tint-${blue.toARGB32()}')),
+      );
+      await tester.enterText(
+        find.byKey(const Key('metadata-tag-field')),
+        'offline',
+      );
+      await tester.tap(find.byKey(const Key('metadata-add-tag')));
+      await tester.tap(find.byKey(const Key('metadata-apply')));
+      await tester.pumpAndSettle();
+
+      expect(result.value?.color, blue);
+      expect(result.value?.tags, ['work', 'offline']);
+      expect(result.value?.reminder, isNull);
+      semantics.dispose();
+    },
+  );
+
+  testWidgets('unsupported reminders preserve a clear-only escape hatch', (
+    tester,
+  ) async {
+    final reminder = DateTime(2030, 1, 15, 10, 30);
+    final result = ValueNotifier<NoteMetadataValue?>(null);
+    addTearDown(result.dispose);
+    await _openSheet(
+      tester,
+      initial: NoteMetadataValue(
+        color: Colors.white,
+        tags: const [],
+        reminder: reminder,
+      ),
+      result: result,
+      supportsReminderScheduling: false,
+    );
+
+    expect(find.byKey(const Key('metadata-reminder-button')), findsNothing);
+    expect(find.text('Jan 15, 2030 10:30 AM'), findsOneWidget);
+    expect(
+      find.text(
+        'Reminders aren’t available on this device. '
+        'You can clear the saved reminder below.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('metadata-clear-reminder')));
+    await tester.tap(find.byKey(const Key('metadata-apply')));
+    await tester.pumpAndSettle();
+
+    expect(result.value?.reminder, isNull);
+  });
+
   testWidgets('blank and duplicate tags are rejected and tags can be removed', (
     tester,
   ) async {
@@ -729,6 +810,7 @@ Future<void> _openSheet(
   EdgeInsets viewInsets = EdgeInsets.zero,
   bool disableAnimations = false,
   DateTime Function()? now,
+  bool supportsReminderScheduling = true,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -763,8 +845,11 @@ Future<void> _openSheet(
                   isScrollControlled: true,
                   useSafeArea: true,
                   backgroundColor: Colors.transparent,
-                  builder: (context) =>
-                      NoteMetadataSheet(initialValue: initial, now: now),
+                  builder: (context) => NoteMetadataSheet(
+                    initialValue: initial,
+                    now: now,
+                    supportsReminderScheduling: supportsReminderScheduling,
+                  ),
                 );
                 if (value != null) result.value = value;
               },
