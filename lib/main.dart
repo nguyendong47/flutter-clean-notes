@@ -17,7 +17,10 @@ void main() async {
 
   await NotificationService().init();
 
-  runApp(const ProviderScope(child: MyApp()));
+  final container = ProviderContainer();
+  await container.read(appThemeProvider.future);
+
+  runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
 }
 
 class MyApp extends ConsumerWidget {

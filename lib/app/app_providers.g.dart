@@ -113,7 +113,7 @@ final class AppThemeProvider
         argument: null,
         retry: null,
         name: r'appThemeProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -126,7 +126,7 @@ final class AppThemeProvider
   AppTheme create() => AppTheme();
 }
 
-String _$appThemeHash() => r'7481b1783c43851ca0487a2dfbb0f7457a1a479a';
+String _$appThemeHash() => r'155257d02780a8298f9f2e8948ef223544c89944';
 
 /// Theme mode controller that respects a saved preference.
 

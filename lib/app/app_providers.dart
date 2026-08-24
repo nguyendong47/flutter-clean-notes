@@ -45,11 +45,15 @@ ThemeModeStore themeModeStore(Ref ref) {
 }
 
 /// Theme mode controller that respects a saved preference.
-@riverpod
+@Riverpod(keepAlive: true)
 class AppTheme extends _$AppTheme {
   @override
-  Future<ThemeMode> build() {
-    return ref.watch(themeModeStoreProvider).readMode();
+  Future<ThemeMode> build() async {
+    try {
+      return await ref.watch(themeModeStoreProvider).readMode();
+    } catch (_) {
+      return ThemeMode.system;
+    }
   }
 
   /// Save the selected theme mode and update state.
