@@ -14,6 +14,7 @@ abstract class LocalNoteDataSource {
   Future<int> deleteNote(int id);
   Future<List<NoteModel>> getNotesByStatus(int status);
   Future<int> setNoteStatus(int id, int status);
+  Future<int> toggleNotePin(int id);
   Future<int> cleanupTrash();
   Future<int> removeTag(String tag);
 }
@@ -143,6 +144,19 @@ class LocalNoteDataSourceImpl implements LocalNoteDataSource {
       {'status': status},
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  @override
+  Future<int> toggleNotePin(int id) async {
+    final db = await database;
+    return db.rawUpdate(
+      '''
+      UPDATE $_tableName
+      SET isPinned = CASE isPinned WHEN 0 THEN 1 ELSE 0 END
+      WHERE id = ?
+      ''',
+      [id],
     );
   }
 

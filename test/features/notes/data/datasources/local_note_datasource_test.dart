@@ -31,6 +31,39 @@ void main() {
     expect(restored.single.tags, ['finance,2026', 'work']);
   });
 
+  test('pin toggle changes only isPinned for the selected row', () async {
+    sqfliteFfiInit();
+    final database = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
+    addTearDown(database.close);
+    await _createNotesTable(database);
+    final dataSource = LocalNoteDataSourceImpl(database: database);
+    final id = await dataSource.addNote(
+      NoteModel(
+        title: 'Archived source',
+        content: 'Keep every non-pin field',
+        color: 7,
+        createdAt: DateTime.utc(2026, 8, 24),
+        tags: const ['safe'],
+        status: NoteStatus.archived,
+        reminder: DateTime.utc(2026, 8, 25),
+      ),
+    );
+
+    expect(await dataSource.toggleNotePin(id), 1);
+
+    final row = await database.query('notes', where: 'id = ?', whereArgs: [id]);
+    final restored = NoteModel.fromJson(row.single);
+    expect(restored.isPinned, isTrue);
+    expect(restored.status, NoteStatus.archived);
+    expect(restored.title, 'Archived source');
+    expect(restored.content, 'Keep every non-pin field');
+    expect(restored.tags, ['safe']);
+    expect(restored.reminder, DateTime.utc(2026, 8, 25));
+  });
+
   test(
     'bulk import rolls back every insert when a later insert fails',
     () async {

@@ -114,8 +114,7 @@ class NotesTransfer extends _$NotesTransfer {
   }
 
   Future<List<Note>> _notes() async {
-    final cached = ref.read(notesProvider).value;
-    return cached ?? await ref.read(notesProvider.future);
+    return ref.read(notesProvider.notifier).readPersistedNotes();
   }
 
   Future<ReadableNotesExport> _readableExportNotes() async {

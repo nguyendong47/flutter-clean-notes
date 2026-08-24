@@ -393,6 +393,48 @@ final class SetNoteStatusUsecaseProvider
 String _$setNoteStatusUsecaseHash() =>
     r'708bc1f73ce3fd7d100cb0947bf787e7cef33237';
 
+@ProviderFor(toggleNotePinUsecase)
+final toggleNotePinUsecaseProvider = ToggleNotePinUsecaseProvider._();
+
+final class ToggleNotePinUsecaseProvider
+    extends $FunctionalProvider<ToggleNotePin, ToggleNotePin, ToggleNotePin>
+    with $Provider<ToggleNotePin> {
+  ToggleNotePinUsecaseProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'toggleNotePinUsecaseProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$toggleNotePinUsecaseHash();
+
+  @$internal
+  @override
+  $ProviderElement<ToggleNotePin> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  ToggleNotePin create(Ref ref) {
+    return toggleNotePinUsecase(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(ToggleNotePin value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<ToggleNotePin>(value),
+    );
+  }
+}
+
+String _$toggleNotePinUsecaseHash() =>
+    r'13047d382bc6ab9305b43e117a14ceec4850a001';
+
 @ProviderFor(cleanupTrashUsecase)
 final cleanupTrashUsecaseProvider = CleanupTrashUsecaseProvider._();
 
@@ -1029,7 +1071,7 @@ final class NotesNotifierProvider
   NotesNotifier create() => NotesNotifier();
 }
 
-String _$notesNotifierHash() => r'efe985b9ff5abe95fae0c49ba288d54b858d4d37';
+String _$notesNotifierHash() => r'6d957e4f161fc5c09c6780d432d6a697931ebc0c';
 
 abstract class _$NotesNotifier extends $AsyncNotifier<List<Note>> {
   FutureOr<List<Note>> build();

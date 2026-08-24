@@ -112,6 +112,15 @@ class InMemoryNoteRepository implements NoteRepository {
   }
 
   @override
+  Future<int> toggleNotePin(int id) async {
+    if (updateError case final error?) _throw(error);
+    final index = _notes.indexWhere((note) => note.id == id);
+    if (index == -1) return 0;
+    _notes[index] = _notes[index].copyWith(isPinned: !_notes[index].isPinned);
+    return 1;
+  }
+
+  @override
   Future<int> cleanupTrash() async {
     if (cleanupError case final error?) _throw(error);
     final cutoff = _now().subtract(const Duration(days: 30));

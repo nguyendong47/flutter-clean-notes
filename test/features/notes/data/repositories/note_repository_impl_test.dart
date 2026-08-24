@@ -45,6 +45,16 @@ void main() {
     expect(changed, 3);
     expect(dataSource.removedTags, ['shared']);
   });
+
+  test('repository forwards an atomic pin toggle', () async {
+    final dataSource = _RecordingLocalNoteDataSource();
+    final repository = NoteRepositoryImpl(dataSource);
+
+    final changed = await repository.toggleNotePin(42);
+
+    expect(changed, 1);
+    expect(dataSource.toggledNoteIds, [42]);
+  });
 }
 
 class _RecordingLocalNoteDataSource implements LocalNoteDataSource {
@@ -52,6 +62,7 @@ class _RecordingLocalNoteDataSource implements LocalNoteDataSource {
   int importCalls = 0;
   List<NoteModel> imported = const [];
   final List<String> removedTags = [];
+  final List<int> toggledNoteIds = [];
 
   @override
   Future<int> addNote(NoteModel note) async {
@@ -85,6 +96,12 @@ class _RecordingLocalNoteDataSource implements LocalNoteDataSource {
 
   @override
   Future<int> setNoteStatus(int id, int status) async => 0;
+
+  @override
+  Future<int> toggleNotePin(int id) async {
+    toggledNoteIds.add(id);
+    return 1;
+  }
 
   @override
   Future<int> updateNote(NoteModel note) async => 0;

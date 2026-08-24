@@ -49,6 +49,11 @@ class NoteRepositoryImpl implements NoteRepository {
   }
 
   @override
+  Future<int> toggleNotePin(int id) async {
+    return localDataSource.toggleNotePin(id);
+  }
+
+  @override
   Future<int> cleanupTrash() async {
     return await localDataSource.cleanupTrash();
   }

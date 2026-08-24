@@ -75,6 +75,16 @@ class SetNoteStatus {
   }
 }
 
+class ToggleNotePin {
+  final NoteRepository repository;
+
+  ToggleNotePin(this.repository);
+
+  Future<int> call(int id) async {
+    return repository.toggleNotePin(id);
+  }
+}
+
 class CleanupTrash {
   final NoteRepository repository;
 

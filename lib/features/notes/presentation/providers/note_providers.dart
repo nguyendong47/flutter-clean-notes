@@ -70,6 +70,12 @@ SetNoteStatus setNoteStatusUsecase(Ref ref) {
 }
 
 @riverpod
+ToggleNotePin toggleNotePinUsecase(Ref ref) {
+  final repository = ref.watch(noteRepositoryProvider);
+  return ToggleNotePin(repository);
+}
+
+@riverpod
 CleanupTrash cleanupTrashUsecase(Ref ref) {
   final repository = ref.watch(noteRepositoryProvider);
   return CleanupTrash(repository);
@@ -222,6 +228,16 @@ class NotesNotifier extends _$NotesNotifier {
       notes.addAll(await getNotes(status));
     }
     return notes;
+  }
+
+  Future<List<Note>> readPersistedNotes() {
+    final keepAlive = ref.keepAlive();
+    final result = _mutationQueue.then((_) => _fetchAllNotes());
+    _mutationQueue = result.then<void>(
+      (_) => keepAlive.close(),
+      onError: (Object _, StackTrace _) => keepAlive.close(),
+    );
+    return result;
   }
 
   Future<void> _mutate(Future<void> Function() operation) {
@@ -437,10 +453,10 @@ class NotesNotifier extends _$NotesNotifier {
   }
 
   Future<void> togglePin(Note note) {
-    return _mutateOneExistingNote(note.id, () {
-      return ref.read(updateNoteUsecaseProvider)(
-        note.copyWith(isPinned: !note.isPinned),
-      );
+    final noteId = note.id;
+    return _mutateOneExistingNote(noteId, () {
+      if (noteId == null) return Future.value(0);
+      return ref.read(toggleNotePinUsecaseProvider)(noteId);
     });
   }
 

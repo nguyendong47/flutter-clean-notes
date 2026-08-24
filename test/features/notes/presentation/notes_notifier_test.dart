@@ -369,6 +369,62 @@ void main() {
     },
   );
 
+  final queuedStatusMutations =
+      <
+        ({
+          String name,
+          NoteStatus expectedStatus,
+          Future<void> Function(NotesNotifier notifier, Note note) run,
+        })
+      >[
+        (
+          name: 'archive',
+          expectedStatus: NoteStatus.archived,
+          run: (notifier, note) => notifier.archiveNote(note),
+        ),
+        (
+          name: 'trash',
+          expectedStatus: NoteStatus.trashed,
+          run: (notifier, note) => notifier.trashNote(note),
+        ),
+      ];
+
+  for (final mutation in queuedStatusMutations) {
+    test(
+      'queued pin uses the latest persisted note after ${mutation.name}',
+      () async {
+        final repository = InMemoryNoteRepository.seeded([
+          Note(
+            id: 901,
+            title: 'Cached search result',
+            content: 'Do not resurrect this note',
+            color: 0,
+            createdAt: DateTime.utc(2026, 8, 24),
+          ),
+        ]);
+        final container = ProviderContainer(
+          overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        );
+        addTearDown(container.dispose);
+        await container.read(notesProvider.future);
+        container.read(searchQueryProvider.notifier).setQuery('cached');
+        final staleSearchNote = container.read(searchResultsProvider).single;
+        final notifier = container.read(notesProvider.notifier);
+
+        final move = mutation.run(notifier, staleSearchNote);
+        final pin = notifier.togglePin(staleSearchNote);
+        await Future.wait([move, pin]);
+
+        final persisted = repository.notes.single;
+        expect(persisted.status, mutation.expectedStatus);
+        expect(persisted.isPinned, isTrue);
+        final visible = container.read(notesProvider).requireValue.single;
+        expect(visible.status, mutation.expectedStatus);
+        expect(visible.isPinned, isTrue);
+      },
+    );
+  }
+
   test('serializes import refresh before the next mutation', () async {
     final repository = _GatedImportRefreshRepository(sampleNotes);
     final container = ProviderContainer(
@@ -1433,13 +1489,13 @@ class _SequencedUpdateRepository extends InMemoryNoteRepository {
   int _nextStep = 0;
 
   @override
-  Future<int> updateNote(Note note) async {
+  Future<int> toggleNotePin(int id) async {
     final step = steps[_nextStep++];
-    startedIds.add(note.id);
+    startedIds.add(id);
     step.entered.complete();
     await step._gate.future;
     if (step.error case final error?) throw error;
-    return super.updateNote(note);
+    return super.toggleNotePin(id);
   }
 }
 
@@ -1473,9 +1529,9 @@ class _GatedImportRefreshRepository extends InMemoryNoteRepository {
   }
 
   @override
-  Future<int> updateNote(Note note) async {
-    events.add('update:${note.id}');
-    return super.updateNote(note);
+  Future<int> toggleNotePin(int id) async {
+    events.add('update:$id');
+    return super.toggleNotePin(id);
   }
 }
 

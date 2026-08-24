@@ -9,6 +9,7 @@ import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/notes_transfer_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/notes_transfer_gateway.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:share_plus/share_plus.dart'
@@ -315,6 +316,91 @@ void main() {
       expect(gateway.lastSharedText, contains('Note 1'));
       expect(gateway.lastSharedText, contains('Note 2'));
       expect(gateway.lastSharedText, isNot(contains('Note 3')));
+    },
+  );
+
+  test(
+    'readable exports reload committed statuses after a failed mutation refresh',
+    () async {
+      final gateway = _FakeNotesTransferGateway();
+      final repository = InMemoryNoteRepository.seeded([
+        _note(71, NoteStatus.active, const []),
+        _note(72, NoteStatus.active, const []),
+      ]);
+      final container = _container(gateway: gateway, repository: repository);
+      addTearDown(container.dispose);
+      final cached = await container.read(notesProvider.future);
+      final privateNote = cached.singleWhere((note) => note.id == 71);
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      await expectLater(
+        container.read(notesProvider.notifier).trashNote(privateNote),
+        throwsA(isA<PersistedNoteMutationException>()),
+      );
+
+      expect(
+        repository.notes.singleWhere((note) => note.id == 71).status,
+        NoteStatus.trashed,
+      );
+      expect(
+        container
+            .read(notesProvider)
+            .value!
+            .singleWhere((note) => note.id == 71)
+            .status,
+        NoteStatus.active,
+      );
+      repository.getErrorAtCall = null;
+
+      expect(
+        await container.read(notesTransferProvider.notifier).exportText(),
+        NotesTransferResult.completed,
+      );
+      expect(gateway.lastSharedText, isNot(contains('Note 71')));
+      expect(gateway.lastSharedText, contains('Note 72'));
+
+      expect(
+        await container.read(notesTransferProvider.notifier).exportMarkdown(),
+        NotesTransferResult.completed,
+      );
+      expect(gateway.lastSharedText, isNot(contains('Note 71')));
+      expect(gateway.lastSharedText, contains('Note 72'));
+    },
+  );
+
+  test(
+    'readable export waits for an in-flight Trash commit before sharing',
+    () async {
+      final gateway = _FakeNotesTransferGateway();
+      final repository = _GatedStatusRepository.seeded([
+        _note(81, NoteStatus.active, const []),
+        _note(82, NoteStatus.active, const []),
+      ]);
+      final container = _container(gateway: gateway, repository: repository);
+      addTearDown(container.dispose);
+      final cached = await container.read(notesProvider.future);
+      final privateNote = cached.singleWhere((note) => note.id == 81);
+
+      final trash = container
+          .read(notesProvider.notifier)
+          .trashNote(privateNote);
+      await repository.statusWriteEntered.future;
+      final export = container
+          .read(notesTransferProvider.notifier)
+          .exportText();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(gateway.shareTextCalls, 0);
+
+      repository.releaseStatusWrite();
+      await trash;
+      expect(await export, NotesTransferResult.completed);
+      expect(gateway.lastSharedText, isNot(contains('Note 81')));
+      expect(gateway.lastSharedText, contains('Note 82'));
+      expect(
+        repository.notes.singleWhere((note) => note.id == 81).status,
+        NoteStatus.trashed,
+      );
     },
   );
 
@@ -905,6 +991,22 @@ class _CountingRepository extends InMemoryNoteRepository {
     statusReadCalls += 1;
     events.add('read');
     return super.getNotesByStatus(status);
+  }
+}
+
+class _GatedStatusRepository extends InMemoryNoteRepository {
+  _GatedStatusRepository.seeded(super.notes) : super.seeded();
+
+  final statusWriteEntered = Completer<void>();
+  final _statusWriteGate = Completer<void>();
+
+  void releaseStatusWrite() => _statusWriteGate.complete();
+
+  @override
+  Future<int> setNoteStatus(int id, NoteStatus status) async {
+    statusWriteEntered.complete();
+    await _statusWriteGate.future;
+    return super.setNoteStatus(id, status);
   }
 }
 
