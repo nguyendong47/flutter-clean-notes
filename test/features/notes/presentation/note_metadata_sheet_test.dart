@@ -190,6 +190,40 @@ void main() {
     expect(defaultReminder.isAfter(now), isTrue);
   });
 
+  testWidgets('new reminder default survives time spent in the dialogs', (
+    tester,
+  ) async {
+    var now = DateTime(2030, 1, 15, 10, 15, 59);
+    final result = ValueNotifier<NoteMetadataValue?>(null);
+    addTearDown(result.dispose);
+    await _openSheet(
+      tester,
+      initial: NoteMetadataValue(
+        color: Colors.white,
+        tags: const [],
+        reminder: null,
+      ),
+      result: result,
+      now: () => now,
+    );
+
+    await tester.tap(find.byKey(const Key('metadata-reminder-button')));
+    await tester.pumpAndSettle();
+    now = DateTime(2030, 1, 15, 10, 19, 30);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('metadata-reminder-error')), findsNothing);
+    expect(find.text('Jan 15, 2030 10:21 AM'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('metadata-apply')));
+    await tester.pumpAndSettle();
+
+    expect(result.value?.reminder, DateTime(2030, 1, 15, 10, 21));
+  });
+
   testWidgets('expired reminder is clamped using the injected picker clock', (
     tester,
   ) async {
@@ -221,7 +255,7 @@ void main() {
       tester
           .widget<TimePickerDialog>(find.byType(TimePickerDialog))
           .initialTime,
-      const TimeOfDay(hour: 10, minute: 16),
+      const TimeOfDay(hour: 10, minute: 21),
     );
   });
 
@@ -333,9 +367,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
-    expect(find.text('Jan 15, 2030 10:16 AM'), findsOneWidget);
+    expect(find.text('Jan 15, 2030 10:21 AM'), findsOneWidget);
 
-    now = DateTime(2030, 1, 15, 10, 16);
+    now = DateTime(2030, 1, 15, 10, 21);
     final apply = find.byKey(const Key('metadata-apply'));
     await tester.ensureVisible(apply);
     await tester.tap(apply);

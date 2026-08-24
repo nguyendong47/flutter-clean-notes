@@ -360,13 +360,14 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
 
   Future<void> _pickReminder() async {
     final now = widget.now?.call() ?? DateTime.now();
-    final futureDefault = DateTime(
+    final roundedUpMinute = DateTime(
       now.year,
       now.month,
       now.day,
       now.hour,
       now.minute,
     ).add(const Duration(minutes: 1));
+    final futureDefault = roundedUpMinute.add(const Duration(minutes: 5));
     final initial = _reminder?.isAfter(now) ?? false
         ? _reminder!
         : futureDefault;
