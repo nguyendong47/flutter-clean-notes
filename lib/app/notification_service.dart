@@ -10,12 +10,44 @@ import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 
 typedef OnNotificationTap = void Function(Note note, BuildContext context);
 
+bool supportsReminderSchedulingOn({
+  required bool isWeb,
+  required TargetPlatform platform,
+}) {
+  if (isWeb) return false;
+  return switch (platform) {
+    TargetPlatform.android ||
+    TargetPlatform.iOS ||
+    TargetPlatform.macOS => true,
+    _ => false,
+  };
+}
+
+UnsupportedError _unsupportedReminderSchedulingError({
+  required bool isWeb,
+  required TargetPlatform platform,
+}) {
+  return UnsupportedError(
+    isWeb
+        ? 'Scheduling reminders is not supported on the web.'
+        : 'Scheduling reminders is not supported on ${platform.name}.',
+  );
+}
+
 class NotificationPermissionDeniedException implements Exception {
   const NotificationPermissionDeniedException();
 
   @override
   String toString() =>
       'NotificationPermissionDeniedException: Notification permission was not granted.';
+}
+
+class NotificationUnavailableException implements Exception {
+  const NotificationUnavailableException();
+
+  @override
+  String toString() =>
+      'Notifications are unavailable. Restart Clean Notes and try again.';
 }
 
 class NotificationService {
@@ -52,8 +84,14 @@ class NotificationService {
   Future<void>? _initFuture;
   bool _flushScheduled = false;
   bool _launchDetailsChecked = false;
+  bool _initializationFailed = false;
 
   OnNotificationTap? get onNotificationTap => _onNotificationTap;
+
+  bool get supportsReminderScheduling => supportsReminderSchedulingOn(
+    isWeb: kIsWeb,
+    platform: defaultTargetPlatform,
+  );
 
   set onNotificationTap(OnNotificationTap? callback) {
     _onNotificationTap = callback;
@@ -68,12 +106,36 @@ class NotificationService {
     if (inFlightOrCompleted != null) return inFlightOrCompleted;
 
     late final Future<void> initialization;
-    initialization = _initialize().onError((error, stackTrace) {
-      if (identical(_initFuture, initialization)) _initFuture = null;
-      Error.throwWithStackTrace(error as Object, stackTrace);
-    });
+    initialization = _initialize()
+        .then<void>((_) => _initializationFailed = false)
+        .onError((error, _) {
+          if (identical(_initFuture, initialization)) _initFuture = null;
+          _initializationFailed = true;
+          final failureType = error.runtimeType.toString();
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: const NotificationUnavailableException(),
+              stack: StackTrace.current,
+              library: 'notification service',
+              context: ErrorDescription(
+                'while initializing optional notifications',
+              ),
+              informationCollector: () => <DiagnosticsNode>[
+                StringProperty('Native failure type', failureType),
+              ],
+            ),
+          );
+        });
     _initFuture = initialization;
     return initialization;
+  }
+
+  Future<void> _recoverInitializationIfNeeded() async {
+    if (!_initializationFailed) return;
+    await init();
+    if (_initializationFailed) {
+      throw const NotificationUnavailableException();
+    }
   }
 
   Future<void> _initialize() async {
@@ -131,15 +193,10 @@ class NotificationService {
     }
   }
 
-  bool get _supportsNotificationLaunchDetails {
-    if (kIsWeb) return false;
-    return switch (defaultTargetPlatform) {
-      TargetPlatform.android ||
-      TargetPlatform.iOS ||
-      TargetPlatform.macOS => true,
-      _ => false,
-    };
-  }
+  bool get _supportsNotificationLaunchDetails => supportsReminderSchedulingOn(
+    isWeb: kIsWeb,
+    platform: defaultTargetPlatform,
+  );
 
   Future<void> handleNotificationResponse(NotificationResponse response) async {
     final payload = response.payload;
@@ -281,6 +338,16 @@ class NotificationService {
         'The reminder must be in the future',
       );
     }
+    if (!supportsReminderSchedulingOn(
+      isWeb: kIsWeb,
+      platform: defaultTargetPlatform,
+    )) {
+      throw _unsupportedReminderSchedulingError(
+        isWeb: kIsWeb,
+        platform: defaultTargetPlatform,
+      );
+    }
+    await _recoverInitializationIfNeeded();
 
     final payload = buildPayload(note);
     final snoozeActions = <AndroidNotificationAction>[];
@@ -328,9 +395,13 @@ class NotificationService {
     final override = _requestPermissionOverride;
     if (override != null) return override();
 
-    if (kIsWeb) {
-      throw UnsupportedError(
-        'Scheduling reminders is not supported on the web.',
+    if (!supportsReminderSchedulingOn(
+      isWeb: kIsWeb,
+      platform: defaultTargetPlatform,
+    )) {
+      throw _unsupportedReminderSchedulingError(
+        isWeb: kIsWeb,
+        platform: defaultTargetPlatform,
       );
     }
 
@@ -353,8 +424,9 @@ class NotificationService {
               MacOSFlutterLocalNotificationsPlugin
             >()
             ?.requestPermissions(alert: true, badge: true, sound: true),
-      final platform => throw UnsupportedError(
-        'Scheduling reminders is not supported on ${platform.name}.',
+      final platform => throw _unsupportedReminderSchedulingError(
+        isWeb: false,
+        platform: platform,
       ),
     };
 
@@ -362,7 +434,13 @@ class NotificationService {
   }
 
   Future<void> cancelReminder(int id) async {
-    if (kIsWeb || defaultTargetPlatform == TargetPlatform.windows) return;
+    if (!supportsReminderSchedulingOn(
+      isWeb: kIsWeb,
+      platform: defaultTargetPlatform,
+    )) {
+      return;
+    }
+    await _recoverInitializationIfNeeded();
     await _plugin.cancel(id);
   }
 }

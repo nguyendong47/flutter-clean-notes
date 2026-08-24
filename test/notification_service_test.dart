@@ -40,6 +40,9 @@ class FakeFlutterLocalNotificationsPlugin extends Fake
   DidReceiveNotificationResponseCallback? onDidReceiveNotificationResponse;
   DidReceiveBackgroundNotificationResponseCallback?
   onDidReceiveBackgroundNotificationResponse;
+  Object? initializationError;
+  StackTrace? initializationStackTrace;
+  int initializeCalls = 0;
   int getLaunchDetailsCalls = 0;
 
   final List<ZonedScheduleCall> zonedScheduleCalls = [];
@@ -52,6 +55,14 @@ class FakeFlutterLocalNotificationsPlugin extends Fake
     DidReceiveBackgroundNotificationResponseCallback?
     onDidReceiveBackgroundNotificationResponse,
   }) async {
+    initializeCalls += 1;
+    final error = initializationError;
+    if (error != null) {
+      Error.throwWithStackTrace(
+        error,
+        initializationStackTrace ?? StackTrace.current,
+      );
+    }
     lastInitSettings = initializationSettings;
     this.onDidReceiveNotificationResponse = onDidReceiveNotificationResponse;
     this.onDidReceiveBackgroundNotificationResponse =
@@ -103,6 +114,20 @@ class FakeFlutterLocalNotificationsPlugin extends Fake
   }
 }
 
+Future<List<FlutterErrorDetails>> _captureFlutterErrors(
+  Future<void> Function() action,
+) async {
+  final diagnostics = <FlutterErrorDetails>[];
+  final previousErrorHandler = FlutterError.onError;
+  FlutterError.onError = diagnostics.add;
+  try {
+    await action();
+  } finally {
+    FlutterError.onError = previousErrorHandler;
+  }
+  return diagnostics;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones();
@@ -141,6 +166,108 @@ void main() {
     });
 
     group('Initialization', () {
+      test('platform capability includes only schedulable native targets', () {
+        const cases = <({bool isWeb, TargetPlatform platform, bool expected})>[
+          (isWeb: false, platform: TargetPlatform.android, expected: true),
+          (isWeb: false, platform: TargetPlatform.iOS, expected: true),
+          (isWeb: false, platform: TargetPlatform.macOS, expected: true),
+          (isWeb: false, platform: TargetPlatform.windows, expected: false),
+          (isWeb: false, platform: TargetPlatform.linux, expected: false),
+          (isWeb: true, platform: TargetPlatform.android, expected: false),
+        ];
+
+        for (final testCase in cases) {
+          expect(
+            supportsReminderSchedulingOn(
+              isWeb: testCase.isWeb,
+              platform: testCase.platform,
+            ),
+            testCase.expected,
+            reason:
+                'isWeb=${testCase.isWeb}, platform=${testCase.platform.name}',
+          );
+        }
+      });
+
+      test('service exposes the current native platform capability', () {
+        const cases = <({TargetPlatform platform, bool expected})>[
+          (platform: TargetPlatform.android, expected: true),
+          (platform: TargetPlatform.iOS, expected: true),
+          (platform: TargetPlatform.macOS, expected: true),
+          (platform: TargetPlatform.windows, expected: false),
+          (platform: TargetPlatform.linux, expected: false),
+        ];
+
+        try {
+          for (final testCase in cases) {
+            debugDefaultTargetPlatformOverride = testCase.platform;
+            expect(
+              notificationService.supportsReminderScheduling,
+              testCase.expected,
+              reason: testCase.platform.name,
+            );
+          }
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
+
+      test(
+        'init diagnostic keeps the failure type but omits private error and stack text',
+        () async {
+          fakePlugin.initializationError = StateError(
+            'private notification error details',
+          );
+          fakePlugin.initializationStackTrace = StackTrace.fromString(
+            'private notification stack details',
+          );
+          final diagnostics = await _captureFlutterErrors(
+            notificationService.init,
+          );
+
+          expect(diagnostics, hasLength(1));
+          final renderedDiagnostic = diagnostics.single.toString();
+          expect(renderedDiagnostic, contains('StateError'));
+          expect(
+            renderedDiagnostic,
+            isNot(contains('private notification error details')),
+          );
+          expect(
+            renderedDiagnostic,
+            isNot(contains('private notification stack details')),
+          );
+        },
+      );
+
+      test(
+        'service capability stays platform-only after initialization fails',
+        () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          addTearDown(() => debugDefaultTargetPlatformOverride = null);
+          fakePlugin.initializationError = StateError(
+            'private notification initialization details',
+          );
+          await _captureFlutterErrors(notificationService.init);
+
+          expect(notificationService.supportsReminderScheduling, isTrue);
+        },
+      );
+
+      test('a later successful init restores reminder capability', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        fakePlugin.initializationError = StateError(
+          'private notification initialization details',
+        );
+        await _captureFlutterErrors(notificationService.init);
+        fakePlugin.initializationError = null;
+
+        await notificationService.init();
+
+        expect(fakePlugin.initializeCalls, 2);
+        expect(notificationService.supportsReminderScheduling, isTrue);
+      });
+
       for (final platform in [
         TargetPlatform.android,
         TargetPlatform.iOS,
@@ -199,6 +326,62 @@ void main() {
     });
 
     group('Reminder Scheduling', () {
+      test(
+        'repeated initialization failure makes scheduling fail without scheduling',
+        () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          addTearDown(() => debugDefaultTargetPlatformOverride = null);
+          fakePlugin.initializationError = StateError(
+            'private notification initialization details',
+          );
+          await _captureFlutterErrors(notificationService.init);
+
+          final diagnostics = await _captureFlutterErrors(() async {
+            await expectLater(
+              notificationService.scheduleReminder(testNote),
+              throwsA(
+                isA<NotificationUnavailableException>().having(
+                  (error) => error.toString(),
+                  'message',
+                  allOf(
+                    contains('Notifications are unavailable'),
+                    isNot(contains('private notification')),
+                  ),
+                ),
+              ),
+            );
+          });
+
+          expect(diagnostics, hasLength(1));
+          expect(fakePlugin.initializeCalls, 2);
+          expect(permissionRequests, 0);
+          expect(fakePlugin.zonedScheduleCalls, isEmpty);
+        },
+      );
+
+      test(
+        'supported scheduling and cancellation share a successful recovery',
+        () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          addTearDown(() => debugDefaultTargetPlatformOverride = null);
+          fakePlugin.initializationError = StateError(
+            'private notification initialization details',
+          );
+          await _captureFlutterErrors(notificationService.init);
+          fakePlugin.initializationError = null;
+
+          await Future.wait([
+            notificationService.scheduleReminder(testNote),
+            notificationService.cancelReminder(42),
+          ]);
+
+          expect(fakePlugin.initializeCalls, 2);
+          expect(permissionRequests, 1);
+          expect(fakePlugin.zonedScheduleCalls, hasLength(1));
+          expect(fakePlugin.cancelledIds, [42]);
+        },
+      );
+
       test(
         'scheduleReminder uses a private generic inexact notification when permission is granted',
         () async {
@@ -396,9 +579,58 @@ void main() {
           },
         );
       }
+
+      for (final platform in [
+        TargetPlatform.linux,
+        TargetPlatform.windows,
+        TargetPlatform.fuchsia,
+      ]) {
+        test(
+          'unsupported ${platform.name} stays unsupported after init failure',
+          () async {
+            debugDefaultTargetPlatformOverride = platform;
+            addTearDown(() => debugDefaultTargetPlatformOverride = null);
+            fakePlugin.initializationError = StateError(
+              'private notification initialization details',
+            );
+            await _captureFlutterErrors(notificationService.init);
+
+            await expectLater(
+              notificationService.scheduleReminder(testNote),
+              throwsA(isA<UnsupportedError>()),
+            );
+
+            expect(fakePlugin.zonedScheduleCalls, isEmpty);
+            expect(permissionRequests, 0);
+          },
+        );
+      }
     });
 
     group('Reminder Cancellation', () {
+      test(
+        'repeated initialization failure makes cancellation fail without cancellation',
+        () async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          addTearDown(() => debugDefaultTargetPlatformOverride = null);
+          fakePlugin.initializationError = StateError(
+            'private notification initialization details',
+          );
+          await _captureFlutterErrors(notificationService.init);
+
+          final diagnostics = await _captureFlutterErrors(() async {
+            await expectLater(
+              notificationService.cancelReminder(42),
+              throwsA(isA<NotificationUnavailableException>()),
+            );
+          });
+
+          expect(diagnostics, hasLength(1));
+          expect(fakePlugin.initializeCalls, 2);
+          expect(fakePlugin.cancelledIds, isEmpty);
+        },
+      );
+
       test('cancelReminder delegates on a supported platform', () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.android;
         addTearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -416,6 +648,28 @@ void main() {
 
         expect(fakePlugin.cancelledIds, isEmpty);
       });
+
+      for (final platform in [
+        TargetPlatform.linux,
+        TargetPlatform.windows,
+        TargetPlatform.fuchsia,
+      ]) {
+        test(
+          'unsupported ${platform.name} cancellation stays a no-op after init failure',
+          () async {
+            debugDefaultTargetPlatformOverride = platform;
+            addTearDown(() => debugDefaultTargetPlatformOverride = null);
+            fakePlugin.initializationError = StateError(
+              'private notification initialization details',
+            );
+            await _captureFlutterErrors(notificationService.init);
+
+            await notificationService.cancelReminder(42);
+
+            expect(fakePlugin.cancelledIds, isEmpty);
+          },
+        );
+      }
     });
 
     group('Snooze Functionality', () {

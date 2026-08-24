@@ -229,15 +229,31 @@ void main() {
       },
     );
 
-    test('failed init can be retried', () async {
+    test('failed init is reported and can be retried', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       final plugin = _PermissionAwarePlugin()..initializeFailuresRemaining = 1;
       final service = NotificationService(plugin: plugin, now: () => now);
+      final diagnostics = <FlutterErrorDetails>[];
+      final previousErrorHandler = FlutterError.onError;
+      FlutterError.onError = diagnostics.add;
+      try {
+        await service.init();
+      } finally {
+        FlutterError.onError = previousErrorHandler;
+      }
 
-      await expectLater(service.init(), throwsStateError);
+      expect(diagnostics, hasLength(1));
+      expect(
+        diagnostics.single.exception,
+        isA<NotificationUnavailableException>(),
+      );
+      expect(service.supportsReminderScheduling, isTrue);
       await service.init();
 
       expect(plugin.initializeCalls, 2);
       expect(plugin.launchDetailsCalls, 1);
+      expect(service.supportsReminderScheduling, isTrue);
     });
 
     test('cold-launch snooze is complete before init completes', () async {
