@@ -1,11 +1,11 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import 'package:flutter_clean_notes/features/notes/data/datasources/local_note_datasource.dart';
 import 'package:flutter_clean_notes/features/notes/data/repositories/note_repository_impl.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/domain/repositories/note_repository.dart';
 import 'package:flutter_clean_notes/features/notes/domain/usecases/note_usecases.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_filters.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/local_note_datasource_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/invalid_note_reminder_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
@@ -13,13 +13,10 @@ import 'package:flutter_clean_notes/features/notes/presentation/services/persist
 
 export 'package:flutter_clean_notes/features/notes/presentation/providers/note_filters.dart'
     show NoteSort;
+export 'package:flutter_clean_notes/features/notes/presentation/providers/local_note_datasource_provider.dart'
+    show localNoteDataSourceProvider;
 
 part 'note_providers.g.dart';
-
-@riverpod
-LocalNoteDataSource localNoteDataSource(Ref ref) {
-  return LocalNoteDataSourceImpl();
-}
 
 @riverpod
 NoteRepository noteRepository(Ref ref) {
@@ -546,6 +543,12 @@ class NotesNotifier extends _$NotesNotifier {
   Future<void> cleanupTrash() {
     return _mutate(() async {
       await ref.read(cleanupTrashUsecaseProvider)();
+      try {
+        await ref.read(noteReminderGatewayProvider).syncPending();
+      } catch (_) {
+        // Cleanup and its cancellation commands are already durable. Startup
+        // reconciliation will retry without misreporting the deletion itself.
+      }
     });
   }
 }

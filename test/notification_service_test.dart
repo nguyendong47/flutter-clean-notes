@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
+import 'package:flutter_clean_notes/features/notes/domain/entities/reminder_command.dart';
+import 'package:flutter_clean_notes/features/notes/domain/repositories/reminder_outbox_repository.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/note_reminder_gateway.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -47,6 +49,7 @@ class FakeFlutterLocalNotificationsPlugin extends Fake
 
   final List<ZonedScheduleCall> zonedScheduleCalls = [];
   final List<int> cancelledIds = [];
+  List<PendingNotificationRequest> pendingRequests = const [];
 
   @override
   Future<bool?> initialize(
@@ -111,6 +114,11 @@ class FakeFlutterLocalNotificationsPlugin extends Fake
   @override
   Future<void> cancel(int id, {String? tag}) async {
     cancelledIds.add(id);
+  }
+
+  @override
+  Future<List<PendingNotificationRequest>> pendingNotificationRequests() async {
+    return pendingRequests;
   }
 }
 
@@ -326,6 +334,69 @@ void main() {
     });
 
     group('Reminder Scheduling', () {
+      test(
+        'outbox scheduling uses v2 payload without prompting in existing-only mode',
+        () async {
+          var permissionChecks = 0;
+          final service = NotificationService(
+            plugin: fakePlugin,
+            now: () => now,
+            requestPermission: () async {
+              permissionRequests += 1;
+              return true;
+            },
+            checkPermission: () async {
+              permissionChecks += 1;
+              return true;
+            },
+          );
+          final command = ReminderCommand(
+            generation: 17,
+            noteId: 1,
+            operation: ReminderCommandOperation.schedule,
+            scheduledAt: now.add(const Duration(hours: 1)),
+          );
+
+          await service.schedule(
+            command,
+            permissionPolicy: ReminderPermissionPolicy.existingOnly,
+          );
+
+          expect(permissionChecks, 1);
+          expect(permissionRequests, 0);
+          expect(fakePlugin.zonedScheduleCalls.single.payload, 'note:v2:1:17');
+        },
+      );
+
+      test('existing-only denial leaves native schedule untouched', () async {
+        final service = NotificationService(
+          plugin: fakePlugin,
+          now: () => now,
+          requestPermission: () async {
+            permissionRequests += 1;
+            return true;
+          },
+          checkPermission: () async => false,
+        );
+        final command = ReminderCommand(
+          generation: 17,
+          noteId: 1,
+          operation: ReminderCommandOperation.schedule,
+          scheduledAt: now.add(const Duration(hours: 1)),
+        );
+
+        await expectLater(
+          service.schedule(
+            command,
+            permissionPolicy: ReminderPermissionPolicy.existingOnly,
+          ),
+          throwsA(isA<NotificationPermissionDeniedException>()),
+        );
+
+        expect(permissionRequests, 0);
+        expect(fakePlugin.zonedScheduleCalls, isEmpty);
+      });
+
       test(
         'repeated initialization failure makes scheduling fail without scheduling',
         () async {
@@ -738,6 +809,96 @@ void main() {
     });
 
     group('Response Handling', () {
+      test(
+        'v2 snooze delegates generation without permission or native work',
+        () async {
+          final calls = <({int id, int? generation, int delay})>[];
+          notificationService.attachSnoozeHandler(({
+            required int noteId,
+            required int? expectedGeneration,
+            required int delayMinutes,
+          }) async {
+            calls.add((
+              id: noteId,
+              generation: expectedGeneration,
+              delay: delayMinutes,
+            ));
+            return true;
+          });
+
+          await notificationService.handleNotificationResponse(
+            const NotificationResponse(
+              notificationResponseType:
+                  NotificationResponseType.selectedNotificationAction,
+              id: 1,
+              actionId: 'snooze_15',
+              payload: 'note:v2:1:17',
+            ),
+          );
+
+          expect(calls, [(id: 1, generation: 17, delay: 15)]);
+          expect(permissionRequests, 0);
+          expect(fakePlugin.zonedScheduleCalls, isEmpty);
+        },
+      );
+
+      test(
+        'unknown snooze actions and mismatched v2 response IDs are ignored',
+        () async {
+          var calls = 0;
+          notificationService.attachSnoozeHandler(({
+            required int noteId,
+            required int? expectedGeneration,
+            required int delayMinutes,
+          }) async {
+            calls += 1;
+            return true;
+          });
+
+          for (final response in const [
+            NotificationResponse(
+              notificationResponseType:
+                  NotificationResponseType.selectedNotificationAction,
+              id: 1,
+              actionId: 'snooze_evil',
+              payload: 'note:v2:1:17',
+            ),
+            NotificationResponse(
+              notificationResponseType:
+                  NotificationResponseType.selectedNotificationAction,
+              id: 2,
+              actionId: 'snooze_15',
+              payload: 'note:v2:1:17',
+            ),
+          ]) {
+            await notificationService.handleNotificationResponse(response);
+          }
+
+          expect(calls, 0);
+        },
+      );
+
+      test(
+        'pending audit inventory accepts only owned canonical payloads',
+        () async {
+          fakePlugin.pendingRequests = const [
+            PendingNotificationRequest(1, null, null, 'note:v2:1:17'),
+            PendingNotificationRequest(2, null, null, 'note:v1:2'),
+            PendingNotificationRequest(3, null, null, 'note:v2:4:18'),
+            PendingNotificationRequest(4, null, null, 'note:v3:4:18'),
+            PendingNotificationRequest(5, null, null, null),
+          ];
+
+          final pending = await notificationService.pendingNotifications();
+
+          expect(pending, hasLength(2));
+          expect(pending.first.notificationId, 1);
+          expect(pending.first.generation, 17);
+          expect(pending.last.notificationId, 2);
+          expect(pending.last.isLegacy, isTrue);
+        },
+      );
+
       test(
         'opaque payload schedules a snoozed reminder on a snooze action',
         () async {

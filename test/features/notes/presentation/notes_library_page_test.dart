@@ -1047,8 +1047,9 @@ Future<ProviderContainer> _pumpLibrary(
     ProviderScope(
       overrides: [
         noteRepositoryProvider.overrideWithValue(repository),
-        if (reminderGateway != null)
-          noteReminderGatewayProvider.overrideWithValue(reminderGateway),
+        noteReminderGatewayProvider.overrideWithValue(
+          reminderGateway ?? FakeNoteReminderGateway(),
+        ),
       ],
       child: MaterialApp(
         theme: AuroraTheme.light(),

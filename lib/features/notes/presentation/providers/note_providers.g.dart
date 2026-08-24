@@ -9,54 +9,6 @@ part of 'note_providers.dart';
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
 
-@ProviderFor(localNoteDataSource)
-final localNoteDataSourceProvider = LocalNoteDataSourceProvider._();
-
-final class LocalNoteDataSourceProvider
-    extends
-        $FunctionalProvider<
-          LocalNoteDataSource,
-          LocalNoteDataSource,
-          LocalNoteDataSource
-        >
-    with $Provider<LocalNoteDataSource> {
-  LocalNoteDataSourceProvider._()
-    : super(
-        from: null,
-        argument: null,
-        retry: null,
-        name: r'localNoteDataSourceProvider',
-        isAutoDispose: true,
-        dependencies: null,
-        $allTransitiveDependencies: null,
-      );
-
-  @override
-  String debugGetCreateSourceHash() => _$localNoteDataSourceHash();
-
-  @$internal
-  @override
-  $ProviderElement<LocalNoteDataSource> $createElement(
-    $ProviderPointer pointer,
-  ) => $ProviderElement(pointer);
-
-  @override
-  LocalNoteDataSource create(Ref ref) {
-    return localNoteDataSource(ref);
-  }
-
-  /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(LocalNoteDataSource value) {
-    return $ProviderOverride(
-      origin: this,
-      providerOverride: $SyncValueProvider<LocalNoteDataSource>(value),
-    );
-  }
-}
-
-String _$localNoteDataSourceHash() =>
-    r'876dddb214c48a561908e64e05959b265c384662';
-
 @ProviderFor(noteRepository)
 final noteRepositoryProvider = NoteRepositoryProvider._();
 
@@ -1071,7 +1023,7 @@ final class NotesNotifierProvider
   NotesNotifier create() => NotesNotifier();
 }
 
-String _$notesNotifierHash() => r'6d957e4f161fc5c09c6780d432d6a697931ebc0c';
+String _$notesNotifierHash() => r'e5b5de5c622b12dac9f48e091e5be9fed7a4dd33';
 
 abstract class _$NotesNotifier extends $AsyncNotifier<List<Note>> {
   FutureOr<List<Note>> build();

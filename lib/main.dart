@@ -10,6 +10,7 @@ import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/app/router.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 
 Future<void> main() => bootstrapApplication();
 
@@ -30,19 +31,49 @@ Future<void> bootstrapApplication({
   }
 
   final notifications = notificationService ?? NotificationService();
-  await notifications.init();
-
   final container = (createContainer ?? _createAppContainer)(notifications);
   var handedOff = false;
   try {
+    final reminderCoordinator = container.read(reminderCoordinatorProvider);
+    notifications.attachSnoozeHandler(reminderCoordinator.snooze);
+    await notifications.init();
     await container.read(appThemeProvider.future);
     (runApplication ?? runApp)(
       UncontrolledProviderScope(container: container, child: const MyApp()),
     );
     handedOff = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(
+        reminderCoordinator.reconcileAtStartup().onError((error, stackTrace) {
+          _reportReminderReconciliationFailure(error, stackTrace);
+        }),
+      );
+    });
   } finally {
     if (!handedOff) container.dispose();
   }
+}
+
+void _reportReminderReconciliationFailure(Object? error, StackTrace _) {
+  if (error is NotificationUnavailableException) return;
+  FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: const _ReminderReconciliationFailure(),
+      stack: StackTrace.current,
+      library: 'reminder reconciliation',
+      context: ErrorDescription('while reconciling durable reminders'),
+      informationCollector: () => <DiagnosticsNode>[
+        StringProperty('Native failure type', error.runtimeType.toString()),
+      ],
+    ),
+  );
+}
+
+final class _ReminderReconciliationFailure implements Exception {
+  const _ReminderReconciliationFailure();
+
+  @override
+  String toString() => 'Reminder reconciliation will retry later.';
 }
 
 void _initializeDatabase() {

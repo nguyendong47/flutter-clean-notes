@@ -7,8 +7,16 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
+import 'package:flutter_clean_notes/features/notes/domain/entities/reminder_command.dart';
+import 'package:flutter_clean_notes/features/notes/domain/repositories/reminder_outbox_repository.dart';
 
 typedef OnNotificationTap = void Function(Note note, BuildContext context);
+typedef OnReminderSnooze =
+    Future<bool> Function({
+      required int noteId,
+      required int? expectedGeneration,
+      required int delayMinutes,
+    });
 
 bool supportsReminderSchedulingOn({
   required bool isWeb,
@@ -50,18 +58,31 @@ class NotificationUnavailableException implements Exception {
       'Notifications are unavailable. Restart Clean Notes and try again.';
 }
 
-class NotificationService {
+class NotificationActionFailedException implements Exception {
+  const NotificationActionFailedException();
+
+  @override
+  String toString() =>
+      'A notification action could not be completed. Open Clean Notes to retry.';
+}
+
+class NotificationService implements ReminderNotificationGateway {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService({
     FlutterLocalNotificationsPlugin? plugin,
     DateTime Function()? now,
     Future<bool> Function()? requestPermission,
+    Future<bool> Function()? checkPermission,
   }) {
-    if (plugin != null || now != null || requestPermission != null) {
+    if (plugin != null ||
+        now != null ||
+        requestPermission != null ||
+        checkPermission != null) {
       return NotificationService._internal(
         plugin: plugin,
         now: now,
         requestPermission: requestPermission,
+        checkPermission: checkPermission,
       );
     }
     return _instance;
@@ -70,15 +91,19 @@ class NotificationService {
     FlutterLocalNotificationsPlugin? plugin,
     DateTime Function()? now,
     Future<bool> Function()? requestPermission,
+    Future<bool> Function()? checkPermission,
   }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
        _now = now ?? DateTime.now,
-       _requestPermissionOverride = requestPermission;
+       _requestPermissionOverride = requestPermission,
+       _checkPermissionOverride = checkPermission;
 
   final FlutterLocalNotificationsPlugin _plugin;
   final DateTime Function() _now;
   final Future<bool> Function()? _requestPermissionOverride;
+  final Future<bool> Function()? _checkPermissionOverride;
 
   OnNotificationTap? _onNotificationTap;
+  OnReminderSnooze? _onReminderSnooze;
   GlobalKey<NavigatorState>? _navigatorKey;
   final ListQueue<Note> _pendingOpens = ListQueue<Note>();
   Future<void>? _initFuture;
@@ -93,9 +118,16 @@ class NotificationService {
     platform: defaultTargetPlatform,
   );
 
+  @override
+  bool get supportsScheduling => supportsReminderScheduling;
+
   set onNotificationTap(OnNotificationTap? callback) {
     _onNotificationTap = callback;
     _schedulePendingDelivery();
+  }
+
+  void attachSnoozeHandler(OnReminderSnooze handler) {
+    _onReminderSnooze = handler;
   }
 
   static const String actionSnooze = 'snooze';
@@ -181,13 +213,16 @@ class NotificationService {
   ) async {
     try {
       await handleNotificationResponse(response);
-    } catch (error, stackTrace) {
+    } catch (error) {
       FlutterError.reportError(
         FlutterErrorDetails(
-          exception: error,
-          stack: stackTrace,
+          exception: const NotificationActionFailedException(),
+          stack: StackTrace.current,
           library: 'notification service',
           context: ErrorDescription('while handling a notification action'),
+          informationCollector: () => <DiagnosticsNode>[
+            StringProperty('Native failure type', error.runtimeType.toString()),
+          ],
         ),
       );
     }
@@ -202,8 +237,9 @@ class NotificationService {
     final payload = response.payload;
     if (payload == null) return;
 
-    final id = _noteIdFromPayload(payload);
-    if (id == null) return;
+    final reminderPayload = _reminderPayloadFromText(payload);
+    if (reminderPayload == null) return;
+    final id = reminderPayload.noteId;
 
     final note = Note(
       id: id,
@@ -214,36 +250,34 @@ class NotificationService {
     );
 
     final action = response.actionId;
-    if (action != null &&
-        (action == actionSnooze || action.startsWith('snooze'))) {
-      final delayMinutes = snoozeDelayMinutes(action);
-      await scheduleSnoozedReminder(note, delayMinutes);
+    final snoozeDelay = _snoozeDelayForAction(action);
+    if (snoozeDelay != null) {
+      if (reminderPayload.generation != null && response.id != id) return;
+      final handler = _onReminderSnooze;
+      if (handler != null) {
+        await handler(
+          noteId: id,
+          expectedGeneration: reminderPayload.generation,
+          delayMinutes: snoozeDelay,
+        );
+      } else if (reminderPayload.generation == null) {
+        await scheduleSnoozedReminder(note, snoozeDelay);
+      }
     } else if (action == actionOpen || action == null || action.isEmpty) {
       _openOrQueue(note);
     }
-  }
-
-  int? _noteIdFromPayload(String payload) {
-    final opaqueParts = payload.split(':');
-    final opaqueId =
-        opaqueParts.length == 3 &&
-            opaqueParts[0] == 'note' &&
-            opaqueParts[1] == 'v1'
-        ? int.tryParse(opaqueParts[2])
-        : null;
-
-    final legacyParts = payload.split('|');
-    final legacyId = legacyParts.length == 6
-        ? int.tryParse(legacyParts[0])
-        : null;
-    final id = opaqueId ?? legacyId;
-    return _isValidNotificationId(id) ? id : null;
   }
 
   static const int _maxNotificationId = 0x7fffffff;
 
   static bool _isValidNotificationId(int? id) {
     return id != null && id >= 1 && id <= _maxNotificationId;
+  }
+
+  static bool _isValidGeneration(int? generation) {
+    return generation != null &&
+        generation >= 1 &&
+        generation <= 0x7fffffffffffffff;
   }
 
   static int snoozeDelayMinutes(String? actionId) {
@@ -255,6 +289,17 @@ class NotificationService {
       'snooze_60': 60,
     };
     return delays[actionId] ?? 10;
+  }
+
+  static int? _snoozeDelayForAction(String? actionId) {
+    return switch (actionId) {
+      actionSnooze => 10,
+      'snooze_5' => 5,
+      'snooze_15' => 15,
+      'snooze_30' => 30,
+      'snooze_60' => 60,
+      _ => null,
+    };
   }
 
   void attachContext(GlobalKey<NavigatorState> navigatorKey) {
@@ -304,8 +349,10 @@ class NotificationService {
     }
   }
 
-  String buildPayload(Note note) {
-    return 'note:v1:${note.id}';
+  String buildPayload(Note note, {int? generation}) {
+    return generation == null
+        ? 'note:v1:${note.id}'
+        : 'note:v2:${note.id}:$generation';
   }
 
   Future<void> scheduleSnoozedReminder(Note note, int delayMinutes) async {
@@ -314,7 +361,12 @@ class NotificationService {
     await scheduleReminder(updatedNote);
   }
 
-  Future<void> scheduleReminder(Note note) async {
+  Future<void> scheduleReminder(
+    Note note, {
+    ReminderPermissionPolicy permissionPolicy =
+        ReminderPermissionPolicy.requestIfNeeded,
+    int? generation,
+  }) async {
     final id = note.id;
     if (!_isValidNotificationId(id)) {
       throw ArgumentError.value(
@@ -347,9 +399,36 @@ class NotificationService {
         platform: defaultTargetPlatform,
       );
     }
+    if (_initializationFailed &&
+        permissionPolicy == ReminderPermissionPolicy.existingOnly) {
+      throw const NotificationUnavailableException();
+    }
     await _recoverInitializationIfNeeded();
 
-    final payload = buildPayload(note);
+    if (generation != null && !_isValidGeneration(generation)) {
+      throw ArgumentError.value(
+        generation,
+        'generation',
+        'A positive signed 64-bit generation is required',
+      );
+    }
+    await _scheduleReminder(
+      noteId: id!,
+      reminder: reminder,
+      generation: generation,
+      permissionPolicy: permissionPolicy,
+    );
+  }
+
+  Future<void> _scheduleReminder({
+    required int noteId,
+    required DateTime reminder,
+    required int? generation,
+    required ReminderPermissionPolicy permissionPolicy,
+  }) async {
+    final payload = generation == null
+        ? 'note:v1:$noteId'
+        : 'note:v2:$noteId:$generation';
     final snoozeActions = <AndroidNotificationAction>[];
     for (final minutes in [5, 15, 30, 60]) {
       snoozeActions.add(
@@ -370,13 +449,18 @@ class NotificationService {
       actions: snoozeActions,
     );
 
-    final permissionGranted = await _requestNotificationPermission();
+    final permissionGranted = switch (permissionPolicy) {
+      ReminderPermissionPolicy.existingOnly =>
+        await _hasNotificationPermission(),
+      ReminderPermissionPolicy.requestIfNeeded =>
+        await _requestNotificationPermission(),
+    };
     if (!permissionGranted) {
       throw const NotificationPermissionDeniedException();
     }
 
     await _plugin.zonedSchedule(
-      id!,
+      noteId,
       'Clean Notes',
       'Open Clean Notes to view your reminder.',
       tz.TZDateTime.from(reminder, tz.local),
@@ -433,6 +517,94 @@ class NotificationService {
     return permissionGranted ?? false;
   }
 
+  Future<bool> _hasNotificationPermission() async {
+    final override = _checkPermissionOverride;
+    if (override != null) return override();
+
+    if (!supportsReminderSchedulingOn(
+      isWeb: kIsWeb,
+      platform: defaultTargetPlatform,
+    )) {
+      return false;
+    }
+
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android =>
+        await _plugin
+                .resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin
+                >()
+                ?.areNotificationsEnabled() ??
+            false,
+      TargetPlatform.iOS => switch (await _plugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >()
+          ?.checkPermissions()) {
+        final options? => options.isEnabled || options.isProvisionalEnabled,
+        null => false,
+      },
+      TargetPlatform.macOS => switch (await _plugin
+          .resolvePlatformSpecificImplementation<
+            MacOSFlutterLocalNotificationsPlugin
+          >()
+          ?.checkPermissions()) {
+        final options? => options.isEnabled || options.isProvisionalEnabled,
+        null => false,
+      },
+      _ => false,
+    };
+  }
+
+  @override
+  Future<void> schedule(
+    ReminderCommand command, {
+    required ReminderPermissionPolicy permissionPolicy,
+  }) {
+    if (command.operation != ReminderCommandOperation.schedule ||
+        command.scheduledAt == null) {
+      throw ArgumentError.value(
+        command,
+        'command',
+        'A schedule command is required',
+      );
+    }
+    return scheduleReminder(
+      Note(
+        id: command.noteId,
+        title: '',
+        content: '',
+        color: 0,
+        createdAt: DateTime.utc(1970),
+        reminder: command.scheduledAt,
+      ),
+      permissionPolicy: permissionPolicy,
+      generation: command.generation,
+    );
+  }
+
+  @override
+  Future<void> cancel(int noteId) => cancelReminder(noteId);
+
+  @override
+  Future<List<PendingReminderNotification>> pendingNotifications() async {
+    if (!supportsReminderScheduling) return const [];
+    if (_initializationFailed) throw const NotificationUnavailableException();
+    await _recoverInitializationIfNeeded();
+    final requests = await _plugin.pendingNotificationRequests();
+    return [
+      for (final request in requests)
+        if (_reminderPayloadFromText(request.payload ?? '') case final payload?)
+          if (payload.noteId == request.id)
+            payload.generation == null
+                ? PendingReminderNotification.legacy(notificationId: request.id)
+                : PendingReminderNotification.v2(
+                    notificationId: request.id,
+                    generation: payload.generation!,
+                  ),
+    ];
+  }
+
   Future<void> cancelReminder(int id) async {
     if (!supportsReminderSchedulingOn(
       isWeb: kIsWeb,
@@ -443,4 +615,39 @@ class NotificationService {
     await _recoverInitializationIfNeeded();
     await _plugin.cancel(id);
   }
+
+  _ReminderPayload? _reminderPayloadFromText(String payload) {
+    final v2 = RegExp(
+      r'^note:v2:([1-9][0-9]*):([1-9][0-9]*)$',
+    ).firstMatch(payload);
+    if (v2 != null) {
+      final id = int.tryParse(v2.group(1)!);
+      final generation = int.tryParse(v2.group(2)!);
+      if (_isValidNotificationId(id) && _isValidGeneration(generation)) {
+        return _ReminderPayload(noteId: id!, generation: generation);
+      }
+      return null;
+    }
+
+    final v1 = RegExp(r'^note:v1:([1-9][0-9]*)$').firstMatch(payload);
+    if (v1 != null) {
+      final id = int.tryParse(v1.group(1)!);
+      if (_isValidNotificationId(id)) return _ReminderPayload(noteId: id!);
+      return null;
+    }
+
+    final legacyParts = payload.split('|');
+    if (legacyParts.length != 6) return null;
+    final legacyId = int.tryParse(legacyParts.first);
+    return _isValidNotificationId(legacyId)
+        ? _ReminderPayload(noteId: legacyId!)
+        : null;
+  }
+}
+
+final class _ReminderPayload {
+  const _ReminderPayload({required this.noteId, this.generation});
+
+  final int noteId;
+  final int? generation;
 }

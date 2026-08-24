@@ -444,8 +444,9 @@ Future<_Harness> _pumpRouter(
         repository ?? InMemoryNoteRepository.seeded(sampleNotes),
       ),
       notificationServiceProvider.overrideWithValue(notificationService),
-      if (gateway != null)
-        noteReminderGatewayProvider.overrideWithValue(gateway),
+      noteReminderGatewayProvider.overrideWithValue(
+        gateway ?? FakeNoteReminderGateway(),
+      ),
     ],
   );
   final router = container.read(routerProvider);

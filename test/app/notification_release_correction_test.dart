@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
+import 'package:flutter_clean_notes/features/notes/domain/entities/reminder_command.dart';
+import 'package:flutter_clean_notes/features/notes/domain/repositories/reminder_outbox_repository.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 // The concrete plugin API exposes this bound but does not re-export it.
 // ignore: depend_on_referenced_packages
@@ -26,6 +28,7 @@ class _PermissionAwarePlugin extends Fake
   Completer<void>? initializeGate;
   Completer<void>? scheduleGate;
   Object? scheduleError;
+  StackTrace? scheduleStackTrace;
   NotificationAppLaunchDetails launchDetails =
       const NotificationAppLaunchDetails(false);
   DidReceiveNotificationResponseCallback? responseCallback;
@@ -81,21 +84,33 @@ class _PermissionAwarePlugin extends Fake
     scheduleCalls.add(_ScheduleCall(id, payload));
     await scheduleGate?.future;
     final error = scheduleError;
-    if (error != null) throw error;
+    if (error != null) {
+      final stackTrace = scheduleStackTrace;
+      if (stackTrace != null) Error.throwWithStackTrace(error, stackTrace);
+      throw error;
+    }
   }
 }
 
 class _AndroidPermissionPlugin extends Fake
     implements AndroidFlutterLocalNotificationsPlugin {
-  _AndroidPermissionPlugin(this.result);
+  _AndroidPermissionPlugin(this.result, {this.enabled});
 
   final bool? result;
+  final bool? enabled;
   int requestCalls = 0;
+  int checkCalls = 0;
 
   @override
   Future<bool?> requestNotificationsPermission() async {
     requestCalls += 1;
     return result;
+  }
+
+  @override
+  Future<bool?> areNotificationsEnabled() async {
+    checkCalls += 1;
+    return enabled;
   }
 }
 
@@ -117,10 +132,12 @@ class _DarwinPermissionCall {
 
 class _IOSPermissionPlugin extends Fake
     implements IOSFlutterLocalNotificationsPlugin {
-  _IOSPermissionPlugin(this.result);
+  _IOSPermissionPlugin(this.result, {this.enabledOptions});
 
   final bool? result;
+  final NotificationsEnabledOptions? enabledOptions;
   final List<_DarwinPermissionCall> calls = <_DarwinPermissionCall>[];
+  int checkCalls = 0;
 
   @override
   Future<bool?> requestPermissions({
@@ -141,14 +158,22 @@ class _IOSPermissionPlugin extends Fake
     );
     return result;
   }
+
+  @override
+  Future<NotificationsEnabledOptions?> checkPermissions() async {
+    checkCalls += 1;
+    return enabledOptions;
+  }
 }
 
 class _MacOSPermissionPlugin extends Fake
     implements MacOSFlutterLocalNotificationsPlugin {
-  _MacOSPermissionPlugin(this.result);
+  _MacOSPermissionPlugin(this.result, {this.enabledOptions});
 
   final bool? result;
+  final NotificationsEnabledOptions? enabledOptions;
   final List<_DarwinPermissionCall> calls = <_DarwinPermissionCall>[];
+  int checkCalls = 0;
 
   @override
   Future<bool?> requestPermissions({
@@ -168,6 +193,12 @@ class _MacOSPermissionPlugin extends Fake
       ),
     );
     return result;
+  }
+
+  @override
+  Future<NotificationsEnabledOptions?> checkPermissions() async {
+    checkCalls += 1;
+    return enabledOptions;
   }
 }
 
@@ -292,7 +323,10 @@ void main() {
             true,
             notificationResponse: snoozeResponse(8),
           )
-          ..scheduleError = StateError('schedule failed');
+          ..scheduleError = StateError('private-sql-path-marker')
+          ..scheduleStackTrace = StackTrace.fromString(
+            'private-cold-stack-marker',
+          );
         final service = NotificationService(
           plugin: plugin,
           now: () => now,
@@ -310,7 +344,13 @@ void main() {
         final details = await reportedError.future.timeout(
           const Duration(seconds: 2),
         );
-        expect(details.exception, isA<StateError>());
+        expect(details.exception, isA<NotificationActionFailedException>());
+        expect(details.toString(), isNot(contains('private-sql-path-marker')));
+        expect(
+          details.stack.toString(),
+          isNot(contains('private-cold-stack-marker')),
+        );
+        expect(details.toString(), contains('StateError'));
         expect(plugin.scheduleCalls.single.id, 8);
       },
     );
@@ -319,7 +359,10 @@ void main() {
       'live callback reports snooze failures through FlutterError',
       () async {
         final plugin = _PermissionAwarePlugin()
-          ..scheduleError = StateError('schedule failed');
+          ..scheduleError = StateError('private-plugin-marker')
+          ..scheduleStackTrace = StackTrace.fromString(
+            'private-live-stack-marker',
+          );
         final service = NotificationService(
           plugin: plugin,
           now: () => now,
@@ -338,7 +381,13 @@ void main() {
         final details = await reportedError.future.timeout(
           const Duration(seconds: 2),
         );
-        expect(details.exception, isA<StateError>());
+        expect(details.exception, isA<NotificationActionFailedException>());
+        expect(details.toString(), isNot(contains('private-plugin-marker')));
+        expect(
+          details.stack.toString(),
+          isNot(contains('private-live-stack-marker')),
+        );
+        expect(details.toString(), contains('StateError'));
         expect(plugin.scheduleCalls.single.id, 9);
       },
     );
@@ -404,6 +453,79 @@ void main() {
   });
 
   group('production permission dispatch', () {
+    ReminderCommand command() => ReminderCommand(
+      generation: 7,
+      noteId: 1,
+      operation: ReminderCommandOperation.schedule,
+      scheduledAt: now.add(const Duration(hours: 1)),
+    );
+
+    test('Android existing-only checks status without requesting', () async {
+      final plugin = _PermissionAwarePlugin();
+      final android = _AndroidPermissionPlugin(false, enabled: true);
+      plugin.platformImplementations[AndroidFlutterLocalNotificationsPlugin] =
+          android;
+      final service = NotificationService(plugin: plugin, now: () => now);
+
+      await service.schedule(
+        command(),
+        permissionPolicy: ReminderPermissionPolicy.existingOnly,
+      );
+
+      expect(android.checkCalls, 1);
+      expect(android.requestCalls, 0);
+      expect(plugin.scheduleCalls.single.payload, 'note:v2:1:7');
+    });
+
+    for (final platform in <TargetPlatform>[
+      TargetPlatform.iOS,
+      TargetPlatform.macOS,
+    ]) {
+      test(
+        '${platform.name} existing-only accepts provisional without request',
+        () async {
+          debugDefaultTargetPlatformOverride = platform;
+          final plugin = _PermissionAwarePlugin();
+          const options = NotificationsEnabledOptions(
+            isEnabled: false,
+            isSoundEnabled: false,
+            isAlertEnabled: true,
+            isBadgeEnabled: false,
+            isProvisionalEnabled: true,
+            isCriticalEnabled: false,
+          );
+          late final int Function() checkCalls;
+          late final int Function() requestCalls;
+          if (platform == TargetPlatform.iOS) {
+            final ios = _IOSPermissionPlugin(false, enabledOptions: options);
+            plugin.platformImplementations[IOSFlutterLocalNotificationsPlugin] =
+                ios;
+            checkCalls = () => ios.checkCalls;
+            requestCalls = () => ios.calls.length;
+          } else {
+            final macOS = _MacOSPermissionPlugin(
+              false,
+              enabledOptions: options,
+            );
+            plugin.platformImplementations[MacOSFlutterLocalNotificationsPlugin] =
+                macOS;
+            checkCalls = () => macOS.checkCalls;
+            requestCalls = () => macOS.calls.length;
+          }
+          final service = NotificationService(plugin: plugin, now: () => now);
+
+          await service.schedule(
+            command(),
+            permissionPolicy: ReminderPermissionPolicy.existingOnly,
+          );
+
+          expect(checkCalls(), 1);
+          expect(requestCalls(), 0);
+          expect(plugin.scheduleCalls, hasLength(1));
+        },
+      );
+    }
+
     test(
       'Android requests notification permission through Android API',
       () async {

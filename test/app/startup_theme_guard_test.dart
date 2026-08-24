@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,9 @@ import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_home_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
+import 'package:flutter_clean_notes/features/notes/domain/repositories/reminder_outbox_repository.dart';
+import 'package:flutter_clean_notes/features/notes/domain/services/reminder_coordinator.dart';
 import 'package:flutter_clean_notes/main.dart' as app;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,6 +48,109 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_preferencesChannel, null);
   });
+
+  testWidgets(
+    'bootstrap attaches durable snooze before notification cold-launch handling',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final events = <String>[];
+      final plugin = _ColdSnoozePlugin(events);
+      final notifications = NotificationService(plugin: plugin);
+      final coordinator = _FakeReminderSyncCoordinator(events);
+      late ProviderContainer container;
+
+      await app.bootstrapApplication(
+        notificationService: notifications,
+        initializeDatabase: () {},
+        createContainer: (service) {
+          events.add('container');
+          container = ProviderContainer(
+            overrides: [
+              notificationServiceProvider.overrideWithValue(service),
+              reminderCoordinatorProvider.overrideWithValue(coordinator),
+              themeModeStoreProvider.overrideWithValue(
+                _CountingThemeModeStore(ThemeMode.system),
+              ),
+            ],
+          );
+          return container;
+        },
+        runApplication: (_) {
+          events.add('run');
+          runApp(const SizedBox.shrink());
+        },
+      );
+
+      expect(events.take(4), ['container', 'init', 'snooze:7:17:15', 'run']);
+      tester.binding.scheduleFrame();
+      await tester.pump();
+      await tester.pump();
+      expect(events, contains('reconcile'));
+      container.dispose();
+      debugDefaultTargetPlatformOverride = null;
+    },
+  );
+
+  testWidgets(
+    'startup reconciliation diagnostic omits private error and stack details',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final events = <String>[];
+      final notifications = NotificationService(
+        plugin: _ColdSnoozePlugin(events),
+      );
+      final coordinator = _FakeReminderSyncCoordinator(
+        events,
+        reconcileError: StateError('private-reconcile-error-marker'),
+        reconcileStackTrace: StackTrace.fromString(
+          'private-reconcile-stack-marker',
+        ),
+      );
+      late ProviderContainer container;
+      final diagnostics = <FlutterErrorDetails>[];
+      final previousErrorHandler = FlutterError.onError;
+      FlutterError.onError = diagnostics.add;
+      try {
+        await app.bootstrapApplication(
+          notificationService: notifications,
+          initializeDatabase: () {},
+          createContainer: (service) {
+            container = ProviderContainer(
+              overrides: [
+                notificationServiceProvider.overrideWithValue(service),
+                reminderCoordinatorProvider.overrideWithValue(coordinator),
+                themeModeStoreProvider.overrideWithValue(
+                  _CountingThemeModeStore(ThemeMode.system),
+                ),
+              ],
+            );
+            return container;
+          },
+          runApplication: (_) => runApp(const SizedBox.shrink()),
+        );
+        tester.binding.scheduleFrame();
+        await tester.pump();
+        await tester.pump();
+      } finally {
+        FlutterError.onError = previousErrorHandler;
+        debugDefaultTargetPlatformOverride = null;
+      }
+
+      expect(diagnostics, hasLength(1));
+      final details = diagnostics.single;
+      expect(details.library, 'reminder reconciliation');
+      expect(details.toString(), contains('StateError'));
+      expect(
+        details.toString(),
+        isNot(contains('private-reconcile-error-marker')),
+      );
+      expect(
+        details.stack.toString(),
+        isNot(contains('private-reconcile-stack-marker')),
+      );
+      container.dispose();
+    },
+  );
 
   testWidgets(
     'notification initialization failure is sanitized and notes UI still renders',
@@ -85,6 +192,9 @@ void main() {
                 noteRepositoryProvider.overrideWithValue(
                   InMemoryNoteRepository.seeded(sampleNotes),
                 ),
+                reminderCoordinatorProvider.overrideWithValue(
+                  _FakeReminderSyncCoordinator(<String>[]),
+                ),
               ],
             );
             return container!;
@@ -112,7 +222,7 @@ void main() {
   );
 
   testWidgets(
-    'notification degradation does not mask a later bootstrap failure',
+    'provider bootstrap failure happens before optional notification init',
     (tester) async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(_notificationsChannel, (call) async {
@@ -152,7 +262,7 @@ void main() {
         diagnostics.where(
           (details) => details.library == 'notification service',
         ),
-        hasLength(1),
+        isEmpty,
       );
     },
   );
@@ -278,4 +388,78 @@ class _CountingThemeModeStore implements ThemeModeStore {
 
   @override
   Future<void> writeMode(ThemeMode mode) async {}
+}
+
+final class _FakeReminderSyncCoordinator implements ReminderSyncCoordinator {
+  _FakeReminderSyncCoordinator(
+    this.events, {
+    this.reconcileError,
+    this.reconcileStackTrace,
+  });
+
+  final List<String> events;
+  final Object? reconcileError;
+  final StackTrace? reconcileStackTrace;
+
+  @override
+  Future<void> drain({
+    int? noteId,
+    ReminderPermissionPolicy permissionPolicy =
+        ReminderPermissionPolicy.requestIfNeeded,
+  }) async {}
+
+  @override
+  Future<void> reconcileAtStartup() async {
+    events.add('reconcile');
+    final error = reconcileError;
+    if (error != null) {
+      Error.throwWithStackTrace(
+        error,
+        reconcileStackTrace ?? StackTrace.current,
+      );
+    }
+  }
+
+  @override
+  Future<bool> snooze({
+    required int noteId,
+    required int? expectedGeneration,
+    required int delayMinutes,
+  }) async {
+    events.add('snooze:$noteId:$expectedGeneration:$delayMinutes');
+    return true;
+  }
+}
+
+final class _ColdSnoozePlugin extends Fake
+    implements FlutterLocalNotificationsPlugin {
+  _ColdSnoozePlugin(this.events);
+
+  final List<String> events;
+
+  @override
+  Future<bool?> initialize(
+    InitializationSettings initializationSettings, {
+    DidReceiveNotificationResponseCallback? onDidReceiveNotificationResponse,
+    DidReceiveBackgroundNotificationResponseCallback?
+    onDidReceiveBackgroundNotificationResponse,
+  }) async {
+    events.add('init');
+    return true;
+  }
+
+  @override
+  Future<NotificationAppLaunchDetails?>
+  getNotificationAppLaunchDetails() async {
+    return const NotificationAppLaunchDetails(
+      true,
+      notificationResponse: NotificationResponse(
+        notificationResponseType:
+            NotificationResponseType.selectedNotificationAction,
+        id: 7,
+        actionId: 'snooze_15',
+        payload: 'note:v2:7:17',
+      ),
+    );
+  }
 }

@@ -1396,8 +1396,12 @@ void main() {
 
   test('archive trash restore and delete mutate the full collection', () async {
     final repository = InMemoryNoteRepository.seeded(sampleNotes);
+    final gateway = FakeNoteReminderGateway();
     final container = ProviderContainer(
-      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        noteRepositoryProvider.overrideWithValue(repository),
+        noteReminderGatewayProvider.overrideWithValue(gateway),
+      ],
     );
     addTearDown(container.dispose);
     await container.read(notesProvider.future);
@@ -1460,8 +1464,12 @@ void main() {
       boundaryTrash,
       recentTrash,
     ], now: () => now);
+    final gateway = FakeNoteReminderGateway();
     final container = ProviderContainer(
-      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        noteRepositoryProvider.overrideWithValue(repository),
+        noteReminderGatewayProvider.overrideWithValue(gateway),
+      ],
     );
     addTearDown(container.dispose);
     await container.read(notesProvider.future);
@@ -1474,12 +1482,17 @@ void main() {
       51,
       52,
     ]);
+    expect(gateway.syncCalls, 1);
   });
 
   test('cleanup accepts a zero-row no-op', () async {
     final repository = InMemoryNoteRepository.seeded(const []);
+    final gateway = FakeNoteReminderGateway();
     final container = ProviderContainer(
-      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        noteRepositoryProvider.overrideWithValue(repository),
+        noteReminderGatewayProvider.overrideWithValue(gateway),
+      ],
     );
     addTearDown(container.dispose);
     await container.read(notesProvider.future);
@@ -1489,6 +1502,7 @@ void main() {
     expect(repository.notes, isEmpty);
     expect(container.read(notesProvider), isA<AsyncData<List<Note>>>());
     expect(container.read(notesProvider).requireValue, isEmpty);
+    expect(gateway.syncCalls, 1);
   });
 
   test('removeTag accepts a zero-row no-op', () async {

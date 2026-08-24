@@ -14,12 +14,14 @@ class FakeNoteReminderGateway implements NoteReminderGateway {
   final bool supportsScheduling;
   final List<Note> scheduled = [];
   final List<int> cancelled = [];
+  int syncCalls = 0;
   final List<String> events = [];
 
   Object? scheduleError;
   Object? cancelError;
   Completer<void>? scheduleGate;
   Completer<void>? cancelGate;
+  Completer<void>? syncGate;
 
   @override
   Future<void> schedule(Note note) async {
@@ -41,5 +43,14 @@ class FakeNoteReminderGateway implements NoteReminderGateway {
     if (gate != null) await gate.future;
     final error = cancelError;
     if (error != null) throw error;
+  }
+
+  @override
+  Future<void> syncPending() async {
+    syncCalls += 1;
+    events.add('sync');
+    _eventLog?.add('sync');
+    final gate = syncGate;
+    if (gate != null) await gate.future;
   }
 }
