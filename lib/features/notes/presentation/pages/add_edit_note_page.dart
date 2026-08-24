@@ -99,7 +99,10 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
     ref.watch(notesProvider);
     final routeIsCurrent = ModalRoute.isCurrentOf(context) ?? false;
     _schedulePendingCloseIfCurrent(routeIsCurrent);
-    final canPop = !_saving && _allowPop;
+    final navigatorCanPop = Navigator.of(context).canPop();
+    final canPop =
+        !_saving &&
+        (_allowPop || (navigatorCanPop && !_isDirty && !_hasPartialSave));
     final media = MediaQuery.of(context);
     final duration = media.disableAnimations
         ? Duration.zero
@@ -824,7 +827,10 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage> {
 
   void _finishCloseRequest() {
     final callback = widget.onClose;
-    final needsPopFrame = !_allowPop && Navigator.of(context).canPop();
+    final needsPopFrame =
+        (_hasPartialSave || _discardConfirmed) &&
+        !_allowPop &&
+        Navigator.of(context).canPop();
     if (needsPopFrame) {
       setState(() {
         _allowPop = true;

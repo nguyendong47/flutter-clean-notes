@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -732,6 +733,7 @@ void main() {
         find.byKey(const Key('editor-title-field')),
         'Unsaved pushed draft',
       );
+      await tester.pump();
 
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
@@ -754,6 +756,39 @@ void main() {
       expect(rootNavigatorKey.currentState!.canPop(), isFalse);
     },
   );
+
+  testWidgets('iOS edge swipe is enabled only while a pushed editor is clean', (
+    tester,
+  ) async {
+    // Mutation caught: forcing PopScope.canPop false for a clean editor,
+    // which disables Cupertino back-swipe before a callback can run.
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      final harness = await _pumpRouter(
+        tester,
+        repository: InMemoryNoteRepository.seeded(sampleNotes),
+        initialLocation: '/search',
+      );
+      harness.router.push('/note/1');
+      await tester.pumpAndSettle();
+
+      final editor = find.byType(AddEditNotePage);
+      final route =
+          ModalRoute.of(tester.element(editor))! as PageRoute<dynamic>;
+      expect(route.popGestureEnabled, isTrue);
+
+      final title = find.byKey(const Key('editor-title-field'));
+      await tester.enterText(title, 'Unsaved iOS title');
+      await tester.pump();
+      expect(route.popGestureEnabled, isFalse);
+
+      await tester.enterText(title, sampleNote.title);
+      await tester.pump();
+      expect(route.popGestureEnabled, isTrue);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 
   testWidgets('direct dirty editor top Back falls back only after discard', (
     tester,
