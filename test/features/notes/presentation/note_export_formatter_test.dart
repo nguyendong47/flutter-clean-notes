@@ -183,6 +183,259 @@ void main() {
         );
       }
     });
+
+    test('accepts the note-count boundary and rejects one more note', () {
+      final note = _validBackupNote();
+      final atLimit = jsonEncode(
+        List<Object?>.filled(NoteBackupImportLimits.maxNotes, note),
+      );
+
+      expect(
+        NoteExportFormatter.fromJson(atLimit),
+        hasLength(NoteBackupImportLimits.maxNotes),
+      );
+
+      final overLimit = jsonEncode(
+        List<Object?>.filled(NoteBackupImportLimits.maxNotes + 1, note),
+      );
+      expect(
+        () => NoteExportFormatter.fromJson(overLimit),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('too many notes'),
+          ),
+        ),
+      );
+    });
+
+    test('bounds note field count and field-name length', () {
+      final atFieldLimit = _validBackupNote();
+      for (
+        var index = atFieldLimit.length;
+        index < NoteBackupImportLimits.maxFieldsPerNote;
+        index++
+      ) {
+        atFieldLimit['extra$index'] = null;
+      }
+      expect(
+        NoteExportFormatter.fromJson(jsonEncode([atFieldLimit])),
+        hasLength(1),
+      );
+
+      final tooManyFields = {...atFieldLimit, 'overflow': null};
+      expect(
+        () => NoteExportFormatter.fromJson(jsonEncode([tooManyFields])),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            allOf(contains('Note 1'), contains('too many fields')),
+          ),
+        ),
+      );
+
+      final acceptedFieldName =
+          'x' * NoteBackupImportLimits.maxFieldNameCodeUnits;
+      expect(
+        NoteExportFormatter.fromJson(
+          jsonEncode([
+            {..._validBackupNote(), acceptedFieldName: null},
+          ]),
+        ),
+        hasLength(1),
+      );
+
+      const privateMarker = 'private-field-marker';
+      final rejectedFieldName =
+          privateMarker +
+          ('x' *
+              (NoteBackupImportLimits.maxFieldNameCodeUnits +
+                  1 -
+                  privateMarker.length));
+      expect(
+        () => NoteExportFormatter.fromJson(
+          jsonEncode([
+            {..._validBackupNote(), rejectedFieldName: null},
+          ]),
+        ),
+        throwsA(
+          isA<FormatException>()
+              .having(
+                (error) => error.message,
+                'message',
+                allOf(contains('field name'), contains('too long')),
+              )
+              .having(
+                (error) => error.message,
+                'sanitized message',
+                isNot(contains(privateMarker)),
+              ),
+        ),
+      );
+    });
+
+    test('accepts title and content boundaries then rejects longer fields', () {
+      final cases = <(String, int)>[
+        ('title', NoteBackupImportLimits.maxTitleCodeUnits),
+        ('content', NoteBackupImportLimits.maxContentCodeUnits),
+      ];
+
+      for (final (field, maxLength) in cases) {
+        final atLimit = {..._validBackupNote(), field: 'x' * maxLength};
+        expect(
+          NoteExportFormatter.fromJson(jsonEncode([atLimit])),
+          hasLength(1),
+          reason: '$field boundary',
+        );
+
+        final overLimit = {
+          ..._validBackupNote(),
+          field: 'private-value-${'x' * (maxLength - 12)}',
+        };
+        expect(
+          () => NoteExportFormatter.fromJson(jsonEncode([overLimit])),
+          throwsA(
+            isA<FormatException>()
+                .having(
+                  (error) => error.message,
+                  'message',
+                  allOf(contains('"$field"'), contains('too long')),
+                )
+                .having(
+                  (error) => error.message,
+                  'sanitized message',
+                  isNot(contains('private-value')),
+                ),
+          ),
+          reason: '$field over boundary',
+        );
+      }
+    });
+
+    test('bounds list and legacy tags before materializing imported notes', () {
+      final atLimitTags = List<String>.filled(
+        NoteBackupImportLimits.maxTagsPerNote,
+        'tag',
+      );
+      expect(
+        NoteExportFormatter.fromJson(
+          jsonEncode([
+            {..._validBackupNote(), 'tags': atLimitTags},
+          ]),
+        ).single.tags,
+        hasLength(NoteBackupImportLimits.maxTagsPerNote),
+      );
+
+      final tooManyTags = [...atLimitTags, 'private-tag-marker'];
+      expect(
+        () => NoteExportFormatter.fromJson(
+          jsonEncode([
+            {..._validBackupNote(), 'tags': tooManyTags},
+          ]),
+        ),
+        throwsA(
+          isA<FormatException>()
+              .having(
+                (error) => error.message,
+                'message',
+                contains('too many tags'),
+              )
+              .having(
+                (error) => error.message,
+                'sanitized message',
+                isNot(contains('private-tag-marker')),
+              ),
+        ),
+      );
+
+      final longestTag = 'x' * NoteBackupImportLimits.maxTagCodeUnits;
+      expect(
+        NoteExportFormatter.fromJson(
+          jsonEncode([
+            {
+              ..._validBackupNote(),
+              'tags': [longestTag],
+            },
+          ]),
+        ).single.tags,
+        [longestTag],
+      );
+      expect(
+        () => NoteExportFormatter.fromJson(
+          jsonEncode([
+            {
+              ..._validBackupNote(),
+              'tags': ['private-tag-${'x' * longestTag.length}'],
+            },
+          ]),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+
+      final legacyBoundary = atLimitTags.join(',');
+      expect(
+        NoteExportFormatter.fromJson(
+          jsonEncode([
+            {..._validBackupNote(), 'tags': legacyBoundary},
+          ]),
+        ).single.tags,
+        hasLength(NoteBackupImportLimits.maxTagsPerNote),
+      );
+      expect(
+        () => NoteExportFormatter.fromJson(
+          jsonEncode([
+            {..._validBackupNote(), 'tags': '$legacyBoundary,overflow'},
+          ]),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('accepts the total-tag boundary and rejects one more tag', () {
+      final notes = <Map<String, Object?>>[];
+      var remaining = NoteBackupImportLimits.maxTotalTags;
+      while (remaining > 0) {
+        final count = remaining > NoteBackupImportLimits.maxTagsPerNote
+            ? NoteBackupImportLimits.maxTagsPerNote
+            : remaining;
+        notes.add({
+          ..._validBackupNote(),
+          'tags': List<String>.filled(count, 'tag'),
+        });
+        remaining -= count;
+      }
+
+      expect(
+        NoteExportFormatter.fromJson(jsonEncode(notes)),
+        hasLength(notes.length),
+      );
+
+      final overLimit = [
+        ...notes,
+        {
+          ..._validBackupNote(),
+          'tags': ['private-overflow-tag'],
+        },
+      ];
+      expect(
+        () => NoteExportFormatter.fromJson(jsonEncode(overLimit)),
+        throwsA(
+          isA<FormatException>()
+              .having(
+                (error) => error.message,
+                'message',
+                contains('too many tags in total'),
+              )
+              .having(
+                (error) => error.message,
+                'sanitized message',
+                isNot(contains('private-overflow-tag')),
+              ),
+        ),
+      );
+    });
   });
 
   group('NoteExportFormatter readable exports', () {
@@ -225,4 +478,18 @@ void main() {
 Tags: #work\\|urgent, #multi line''');
     });
   });
+}
+
+Map<String, Object?> _validBackupNote() {
+  return <String, Object?>{
+    'id': 8,
+    'title': 'Valid title',
+    'content': 'Valid content',
+    'color': 7,
+    'createdAt': '2026-08-23T09:00:00.000Z',
+    'isPinned': 1,
+    'tags': const <String>[],
+    'status': 0,
+    'reminder': null,
+  };
 }

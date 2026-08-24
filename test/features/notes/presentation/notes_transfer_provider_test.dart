@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/notes_transfer_provider.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/note_export_formatter.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/notes_transfer_gateway.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -950,6 +951,55 @@ void main() {
     },
   );
 
+  test(
+    'over-limit backup fails before the repository import transaction',
+    () async {
+      final gateway = _FakeNotesTransferGateway()
+        ..pickedJson = jsonEncode([
+          {
+            'title': 'Private oversized backup',
+            'content': '',
+            'color': 17,
+            'createdAt': '2026-08-23T10:00:00.000Z',
+            'isPinned': 0,
+            'tags': List<String>.filled(
+              NoteBackupImportLimits.maxTagsPerNote + 1,
+              'private-tag',
+            ),
+            'status': 0,
+            'reminder': null,
+          },
+        ]);
+      final repository = _ImportCountingRepository.seeded(sampleNotes);
+      final container = _container(gateway: gateway, repository: repository);
+      addTearDown(container.dispose);
+      final before = await container.read(notesProvider.future);
+
+      final result = await container
+          .read(notesTransferProvider.notifier)
+          .importBackup();
+
+      expect(result, NotesTransferResult.failed);
+      expect(repository.importCalls, 0);
+      expect(repository.addCalls, 0);
+      expect(repository.notes, before);
+      expect(
+        container.read(notesTransferProvider).error,
+        isA<FormatException>()
+            .having(
+              (error) => error.message,
+              'message',
+              contains('too many tags'),
+            )
+            .having(
+              (error) => error.message,
+              'sanitized message',
+              isNot(contains('private-tag')),
+            ),
+      );
+    },
+  );
+
   test('share failure becomes row-addressable provider error', () async {
     final gateway = _FakeNotesTransferGateway()
       ..shareError = StateError('share unavailable');
@@ -1332,6 +1382,18 @@ class _CountingRepository extends InMemoryNoteRepository {
     statusReadCalls += 1;
     events.add('read');
     return super.getNotesByStatus(status);
+  }
+}
+
+class _ImportCountingRepository extends InMemoryNoteRepository {
+  _ImportCountingRepository.seeded(super.notes) : super.seeded();
+
+  int importCalls = 0;
+
+  @override
+  Future<void> importNotes(List<Note> notes) async {
+    importCalls += 1;
+    await super.importNotes(notes);
   }
 }
 
