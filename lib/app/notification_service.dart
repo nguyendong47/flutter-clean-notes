@@ -299,9 +299,7 @@ class NotificationService
   }
 
   static bool _isValidGeneration(int? generation) {
-    return generation != null &&
-        generation >= 1 &&
-        generation <= 0x7fffffffffffffff;
+    return generation != null && generation >= 1 && generation.bitLength <= 63;
   }
 
   static int snoozeDelayMinutes(String? actionId) {

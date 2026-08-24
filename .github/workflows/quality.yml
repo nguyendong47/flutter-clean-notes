@@ -105,7 +105,7 @@ jobs:
         run: flutter test --no-pub --concurrency=1
 
       - name: Build web release
-        run: flutter build web --release --no-pub
+        run: flutter build web --release --no-pub --no-web-resources-cdn
 
       - name: Build Android debug APK
         run: flutter build apk --debug --no-pub
