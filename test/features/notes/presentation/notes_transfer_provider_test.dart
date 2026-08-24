@@ -211,7 +211,7 @@ void main() {
   );
 
   test('platform picker accepts exactly 10 MiB of UTF-8 data', () async {
-    const maxImportBytes = 10 * 1024 * 1024;
+    const maxImportBytes = NoteBackupImportLimits.maxUtf8Bytes;
     final bytes = Uint8List(maxImportBytes)..fillRange(0, maxImportBytes, 0x20);
     bytes[0] = 0x5B;
     bytes[maxImportBytes - 1] = 0x5D;
@@ -233,7 +233,8 @@ void main() {
   test('platform picker bounds unknown-size imports by actual bytes', () async {
     final file = _FakePlatformFile.memory(
       name: 'backup.json',
-      bytes: Uint8List(10 * 1024 * 1024 + 1)..fillRange(0, 1, 0x5B),
+      bytes: Uint8List(NoteBackupImportLimits.maxUtf8Bytes + 1)
+        ..fillRange(0, 1, 0x5B),
       reportedLength: 0,
     );
     final picker = _FakeJsonFilePicker()..result = [file];
@@ -256,7 +257,7 @@ void main() {
   test(
     'platform picker stops unknown and misreported streams at 10 MiB plus one byte',
     () async {
-      const maxImportBytes = 10 * 1024 * 1024;
+      const maxImportBytes = NoteBackupImportLimits.maxUtf8Bytes;
       final maxSizedChunk = Uint8List(maxImportBytes);
 
       for (final reportedLength in [0, 1]) {
@@ -318,7 +319,7 @@ void main() {
     addTearDown(() => directory.delete(recursive: true));
     final file = File('${directory.path}${Platform.pathSeparator}backup.json');
     final randomAccessFile = await file.open(mode: FileMode.write);
-    await randomAccessFile.truncate(10 * 1024 * 1024 + 1);
+    await randomAccessFile.truncate(NoteBackupImportLimits.maxUtf8Bytes + 1);
     await randomAccessFile.close();
     final pickedFile = _FakePlatformFile.path(
       name: 'backup.json',
@@ -635,6 +636,40 @@ void main() {
         .toList(growable: false);
 
     expect(statuses, [0, 1, 2]);
+  });
+
+  test('invalid JSON backup is rejected before sharing private data', () async {
+    const privateMarker = 'private-title-marker';
+    final gateway = _FakeNotesTransferGateway();
+    final repository = InMemoryNoteRepository.seeded([
+      Note(
+        id: 1,
+        title:
+            '$privateMarker${'x' * NoteBackupImportLimits.maxTitleCodeUnits}',
+        content: '',
+        color: 7,
+        createdAt: DateTime.utc(2026, 8, 24),
+      ),
+    ]);
+    final container = _container(gateway: gateway, repository: repository);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    final result = await container
+        .read(notesTransferProvider.notifier)
+        .backupJson();
+
+    expect(result, NotesTransferResult.failed);
+    expect(gateway.shareFileCalls, 0);
+    expect(gateway.lastSharedText, isNull);
+    expect(
+      container.read(notesTransferProvider).error,
+      isA<FormatException>().having(
+        (error) => error.message,
+        'sanitized message',
+        isNot(contains(privateMarker)),
+      ),
+    );
   });
 
   test('dismissed share cancels and clears prior settled success', () async {
@@ -995,6 +1030,55 @@ void main() {
               (error) => error.message,
               'sanitized message',
               isNot(contains('private-tag')),
+            ),
+      );
+    },
+  );
+
+  test(
+    'nested unknown backup data fails before the repository import transaction',
+    () async {
+      final gateway = _FakeNotesTransferGateway()
+        ..pickedJson = jsonEncode([
+          {
+            'title': 'Valid title',
+            'content': 'Valid content',
+            'color': 7,
+            'createdAt': '2026-08-24T09:00:00.000Z',
+            'isPinned': 0,
+            'tags': const <String>[],
+            'status': 0,
+            'reminder': null,
+            'private-extension': [
+              {'nested': 'private-value'},
+            ],
+          },
+        ]);
+      final repository = _ImportCountingRepository.seeded(sampleNotes);
+      final container = _container(gateway: gateway, repository: repository);
+      addTearDown(container.dispose);
+      final before = await container.read(notesProvider.future);
+
+      final result = await container
+          .read(notesTransferProvider.notifier)
+          .importBackup();
+
+      expect(result, NotesTransferResult.failed);
+      expect(repository.importCalls, 0);
+      expect(repository.addCalls, 0);
+      expect(repository.notes, before);
+      expect(
+        container.read(notesTransferProvider).error,
+        isA<FormatException>()
+            .having(
+              (error) => error.message,
+              'message',
+              contains('nested data'),
+            )
+            .having(
+              (error) => error.message,
+              'sanitized message',
+              isNot(contains('private')),
             ),
       );
     },

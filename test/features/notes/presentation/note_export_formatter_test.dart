@@ -48,6 +48,93 @@ void main() {
       expect(NoteExportFormatter.toJson(backup), payload);
     });
 
+    test('exports only backups that satisfy every import resource limit', () {
+      final longestTitle = 'x' * NoteBackupImportLimits.maxTitleCodeUnits;
+      final longestTag = 't' * NoteBackupImportLimits.maxTagCodeUnits;
+      final boundary = _backupNote(title: longestTitle, tags: [longestTag]);
+
+      final payload = NoteExportFormatter.toJson(
+        AllStatusNotesBackup.fromAllStatuses([boundary]),
+      );
+
+      final restored = NoteExportFormatter.fromJson(payload).single;
+      expect(restored.title, longestTitle);
+      expect(restored.tags, [longestTag]);
+
+      final tooManyTags = _backupNote(
+        tags: List<String>.filled(
+          NoteBackupImportLimits.maxTagsPerNote + 1,
+          'tag',
+        ),
+      );
+      final tooLongTag = _backupNote(
+        tags: ['t' * (NoteBackupImportLimits.maxTagCodeUnits + 1)],
+      );
+      final tooManyTotalTags = List<Note>.filled(
+        (NoteBackupImportLimits.maxTotalTags ~/
+                NoteBackupImportLimits.maxTagsPerNote) +
+            1,
+        _backupNote(
+          tags: List<String>.filled(
+            NoteBackupImportLimits.maxTagsPerNote,
+            'tag',
+          ),
+        ),
+      );
+      final tooManyNotes = List<Note>.filled(
+        NoteBackupImportLimits.maxNotes + 1,
+        _backupNote(),
+      );
+
+      final invalidBackups = <AllStatusNotesBackup>[
+        AllStatusNotesBackup.fromAllStatuses([
+          _backupNote(
+            title:
+                'private-title-${'x' * NoteBackupImportLimits.maxTitleCodeUnits}',
+          ),
+        ]),
+        AllStatusNotesBackup.fromAllStatuses([
+          _backupNote(
+            content:
+                'private-content-${'x' * NoteBackupImportLimits.maxContentCodeUnits}',
+          ),
+        ]),
+        AllStatusNotesBackup.fromAllStatuses([tooManyTags]),
+        AllStatusNotesBackup.fromAllStatuses([tooLongTag]),
+        AllStatusNotesBackup.fromAllStatuses(tooManyTotalTags),
+        AllStatusNotesBackup.fromAllStatuses(tooManyNotes),
+      ];
+
+      for (final invalid in invalidBackups) {
+        try {
+          NoteExportFormatter.toJson(invalid);
+          fail('Expected an unrestorable backup to be rejected.');
+        } on FormatException catch (error) {
+          expect(error.message, isNot(contains('private-title')));
+          expect(error.message, isNot(contains('private-content')));
+        }
+      }
+    });
+
+    test('rejects an export whose UTF-8 JSON exceeds 10 MiB', () {
+      final multibyteContent =
+          '界' * (NoteBackupImportLimits.maxUtf8Bytes ~/ 3 + 1);
+      expect(
+        multibyteContent.length,
+        lessThan(NoteBackupImportLimits.maxContentCodeUnits),
+      );
+      final backup = AllStatusNotesBackup.fromAllStatuses([
+        _backupNote(content: multibyteContent),
+      ]);
+
+      try {
+        NoteExportFormatter.toJson(backup);
+        fail('Expected a backup larger than 10 MiB to be rejected.');
+      } on FormatException catch (error) {
+        expect(error.message, allOf(contains('backup'), contains('too large')));
+      }
+    });
+
     test('accepts legacy comma-delimited backup tags', () {
       final payload = jsonEncode([
         {
@@ -114,6 +201,106 @@ void main() {
             (error) => error.message,
             'message',
             contains('Note 1'),
+          ),
+        ),
+      );
+    });
+
+    test('rejects deeply nested JSON before decoding it', () {
+      const nesting = 1000;
+      final map = jsonEncode(_validBackupNote());
+      final nested = '${'[' * nesting}0${']' * nesting}';
+      final payload = '[${map.substring(0, map.length - 1)},"extra":$nested}]';
+
+      expect(
+        () => NoteExportFormatter.fromJson(payload),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            allOf(contains('backup'), contains('deeply nested')),
+          ),
+        ),
+      );
+    });
+
+    test('rejects excessive JSON structure before decoding it', () {
+      const emptyCollections = 250000;
+      final map = jsonEncode(_validBackupNote());
+      final wide = List<String>.filled(emptyCollections, '[]').join(',');
+      final payload = '[${map.substring(0, map.length - 1)},"extra":[$wide]}]';
+
+      expect(
+        () => NoteExportFormatter.fromJson(payload),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            allOf(contains('backup'), contains('too complex')),
+          ),
+        ),
+      );
+    });
+
+    test('does not count structural delimiters inside JSON strings', () {
+      final content = List<String>.filled(150000, r'[]{}:,"\\').join();
+      final payload = jsonEncode([
+        {..._validBackupNote(), 'content': content},
+      ]);
+
+      expect(NoteExportFormatter.fromJson(payload).single.content, content);
+    });
+
+    test('rejects nested unknown fields but accepts scalar metadata', () {
+      expect(
+        NoteExportFormatter.fromJson(
+          jsonEncode([
+            {..._validBackupNote(), 'formatVersion': 'future-v2'},
+          ]),
+        ),
+        hasLength(1),
+      );
+
+      expect(
+        () => NoteExportFormatter.fromJson(
+          jsonEncode([
+            {
+              ..._validBackupNote(),
+              'private-extension': [
+                {'nested': 'private-value'},
+              ],
+            },
+          ]),
+        ),
+        throwsA(
+          isA<FormatException>()
+              .having(
+                (error) => error.message,
+                'message',
+                allOf(contains('Note 1'), contains('nested data')),
+              )
+              .having(
+                (error) => error.message,
+                'sanitized message',
+                isNot(contains('private')),
+              ),
+        ),
+      );
+    });
+
+    test('accepts exactly 10 MiB of JSON and rejects one UTF-8 byte more', () {
+      const maxBytes = NoteBackupImportLimits.maxUtf8Bytes;
+      final exact = '[${' ' * (maxBytes - 2)}]';
+
+      expect(utf8.encode(exact), hasLength(maxBytes));
+      expect(NoteExportFormatter.fromJson(exact), isEmpty);
+      expect(
+        () => NoteExportFormatter.fromJson('$exact '),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            allOf(contains('backup'), contains('too large')),
           ),
         ),
       );
@@ -492,4 +679,21 @@ Map<String, Object?> _validBackupNote() {
     'status': 0,
     'reminder': null,
   };
+}
+
+Note _backupNote({
+  String title = 'Valid title',
+  String content = 'Valid content',
+  List<String> tags = const <String>[],
+}) {
+  return Note(
+    id: 8,
+    title: title,
+    content: content,
+    color: 7,
+    createdAt: DateTime.utc(2026, 8, 23, 9),
+    isPinned: true,
+    tags: tags,
+    status: NoteStatus.active,
+  );
 }

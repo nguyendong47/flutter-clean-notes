@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 
@@ -21,12 +22,17 @@ final class AllStatusNotesBackup {
   final List<Note> _notes;
 }
 
-/// Semantic limits applied to JSON backups before an import transaction.
+/// Resource limits shared by JSON backup creation and restoration.
 ///
-/// The picker separately caps files at 10 MiB. These limits prevent a compact
-/// payload from expanding into an excessive number of notes, fields, or tags
-/// while remaining generous for personal note collections.
+/// These limits prevent a compact payload from expanding into an excessive
+/// number of notes, fields, or tags while remaining generous for personal note
+/// collections. String limits use UTF-16 code units, matching Dart's
+/// [String.length]. Whole-backup size uses UTF-8 bytes, matching transferred
+/// files.
 abstract final class NoteBackupImportLimits {
+  /// Maximum UTF-8 bytes accepted or emitted for one backup.
+  static const int maxUtf8Bytes = 10 * 1024 * 1024;
+
   /// Maximum notes accepted from one backup.
   static const int maxNotes = 10_000;
 
@@ -54,10 +60,31 @@ abstract final class NoteBackupImportLimits {
   /// Maximum raw size of legacy comma-delimited tags before splitting.
   static const int maxLegacyTagsCodeUnits =
       maxTagsPerNote * maxTagCodeUnits + maxTagsPerNote - 1;
+
+  /// Maximum JSON collection nesting accepted before decoding.
+  static const int maxJsonNestingDepth = 64;
+
+  /// Maximum structural JSON tokens accepted before decoding.
+  ///
+  /// This covers the theoretical import boundary of [maxNotes] objects with
+  /// [maxFieldsPerNote] scalar fields plus [maxTotalTags] list entries.
+  static const int maxJsonStructuralTokens =
+      maxNotes * (2 * maxFieldsPerNote + 4) + maxTotalTags + 2;
 }
 
 abstract final class NoteExportFormatter {
   static const emptyExportMessage = 'No notes to export.';
+  static const _knownNoteFields = <String>{
+    'id',
+    'title',
+    'content',
+    'color',
+    'createdAt',
+    'isPinned',
+    'tags',
+    'status',
+    'reminder',
+  };
 
   static String toText(ReadableNotesExport export) {
     final buffer = StringBuffer();
@@ -107,25 +134,25 @@ abstract final class NoteExportFormatter {
   }
 
   static String toJson(AllStatusNotesBackup backup) {
-    final maps = backup._notes
-        .map(
-          (note) => <String, Object?>{
-            if (note.id != null) 'id': note.id,
-            'title': note.title,
-            'content': note.content,
-            'color': note.color,
-            'createdAt': note.createdAt.toIso8601String(),
-            'isPinned': note.isPinned ? 1 : 0,
-            'tags': List<String>.of(note.tags, growable: false),
-            'status': note.status.index,
-            'reminder': note.reminder?.toIso8601String(),
-          },
-        )
-        .toList(growable: false);
-    return const JsonEncoder.withIndent('  ').convert(maps);
+    final notes = backup._notes;
+    _checkNoteCount(notes.length);
+
+    final maps = <Map<String, Object?>>[];
+    var totalTags = 0;
+    for (var index = 0; index < notes.length; index++) {
+      final map = _noteToMap(notes[index]);
+      final parsed = _parseNote(map, index + 1);
+      totalTags = _checkTotalTags(totalTags, parsed.tags.length);
+      maps.add(map);
+    }
+
+    final payload = _encodeBackupJson(maps);
+    _checkJsonEnvelope(payload);
+    return payload;
   }
 
   static List<Note> fromJson(String payload) {
+    _checkJsonEnvelope(payload);
     final source = payload.startsWith('\uFEFF')
         ? payload.substring(1)
         : payload;
@@ -139,118 +166,162 @@ abstract final class NoteExportFormatter {
       throw const FormatException('The backup must contain a list of notes.');
     }
 
-    if (decoded.length > NoteBackupImportLimits.maxNotes) {
+    _checkNoteCount(decoded.length);
+
+    final notes = <Note>[];
+    var totalTags = 0;
+    for (var index = 0; index < decoded.length; index++) {
+      final note = _parseNote(decoded[index], index + 1);
+      totalTags = _checkTotalTags(totalTags, note.tags.length);
+      notes.add(note);
+    }
+    return notes;
+  }
+
+  static Map<String, Object?> _noteToMap(Note note) {
+    return <String, Object?>{
+      if (note.id != null) 'id': note.id,
+      'title': note.title,
+      'content': note.content,
+      'color': note.color,
+      'createdAt': note.createdAt.toIso8601String(),
+      'isPinned': note.isPinned ? 1 : 0,
+      'tags': List<String>.of(note.tags, growable: false),
+      'status': note.status.index,
+      'reminder': note.reminder?.toIso8601String(),
+    };
+  }
+
+  static String _encodeBackupJson(List<Map<String, Object?>> maps) {
+    final output = _CappedJsonByteSink(
+      maxBytes: NoteBackupImportLimits.maxUtf8Bytes,
+    );
+    final input = JsonUtf8Encoder(
+      '  ',
+      null,
+      64 * 1024,
+    ).startChunkedConversion(output);
+    input
+      ..add(maps)
+      ..close();
+    return utf8.decode(output.takeBytes());
+  }
+
+  static void _checkNoteCount(int count) {
+    if (count > NoteBackupImportLimits.maxNotes) {
       throw FormatException(
         'The backup contains too many notes '
         '(maximum ${NoteBackupImportLimits.maxNotes}).',
       );
     }
-
-    var totalTags = 0;
-    for (var index = 0; index < decoded.length; index++) {
-      totalTags += _validateResourceLimits(decoded[index], index + 1);
-      if (totalTags > NoteBackupImportLimits.maxTotalTags) {
-        throw FormatException(
-          'The backup contains too many tags in total '
-          '(maximum ${NoteBackupImportLimits.maxTotalTags}).',
-        );
-      }
-    }
-
-    return [
-      for (var index = 0; index < decoded.length; index++)
-        _parseNote(decoded[index], index + 1),
-    ];
   }
 
-  static int _validateResourceLimits(Object? value, int number) {
-    if (value is! Map) return 0;
-    if (value.length > NoteBackupImportLimits.maxFieldsPerNote) {
+  static int _checkTotalTags(int current, int additional) {
+    final total = current + additional;
+    if (total > NoteBackupImportLimits.maxTotalTags) {
       throw FormatException(
-        'Note $number contains too many fields '
-        '(maximum ${NoteBackupImportLimits.maxFieldsPerNote}).',
+        'The backup contains too many tags in total '
+        '(maximum ${NoteBackupImportLimits.maxTotalTags}).',
       );
     }
-
-    for (final key in value.keys) {
-      if (key is String &&
-          key.length > NoteBackupImportLimits.maxFieldNameCodeUnits) {
-        throw FormatException(
-          'Note $number contains a field name that is too long.',
-        );
-      }
-    }
-
-    _validateStringLength(
-      value['title'],
-      number,
-      'title',
-      NoteBackupImportLimits.maxTitleCodeUnits,
-    );
-    _validateStringLength(
-      value['content'],
-      number,
-      'content',
-      NoteBackupImportLimits.maxContentCodeUnits,
-    );
-    return _validateTags(value['tags'], number);
+    return total;
   }
 
-  static void _validateStringLength(
-    Object? value,
-    int number,
-    String field,
-    int maxCodeUnits,
-  ) {
-    if (value is String && value.length > maxCodeUnits) {
-      throw FormatException(
-        'Note $number has a "$field" field that is too long.',
-      );
+  static void _checkJsonEnvelope(String payload) {
+    var byteLength = 0;
+    var depth = 0;
+    var structuralTokens = 0;
+    var topLevelSeparators = 0;
+    var inString = false;
+    var escaped = false;
+    var rootArray = false;
+    var sawRootToken = false;
+
+    for (var index = 0; index < payload.length; index++) {
+      final codeUnit = payload.codeUnitAt(index);
+      if (codeUnit <= 0x7F) {
+        byteLength += 1;
+      } else if (codeUnit <= 0x7FF) {
+        byteLength += 2;
+      } else if (codeUnit >= 0xD800 &&
+          codeUnit <= 0xDBFF &&
+          index + 1 < payload.length) {
+        final next = payload.codeUnitAt(index + 1);
+        if (next >= 0xDC00 && next <= 0xDFFF) {
+          byteLength += 4;
+          index += 1;
+          if (byteLength > NoteBackupImportLimits.maxUtf8Bytes) {
+            throw const FormatException(
+              'The backup is too large. Choose a backup up to 10 MB.',
+            );
+          }
+          continue;
+        }
+        byteLength += 3;
+      } else {
+        byteLength += 3;
+      }
+
+      if (byteLength > NoteBackupImportLimits.maxUtf8Bytes) {
+        throw const FormatException(
+          'The backup is too large. Choose a backup up to 10 MB.',
+        );
+      }
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (codeUnit == 0x5C) {
+          escaped = true;
+        } else if (codeUnit == 0x22) {
+          inString = false;
+        }
+        continue;
+      }
+      if (codeUnit == 0x22) {
+        inString = true;
+        continue;
+      }
+
+      if (!sawRootToken && !_isJsonWhitespace(codeUnit)) {
+        sawRootToken = true;
+        rootArray = codeUnit == 0x5B;
+      }
+
+      switch (codeUnit) {
+        case 0x5B || 0x7B:
+          structuralTokens += 1;
+          depth += 1;
+          if (depth > NoteBackupImportLimits.maxJsonNestingDepth) {
+            throw const FormatException('The backup is too deeply nested.');
+          }
+        case 0x5D || 0x7D:
+          structuralTokens += 1;
+          depth -= 1;
+        case 0x2C:
+          structuralTokens += 1;
+          if (rootArray && depth == 1) {
+            topLevelSeparators += 1;
+            if (topLevelSeparators >= NoteBackupImportLimits.maxNotes) {
+              _checkNoteCount(topLevelSeparators + 1);
+            }
+          }
+        case 0x3A:
+          structuralTokens += 1;
+      }
+
+      if (structuralTokens > NoteBackupImportLimits.maxJsonStructuralTokens) {
+        throw const FormatException('The backup structure is too complex.');
+      }
     }
   }
 
-  static int _validateTags(Object? value, int number) {
-    if (value is String) {
-      if (value.length > NoteBackupImportLimits.maxLegacyTagsCodeUnits) {
-        throw FormatException('Note $number contains tags that are too long.');
-      }
-      final rawTags = value.split(',');
-      if (rawTags.length > NoteBackupImportLimits.maxTagsPerNote) {
-        throw FormatException(
-          'Note $number contains too many tags '
-          '(maximum ${NoteBackupImportLimits.maxTagsPerNote}).',
-        );
-      }
-      var count = 0;
-      for (final rawTag in rawTags) {
-        final tag = rawTag.trim();
-        if (tag.isEmpty) continue;
-        _validateTagLength(tag, number);
-        count += 1;
-      }
-      return count;
-    }
-
-    if (value is List) {
-      if (value.length > NoteBackupImportLimits.maxTagsPerNote) {
-        throw FormatException(
-          'Note $number contains too many tags '
-          '(maximum ${NoteBackupImportLimits.maxTagsPerNote}).',
-        );
-      }
-      for (final tag in value) {
-        if (tag is String) _validateTagLength(tag, number);
-      }
-      return value.length;
-    }
-
-    return 0;
-  }
-
-  static void _validateTagLength(String tag, int number) {
-    if (tag.length > NoteBackupImportLimits.maxTagCodeUnits) {
-      throw FormatException('Note $number contains a tag that is too long.');
-    }
+  static bool _isJsonWhitespace(int codeUnit) {
+    return codeUnit == 0x20 ||
+        codeUnit == 0x09 ||
+        codeUnit == 0x0A ||
+        codeUnit == 0x0D ||
+        codeUnit == 0xFEFF;
   }
 
   static Note _parseNote(Object? value, int number) {
@@ -258,23 +329,53 @@ abstract final class NoteExportFormatter {
       throw FormatException('Note $number must be a JSON object.');
     }
     final map = <String, Object?>{};
+    if (value.length > NoteBackupImportLimits.maxFieldsPerNote) {
+      throw FormatException(
+        'Note $number contains too many fields '
+        '(maximum ${NoteBackupImportLimits.maxFieldsPerNote}).',
+      );
+    }
+
     for (final entry in value.entries) {
       if (entry.key is! String) {
         throw FormatException('Note $number contains an invalid field name.');
       }
-      map[entry.key as String] = entry.value;
+      final key = entry.key as String;
+      if (key.length > NoteBackupImportLimits.maxFieldNameCodeUnits) {
+        throw FormatException(
+          'Note $number contains a field name that is too long.',
+        );
+      }
+      if (!_knownNoteFields.contains(key) &&
+          (entry.value is List || entry.value is Map)) {
+        throw FormatException('Note $number contains unsupported nested data.');
+      }
+      map[key] = entry.value;
     }
 
     final createdAt = _date(map['createdAt'], number, 'createdAt');
     final reminder = _nullableDate(map['reminder'], number, 'reminder');
+    final title = _boundedString(
+      map['title'],
+      number,
+      'title',
+      NoteBackupImportLimits.maxTitleCodeUnits,
+    );
+    final content = _boundedString(
+      map['content'],
+      number,
+      'content',
+      NoteBackupImportLimits.maxContentCodeUnits,
+    );
+    final tags = _parseTags(map['tags'], number);
     return Note(
       id: map.containsKey('id') ? _nullableInt(map['id'], number, 'id') : null,
-      title: _string(map['title'], number, 'title'),
-      content: _string(map['content'], number, 'content'),
+      title: title,
+      content: content,
       color: _integer(map['color'], number, 'color'),
       createdAt: DateTime.parse(createdAt),
       isPinned: _pinned(map['isPinned'], number) == 1,
-      tags: _tags(map['tags'], number),
+      tags: tags,
       status: NoteStatus.values[_status(map['status'], number)],
       reminder: reminder == null ? null : DateTime.parse(reminder),
     );
@@ -293,6 +394,21 @@ abstract final class NoteExportFormatter {
   static String _string(Object? value, int number, String field) {
     if (value is String) return value;
     throw _invalidField(number, field);
+  }
+
+  static String _boundedString(
+    Object? value,
+    int number,
+    String field,
+    int maxCodeUnits,
+  ) {
+    final text = _string(value, number, field);
+    if (text.length > maxCodeUnits) {
+      throw FormatException(
+        'Note $number has a "$field" field that is too long.',
+      );
+    }
+    return text;
   }
 
   static String _date(Object? value, int number, String field) {
@@ -316,21 +432,48 @@ abstract final class NoteExportFormatter {
     };
   }
 
-  static List<String> _tags(Object? value, int number) {
+  static List<String> _parseTags(Object? value, int number) {
     if (value is String) {
-      return value
-          .split(',')
-          .map((tag) => tag.trim())
-          .where((tag) => tag.isNotEmpty)
-          .toList();
+      if (value.length > NoteBackupImportLimits.maxLegacyTagsCodeUnits) {
+        throw FormatException('Note $number contains tags that are too long.');
+      }
+      final rawTags = value.split(',');
+      _checkTagCount(rawTags.length, number);
+      final tags = <String>[];
+      for (final rawTag in rawTags) {
+        final tag = rawTag.trim();
+        if (tag.isEmpty) continue;
+        _checkTagLength(tag, number);
+        tags.add(tag);
+      }
+      return tags;
     }
     if (value is List) {
-      if (value.any((tag) => tag is! String)) {
-        throw _invalidField(number, 'tags');
+      _checkTagCount(value.length, number);
+      final tags = <String>[];
+      for (final rawTag in value) {
+        if (rawTag is! String) throw _invalidField(number, 'tags');
+        _checkTagLength(rawTag, number);
+        tags.add(rawTag);
       }
-      return value.cast<String>().toList(growable: false);
+      return List<String>.unmodifiable(tags);
     }
     throw _invalidField(number, 'tags');
+  }
+
+  static void _checkTagCount(int count, int number) {
+    if (count > NoteBackupImportLimits.maxTagsPerNote) {
+      throw FormatException(
+        'Note $number contains too many tags '
+        '(maximum ${NoteBackupImportLimits.maxTagsPerNote}).',
+      );
+    }
+  }
+
+  static void _checkTagLength(String tag, int number) {
+    if (tag.length > NoteBackupImportLimits.maxTagCodeUnits) {
+      throw FormatException('Note $number contains a tag that is too long.');
+    }
   }
 
   static int _status(Object? value, int number) {
@@ -377,4 +520,26 @@ bool _isReadableNote(Note note) {
     NoteStatus.active || NoteStatus.archived => true,
     NoteStatus.trashed => false,
   };
+}
+
+final class _CappedJsonByteSink implements Sink<List<int>> {
+  _CappedJsonByteSink({required this.maxBytes});
+
+  final int maxBytes;
+  final BytesBuilder _bytes = BytesBuilder();
+
+  @override
+  void add(List<int> data) {
+    if (_bytes.length + data.length > maxBytes) {
+      throw const FormatException(
+        'The backup is too large. Choose a backup up to 10 MB.',
+      );
+    }
+    _bytes.add(data);
+  }
+
+  @override
+  void close() {}
+
+  Uint8List takeBytes() => _bytes.takeBytes();
 }

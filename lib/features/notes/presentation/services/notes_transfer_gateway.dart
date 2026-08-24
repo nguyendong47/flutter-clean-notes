@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart' hide XFile;
 
+import 'note_export_formatter.dart';
 import 'notes_transfer_web_options.dart'
     if (dart.library.js_interop) 'notes_transfer_web_options.web.dart';
 
@@ -37,9 +38,6 @@ class NotesTransferGateway {
   final Future<ShareResult> Function(ShareParams)? _share;
   final JsonFilePicker? _pickJsonFiles;
   final bool _isWeb;
-
-  /// Caps decode and JSON parsing memory for imports on mobile devices.
-  static const int _maxImportBytes = 10 * 1024 * 1024;
 
   Future<String?> pickJsonText() async {
     final List<PlatformFile>? result;
@@ -104,7 +102,7 @@ class NotesTransferGateway {
   }
 
   static void _checkImportSize(int byteLength) {
-    if (byteLength > _maxImportBytes) {
+    if (byteLength > NoteBackupImportLimits.maxUtf8Bytes) {
       throw const FormatException(
         'The selected backup file is too large. Choose a file up to 10 MB.',
       );
