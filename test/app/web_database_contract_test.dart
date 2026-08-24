@@ -63,6 +63,80 @@ void main() {
       );
     });
 
+    test('keeps Flutter engine resources on the application origin', () {
+      final workflow = File('.github/workflows/quality.yml').readAsStringSync();
+      final releaseGuide = File('docs/release.md').readAsStringSync();
+
+      expect(
+        workflow,
+        contains('flutter build web --release --no-pub --no-web-resources-cdn'),
+      );
+      expect(
+        releaseGuide,
+        contains('flutter build web --release --no-web-resources-cdn'),
+      );
+    });
+
+    test('bundles the Roboto text font and its license', () {
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      final font = File('assets/fonts/Roboto-Variable.ttf');
+      final license = File('assets/fonts/OFL.txt');
+
+      expect(pubspec, contains('asset: assets/fonts/Roboto-Variable.ttf'));
+      expect(font.existsSync(), isTrue, reason: 'Missing bundled Roboto font');
+      expect(
+        font.readAsBytesSync().take(4),
+        orderedEquals(const [0x00, 0x01, 0x00, 0x00]),
+      );
+      expect(
+        license.readAsStringSync(),
+        contains('SIL OPEN FONT LICENSE Version 1.1'),
+      );
+    });
+
+    test('keeps dynamic Web font fallback on the application origin', () {
+      final bootstrap = File('web/flutter_bootstrap.js').readAsStringSync();
+      final gitignore = File('.gitignore').readAsStringSync();
+      final license = File('web/fallback_fonts/OFL.txt');
+      final fallbackPaths = <String>[
+        'notosanssymbols/v43/'
+            'rP2up3q65FkAtHfwd-eIS2brbDN6gxP34F9jRRCe4W3gfQ8gb_VFRkzrbQ.woff2',
+        'notosansarabic/v28/'
+            'nwpxtLGrOAZMl5nJ_wfgRg3DrWFZWsnVBJ_sS6tlqHHFlhQ5l3sQWIHPqzCfyGyvvnCBFQLaig.woff2',
+        'notocoloremoji/v32/'
+            'Yq6P-KqIXTD0t4D9z1ESnKM3-HpFabsE4tq3luCC7p-aXxcn.8.woff2',
+        'notosanssc/v37/'
+            'k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.114.woff2',
+        'notosanssc/v37/'
+            'k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.116.woff2',
+      ];
+
+      expect(bootstrap, contains("fontFallbackBaseUrl: 'fallback_fonts/'"));
+      expect(bootstrap, isNot(contains('fonts.gstatic.com')));
+      expect(
+        gitignore,
+        matches(RegExp(r'^!web/flutter_bootstrap\.js$', multiLine: true)),
+        reason: 'The custom bootstrap must survive a clean release checkout',
+      );
+      for (final relativePath in fallbackPaths) {
+        final fallback = File('web/fallback_fonts/$relativePath');
+        expect(
+          fallback.existsSync(),
+          isTrue,
+          reason: 'Missing tested fallback: $relativePath',
+        );
+        expect(
+          fallback.readAsBytesSync().take(4),
+          orderedEquals('wOF2'.codeUnits),
+          reason: 'Invalid WOFF2 header: $relativePath',
+        );
+      }
+      expect(
+        license.readAsStringSync(),
+        contains('SIL OPEN FONT LICENSE Version 1.1'),
+      );
+    });
+
     test('documents Web as a supported release candidate', () {
       final releaseGuide = File('docs/release.md').readAsStringSync();
       final qaMatrix = File('docs/qa.md').readAsStringSync();
