@@ -507,6 +507,26 @@ class _RemoveTagDialogState extends State<_RemoveTagDialog>
     final colorScheme = Theme.of(context).colorScheme;
     final tag = widget.usage.tag;
     final count = widget.usage.count;
+    final removeButton = FilledButton(
+      onPressed: _busy ? null : _remove,
+      style: FilledButton.styleFrom(
+        backgroundColor: colorScheme.error,
+        foregroundColor: colorScheme.onError,
+      ),
+      child: _busy
+          ? const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 8),
+                Text('Removing…'),
+              ],
+            )
+          : const Text('Remove'),
+    );
     return PopScope(
       canPop: !_busy,
       child: AlertDialog(
@@ -540,26 +560,18 @@ class _RemoveTagDialogState extends State<_RemoveTagDialog>
           ),
           ConstrainedBox(
             constraints: const BoxConstraints(minWidth: 120, minHeight: 48),
-            child: FilledButton(
-              onPressed: _busy ? null : _remove,
-              style: FilledButton.styleFrom(
-                backgroundColor: colorScheme.error,
-                foregroundColor: colorScheme.onError,
-              ),
-              child: _busy
-                  ? const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        SizedBox(width: 8),
-                        Text('Removing…'),
-                      ],
-                    )
-                  : const Text('Remove'),
-            ),
+            child: _busy
+                ? Semantics(
+                    key: const Key('remove-tag-progress'),
+                    container: true,
+                    excludeSemantics: true,
+                    liveRegion: true,
+                    button: true,
+                    enabled: false,
+                    label: 'Removing tag',
+                    child: removeButton,
+                  )
+                : removeButton,
           ),
         ],
       ),

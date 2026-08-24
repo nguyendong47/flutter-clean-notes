@@ -31,6 +31,7 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
   final Set<int> _committedDeletedNoteIds = <int>{};
   final Set<int> _reminderCancellationRetries = <int>{};
 
+  Future<void>? _refreshInFlight;
   LibrarySection _section = LibrarySection.archived;
   bool _deleteDialogOpen = false;
 
@@ -90,7 +91,11 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
                 NotesErrorState(onRetry: () => unawaited(_refresh()))
               else ...[
                 if (notesState.hasError) ...[
-                  const _ContentSliver(child: _CachedErrorNotice()),
+                  _ContentSliver(
+                    child: _CachedErrorNotice(
+                      onRetry: () => unawaited(_refresh()),
+                    ),
+                  ),
                   const SliverToBoxAdapter(child: SizedBox(height: 12)),
                 ],
                 if (visibleNotes.isEmpty)
@@ -142,7 +147,20 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
     if (id != null) context.push('/note/$id');
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh() {
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) return inFlight;
+
+    final refresh = _performRefresh();
+    _refreshInFlight = refresh;
+    return refresh.whenComplete(() {
+      if (identical(_refreshInFlight, refresh)) {
+        _refreshInFlight = null;
+      }
+    });
+  }
+
+  Future<void> _performRefresh() async {
     try {
       final refresh = ref.refresh(notesProvider.future);
       await refresh;
@@ -540,38 +558,60 @@ class _LibraryEmptyState extends StatelessWidget {
 }
 
 class _CachedErrorNotice extends StatelessWidget {
-  const _CachedErrorNotice();
+  const _CachedErrorNotice({required this.onRetry});
+
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Semantics(
-      liveRegion: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: colorScheme.errorContainer,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ExcludeSemantics(
-                child: Icon(
-                  Icons.info_outline,
-                  color: colorScheme.onErrorContainer,
-                ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(
+              container: true,
+              liveRegion: true,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ExcludeSemantics(
+                    child: Icon(
+                      Icons.info_outline,
+                      color: colorScheme.onErrorContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Could not update library. Showing saved notes.',
+                      style: TextStyle(color: colorScheme.onErrorContainer),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Could not update library. Showing saved notes.',
-                  style: TextStyle(color: colorScheme.onErrorContainer),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton.icon(
+                key: const Key('notes-library-cached-retry'),
+                onPressed: onRetry,
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                  foregroundColor: colorScheme.onErrorContainer,
                 ),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

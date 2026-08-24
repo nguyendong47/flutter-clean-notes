@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:ui' show Tristate;
+import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -685,6 +685,131 @@ void main() {
     expect(find.text('No archived notes'), findsOneWidget);
   });
 
+  testWidgets(
+    'cached refresh Retry is a semantic keyboard action and keeps cards',
+    (tester) async {
+      final repository = _ControlledNoteRepository.seeded(sampleNotes);
+      final container = await _pumpLibrary(tester, repository: repository);
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      container.invalidate(notesProvider);
+      await expectLater(container.read(notesProvider.future), throwsStateError);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Archived launch notes'), findsOneWidget);
+      final retry = find.byKey(const Key('notes-library-cached-retry'));
+      expect(retry, findsOneWidget);
+      expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
+      final retrySemantics = tester.getSemantics(retry).getSemanticsData();
+      expect(retrySemantics.label, 'Retry');
+      expect(retrySemantics.flagsCollection.isButton, isTrue);
+      expect(retrySemantics.flagsCollection.isEnabled, Tristate.isTrue);
+      expect(retrySemantics.hasAction(SemanticsAction.tap), isTrue);
+
+      final focused = await _focusControl(tester, retry);
+      expect(focused.hasPrimaryFocus, isTrue);
+      final callsBeforeRetry = repository.getCalls;
+      repository.getErrorAtCall = null;
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(repository.getCalls, greaterThan(callsBeforeRetry));
+      expect(
+        find.text('Could not update library. Showing saved notes.'),
+        findsNothing,
+      );
+      expect(find.text('Archived launch notes'), findsOneWidget);
+    },
+  );
+
+  testWidgets('cached refresh Retry reaches 4.5 contrast in both themes', (
+    tester,
+  ) async {
+    for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+      final repository = _ControlledNoteRepository.seeded(sampleNotes);
+      final container = await _pumpLibrary(
+        tester,
+        repository: repository,
+        themeMode: mode,
+      );
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      container.invalidate(notesProvider);
+      await expectLater(container.read(notesProvider.future), throwsStateError);
+      await tester.pumpAndSettle();
+
+      final retry = find.byKey(const Key('notes-library-cached-retry'));
+      expect(retry, findsOneWidget, reason: '$mode Retry action');
+      final button = tester.widget<TextButton>(retry);
+      final foreground = button.style?.foregroundColor?.resolve(
+        const <WidgetState>{},
+      );
+      final background = Theme.of(
+        tester.element(retry),
+      ).colorScheme.errorContainer;
+      expect(foreground, isNotNull, reason: '$mode foreground');
+      expect(
+        _contrastRatio(foreground!, background),
+        greaterThanOrEqualTo(4.5),
+        reason: '$mode Retry label contrast',
+      );
+    }
+  });
+
+  testWidgets('cached Retry and pull refresh coalesce in either order', (
+    tester,
+  ) async {
+    for (final retryFirst in [true, false]) {
+      final order = retryFirst ? 'Retry first' : 'pull first';
+      final repository = _GatedLibraryRepository(sampleNotes);
+      final container = await _pumpLibrary(tester, repository: repository);
+      repository.getError = StateError('refresh unavailable');
+
+      await tester
+          .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+          .onRefresh();
+      await tester.pumpAndSettle();
+      expect(container.read(notesProvider).hasError, isTrue, reason: order);
+      expect(find.text('Archived launch notes'), findsOneWidget);
+
+      repository
+        ..getError = null
+        ..gateRefresh();
+      late final Future<void> sharedRefresh;
+      if (retryFirst) {
+        await tester.tap(find.byKey(const Key('notes-library-cached-retry')));
+        await tester.pump();
+        expect(repository.gatedGetCalls, 1, reason: order);
+        sharedRefresh = tester
+            .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+            .onRefresh();
+      } else {
+        sharedRefresh = tester
+            .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+            .onRefresh();
+        await tester.pump();
+        expect(repository.gatedGetCalls, 1, reason: order);
+        await tester.tap(find.byKey(const Key('notes-library-cached-retry')));
+      }
+      await tester.pump();
+      expect(repository.gatedGetCalls, 1, reason: '$order overlap');
+
+      repository.releaseRefresh();
+      await sharedRefresh;
+      await tester.pumpAndSettle();
+      expect(
+        container.read(notesProvider),
+        isA<AsyncData<List<Note>>>(),
+        reason: order,
+      );
+      expect(find.text('Archived launch notes'), findsOneWidget);
+      expect(
+        find.text('Could not update library. Showing saved notes.'),
+        findsNothing,
+      );
+    }
+  });
+
   testWidgets('failed restore keeps cards and announces once', (tester) async {
     final repository = _ControlledNoteRepository.seeded(sampleNotes)
       ..statusError = StateError('write failed');
@@ -935,6 +1060,28 @@ Future<FocusNode> _focusCardMenu(WidgetTester tester, String noteTitle) async {
   throw TestFailure('Could not focus menu for $noteTitle');
 }
 
+Future<FocusNode> _focusControl(WidgetTester tester, Finder target) async {
+  for (var attempt = 0; attempt < 40; attempt++) {
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus != null && _isDescendantOf(focus.context, target)) return focus;
+  }
+  throw TestFailure('Could not focus the requested Library control');
+}
+
+double _contrastRatio(Color first, Color second) {
+  final firstLuminance = first.computeLuminance();
+  final secondLuminance = second.computeLuminance();
+  final lighter = firstLuminance >= secondLuminance
+      ? firstLuminance
+      : secondLuminance;
+  final darker = firstLuminance >= secondLuminance
+      ? secondLuminance
+      : firstLuminance;
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 bool _isDescendantOf(BuildContext? context, Finder ancestor) {
   if (context is! Element) return false;
   final target = ancestor.evaluate().single;
@@ -1011,6 +1158,34 @@ class _DeferredReadRepository extends _ControlledNoteRepository {
   @override
   Future<List<Note>> getNotesByStatus(NoteStatus status) async {
     await _gate.future;
+    return super.getNotesByStatus(status);
+  }
+}
+
+class _GatedLibraryRepository extends InMemoryNoteRepository {
+  _GatedLibraryRepository(super.notes) : super.seeded();
+
+  Completer<void>? _refreshGate;
+  int gatedGetCalls = 0;
+
+  void gateRefresh() {
+    _refreshGate = Completer<void>();
+    gatedGetCalls = 0;
+  }
+
+  void releaseRefresh() {
+    final gate = _refreshGate;
+    _refreshGate = null;
+    gate?.complete();
+  }
+
+  @override
+  Future<List<Note>> getNotesByStatus(NoteStatus status) async {
+    final gate = _refreshGate;
+    if (gate != null) {
+      gatedGetCalls += 1;
+      await gate.future;
+    }
     return super.getNotesByStatus(status);
   }
 }

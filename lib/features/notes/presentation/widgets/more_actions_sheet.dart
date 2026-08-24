@@ -46,7 +46,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
   @override
   late final ValueNotifier<bool> canPopNotifier;
 
-  bool _themeChoicesVisible = true;
+  bool _themeChoicesVisible = false;
   bool _themeBusy = false;
   bool _transferBusy = false;
   ThemeMode? _pendingTheme;
@@ -430,7 +430,7 @@ class _ThemeChoiceRow extends StatelessWidget {
       enabled: enabled,
       loading: loading,
       reserveDescriptionForStatus: true,
-      trailing: Icon(selected ? Icons.check : Icons.chevron_right),
+      trailing: selected ? const Icon(Icons.check) : const SizedBox.shrink(),
       onPressed: (_) => onSelected(mode),
     );
   }

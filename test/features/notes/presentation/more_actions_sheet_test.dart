@@ -38,6 +38,16 @@ void main() {
       expect(find.text(label), findsOneWidget);
     }
     for (final mode in ['System', 'Light', 'Dark']) {
+      expect(find.text(mode), findsNothing);
+    }
+    final themeRow = find.byKey(const Key('more-row-theme'));
+    expect(
+      tester.getSemantics(themeRow).flagsCollection.isExpanded,
+      Tristate.isFalse,
+    );
+    await tester.tap(themeRow);
+    await tester.pumpAndSettle();
+    for (final mode in ['System', 'Light', 'Dark']) {
       expect(find.text(mode), findsOneWidget);
     }
 
@@ -92,25 +102,63 @@ void main() {
       );
     }
     expect(
-      tester
-          .getSemantics(find.byKey(const Key('more-row-theme')))
-          .flagsCollection
-          .isExpanded,
+      tester.getSemantics(themeRow).flagsCollection.isExpanded,
       Tristate.isTrue,
     );
-    await tester.tap(find.byKey(const Key('more-row-theme')));
+    for (final key in [
+      'theme-mode-system',
+      'theme-mode-light',
+      'theme-mode-dark',
+    ]) {
+      expect(
+        find.descendant(
+          of: find.byKey(Key(key)),
+          matching: find.byIcon(Icons.chevron_right),
+        ),
+        findsNothing,
+        reason: '$key must not imply navigation',
+      );
+    }
+    await tester.tap(themeRow);
     await tester.pumpAndSettle();
     expect(
-      tester
-          .getSemantics(find.byKey(const Key('more-row-theme')))
-          .flagsCollection
-          .isExpanded,
+      tester.getSemantics(themeRow).flagsCollection.isExpanded,
       Tristate.isFalse,
     );
     expect(find.byKey(const Key('theme-mode-system')), findsNothing);
     expect(find.byType(GlassSurface), findsOneWidget);
     expect(find.byType(SafeArea), findsWidgets);
   });
+
+  testWidgets(
+    'starts Appearance collapsed with Import backup visible at 390x844',
+    (tester) async {
+      await _pumpMore(tester, size: const Size(390, 844));
+
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byType(SingleChildScrollView),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(scrollable.position.pixels, 0);
+      expect(
+        tester
+            .getSemantics(find.byKey(const Key('more-row-theme')))
+            .flagsCollection
+            .isExpanded,
+        Tristate.isFalse,
+      );
+      expect(find.byKey(const Key('theme-mode-system')), findsNothing);
+
+      final importBackup = find.byKey(const Key('more-row-import-backup'));
+      expect(importBackup.hitTestable(), findsOneWidget);
+      final importRect = tester.getRect(importBackup);
+      expect(importRect.top, greaterThanOrEqualTo(0));
+      expect(importRect.bottom, lessThanOrEqualTo(844));
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('transfer rows disclose scope before platform work', (
     tester,
@@ -185,6 +233,7 @@ void main() {
   ) async {
     final store = _FakeThemeModeStore()..writeError = StateError('disk full');
     final harness = await _pumpMore(tester, themeStore: store);
+    await _expandThemeChoices(tester);
 
     await tester.tap(find.byKey(const Key('theme-mode-dark')));
     await tester.pumpAndSettle();
@@ -225,6 +274,7 @@ void main() {
       final gate = Completer<void>();
       final store = _FakeThemeModeStore()..writeGate = gate;
       await _pumpMore(tester, themeStore: store);
+      await _expandThemeChoices(tester);
       final darkRow = find.byKey(const Key('theme-mode-dark'));
 
       await tester.tap(darkRow);
@@ -741,6 +791,18 @@ void main() {
 
     expect(repository.removeTagInvocations, 1);
     expect(find.text('Removing…'), findsOneWidget);
+    final removingStatus = find.byKey(const Key('remove-tag-progress'));
+    expect(removingStatus, findsOneWidget);
+    final removingSemantics = tester
+        .getSemantics(removingStatus)
+        .getSemanticsData();
+    expect(removingSemantics.label, 'Removing tag');
+    expect(removingSemantics.flagsCollection.isLiveRegion, isTrue);
+    expect(removingSemantics.flagsCollection.isButton, isTrue);
+    expect(removingSemantics.flagsCollection.isEnabled, Tristate.isFalse);
+    expect(removingSemantics.hasAction(SemanticsAction.tap), isFalse);
+    expect(find.bySemanticsLabel(RegExp(r'^Removing tag$')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Removing…$')), findsNothing);
     expect(find.byType(AlertDialog), findsOneWidget);
     expect(find.bySemanticsLabel('Scrim'), findsNothing);
     await tester.tapAt(const Offset(4, 4));
@@ -803,6 +865,10 @@ void main() {
       );
 
       expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(find.text('System'), findsNothing);
+      expect(find.text('Light'), findsNothing);
+      expect(find.text('Dark'), findsNothing);
+      await _expandThemeChoices(tester);
       expect(find.text('System'), findsOneWidget);
       expect(find.text('Light'), findsOneWidget);
       expect(find.text('Dark'), findsOneWidget);
@@ -972,6 +1038,20 @@ Future<void> _openTags(WidgetTester tester) async {
   await tester.tap(manageTags);
   await tester.pumpAndSettle();
   expect(find.byType(TagManagerSheet), findsOneWidget);
+}
+
+Future<void> _expandThemeChoices(WidgetTester tester) async {
+  final theme = find.byKey(const Key('more-row-theme'));
+  expect(
+    tester.getSemantics(theme).flagsCollection.isExpanded,
+    Tristate.isFalse,
+  );
+  await tester.tap(theme);
+  await tester.pumpAndSettle();
+  expect(
+    tester.getSemantics(theme).flagsCollection.isExpanded,
+    Tristate.isTrue,
+  );
 }
 
 Future<FocusNode> _focus(WidgetTester tester, Finder target) async {
