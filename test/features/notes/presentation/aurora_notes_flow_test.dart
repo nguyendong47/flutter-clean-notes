@@ -362,6 +362,94 @@ void main() {
   );
 
   testWidgets(
+    'real MyApp root More persists theme and preserves shell route state',
+    (tester) async {
+      // Mutations caught: presenting More on a branch navigator, changing only
+      // sheet-local styling, skipping AppTheme persistence, or popping Search
+      // and its query when the global modal is dismissed.
+      tester.view.physicalSize = const Size(375, 812);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final store = _FakeThemeModeStore(ThemeMode.light);
+      final container = ProviderContainer(
+        overrides: [
+          themeModeStoreProvider.overrideWithValue(store),
+          noteRepositoryProvider.overrideWithValue(
+            InMemoryNoteRepository.seeded(sampleNotes),
+          ),
+          noteReminderGatewayProvider.overrideWithValue(
+            FakeNoteReminderGateway(),
+          ),
+          notificationServiceProvider.overrideWithValue(
+            NotificationService(plugin: FlutterLocalNotificationsPlugin()),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(appThemeProvider.future);
+      final router = container.read(routerProvider);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(container: container, child: const MyApp()),
+      );
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsLabel('Search tab'));
+      await tester.pumpAndSettle();
+      final searchField = find.byKey(const Key('notes-search-field'));
+      await tester.enterText(searchField, 'Aurora');
+      await tester.pumpAndSettle();
+      final uriBefore = router.routeInformationProvider.value.uri;
+      expect(uriBefore.path, '/search');
+      expect(store.readCalls, 1);
+      expect(container.read(searchQueryProvider), 'Aurora');
+      expect(
+        tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+        ThemeMode.light,
+      );
+
+      await tester.tap(find.bySemanticsLabel('More actions'));
+      await tester.pumpAndSettle();
+
+      final sheet = find.byKey(const Key('more-actions-sheet'));
+      expect(sheet, findsOneWidget);
+      expect(
+        Navigator.of(tester.element(sheet)),
+        same(rootNavigatorKey.currentState),
+      );
+      expect(router.routeInformationProvider.value.uri, uriBefore);
+
+      await tester.tap(find.byKey(const Key('theme-mode-dark')));
+      await tester.pumpAndSettle();
+
+      expect(store.writeCalls, 1);
+      expect(store.mode, ThemeMode.dark);
+      expect(container.read(appThemeProvider).requireValue, ThemeMode.dark);
+      expect(
+        tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+        ThemeMode.dark,
+      );
+      expect(Theme.of(tester.element(sheet)).brightness, Brightness.dark);
+      expect(sheet, findsOneWidget);
+      expect(router.routeInformationProvider.value.uri, uriBefore);
+      expect(container.read(searchQueryProvider), 'Aurora');
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(sheet, findsNothing);
+      expect(router.routeInformationProvider.value.uri, uriBefore);
+      expect(container.read(searchQueryProvider), 'Aurora');
+      expect(find.byType(NotesSearchPage), findsOneWidget);
+      expect(tester.widget<SearchBar>(searchField).controller?.text, 'Aurora');
+    },
+  );
+
+  testWidgets(
     'clearing a reminder persists across reload and cancels without scheduling',
     (tester) async {
       // Mutation caught: updateNote scheduling a stale reminder after metadata
