@@ -25,7 +25,12 @@ void main() {
       final webFactory = mainSource.indexOf(
         'databaseFactory = databaseFactoryFfiWeb;',
       );
-      final providerContainer = mainSource.indexOf('ProviderContainer()');
+      final databaseInitialization = mainSource.indexOf(
+        '_initializeDatabase();',
+      );
+      final providerContainer = mainSource.indexOf(
+        '(createContainer ?? _createAppContainer)(notifications);',
+      );
 
       expect(
         mainSource,
@@ -33,7 +38,8 @@ void main() {
       );
       expect(webGuard, isNonNegative);
       expect(webFactory, greaterThan(webGuard));
-      expect(providerContainer, greaterThan(webFactory));
+      expect(databaseInitialization, isNonNegative);
+      expect(providerContainer, greaterThan(databaseInitialization));
     });
 
     test('ships the worker and WebAssembly runtime assets', () {
