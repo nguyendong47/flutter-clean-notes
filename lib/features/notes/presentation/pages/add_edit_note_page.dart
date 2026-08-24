@@ -26,10 +26,14 @@ class AddEditNotePage extends ConsumerStatefulWidget {
 
 class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     implements PopEntry<Object?> {
+  static const _reminderValidationMessage =
+      'Open Note details to choose a future reminder.';
+
   late final TextEditingController _titleController;
   late final TextEditingController _contentController;
   late final FocusNode _titleFocusNode;
   late final FocusNode _contentFocusNode;
+  late final FocusNode _metadataFocusNode;
   late final ScrollController _shortLayoutScrollController;
   late final DateTime _createdAt;
   late final NoteStatus _status;
@@ -70,6 +74,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     _contentController = TextEditingController(text: note?.content ?? '');
     _titleFocusNode = FocusNode(debugLabel: 'Note title');
     _contentFocusNode = FocusNode(debugLabel: 'Note content');
+    _metadataFocusNode = FocusNode(debugLabel: 'Note details');
     _shortLayoutScrollController = ScrollController();
     _titleFocusNode.addListener(_handleTitleFocus);
     _contentFocusNode.addListener(_handleContentFocus);
@@ -110,6 +115,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     _contentFocusNode.removeListener(_handleContentFocus);
     _titleFocusNode.dispose();
     _contentFocusNode.dispose();
+    _metadataFocusNode.dispose();
     _shortLayoutScrollController.dispose();
     super.dispose();
   }
@@ -155,16 +161,27 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
 
   Widget _buildPageLayout(BoxConstraints constraints) {
     final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final textScaler = MediaQuery.textScalerOf(context);
+    final labelFontSize =
+        Theme.of(context).textTheme.labelLarge?.fontSize ?? 14;
+    final effectiveTextScale = textScaler.scale(labelFontSize) / labelFontSize;
     final shortKeyboardLayout =
         !_previewMode &&
         keyboardVisible &&
         constraints.maxHeight < (constraints.maxWidth >= 480 ? 260 : 480);
-    if (shortKeyboardLayout) {
-      final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final highScalePortraitLayout =
+        !_previewMode &&
+        constraints.maxWidth < 480 &&
+        effectiveTextScale >= 2.5;
+    if (shortKeyboardLayout || highScalePortraitLayout) {
       final editorHeight = constraints.maxWidth >= 480
           ? 144.0
-          : (440 * textScale).clamp(480.0, 960.0).toDouble();
-      if (_titleFocusNode.hasFocus) {
+          : highScalePortraitLayout
+          ? 440 * effectiveTextScale
+          : (440 * effectiveTextScale).clamp(480.0, 960.0).toDouble();
+      if (_validationMessage != null) {
+        _scheduleShortFieldReveal(toEnd: false);
+      } else if (_titleFocusNode.hasFocus) {
         _scheduleShortFieldReveal(toEnd: false);
       } else if (_contentFocusNode.hasFocus) {
         _scheduleShortFieldReveal(toEnd: true);
@@ -203,6 +220,10 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
   }
 
   Widget _buildTopBar() {
+    final doneFontSize = Theme.of(context).textTheme.labelLarge?.fontSize ?? 14;
+    final compactDoneAction =
+        MediaQuery.textScalerOf(context).scale(doneFontSize) >=
+        doneFontSize * 2.5;
     return SizedBox(
       key: const Key('editor-top-bar'),
       height: 56,
@@ -216,12 +237,17 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
             BackButton(
               key: const Key('editor-back-button'),
               onPressed: _saving ? null : _requestClose,
+              style: IconButton.styleFrom(
+                minimumSize: const Size.square(48),
+                tapTargetSize: MaterialTapTargetSize.padded,
+                visualDensity: VisualDensity.standard,
+              ),
             ),
             IconButton(
               key: const Key('editor-preview-toggle'),
               tooltip: _previewMode ? 'Edit' : 'Preview',
               onPressed: _saving ? null : _togglePreview,
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               icon: Icon(
                 _previewMode ? Icons.edit_rounded : Icons.visibility_rounded,
               ),
@@ -230,7 +256,8 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
               key: const Key('editor-metadata-button'),
               tooltip: 'Note details',
               onPressed: _saving ? null : _openMetadata,
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+              focusNode: _metadataFocusNode,
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               icon: const Icon(Icons.tune_rounded),
             ),
             const Spacer(),
@@ -238,8 +265,10 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
               key: const Key('editor-done-button'),
               onPressed: _saving ? null : _saveNote,
               style: TextButton.styleFrom(
-                minimumSize: const Size(64, 44),
+                minimumSize: const Size(64, 48),
                 padding: const EdgeInsets.symmetric(horizontal: 12),
+                tapTargetSize: MaterialTapTargetSize.padded,
+                visualDensity: VisualDensity.standard,
               ),
               child: _saving
                   ? Semantics(
@@ -250,6 +279,13 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2.2),
+                      ),
+                    )
+                  : compactDoneAction
+                  ? Semantics(
+                      label: 'Done',
+                      child: const ExcludeSemantics(
+                        child: Icon(Icons.check_rounded),
                       ),
                     )
                   : const Text('Done'),
@@ -548,7 +584,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
               ),
               const SizedBox(height: 8),
               ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 44),
+                constraints: const BoxConstraints(minHeight: 48),
                 child: TextButton.icon(
                   key: const Key('editor-retry-button'),
                   onPressed: _saving ? null : _saveNote,
@@ -572,7 +608,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
       opacity: 0.82,
       blur: 18,
       borderRadius: BorderRadius.circular(16),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: EditorFormattingBar(
         controller: _contentController,
         enabled: !_saving,
@@ -683,11 +719,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     final reminderChanged = reminder != _persistedReminder;
     final now = widget.now?.call() ?? DateTime.now();
     if (reminderChanged && reminder != null && !reminder.isAfter(now)) {
-      setState(() {
-        _previewMode = false;
-        _validationMessage = 'Choose a reminder time in the future';
-        _saveError = null;
-      });
+      _showReminderValidationError();
       return;
     }
 
@@ -727,13 +759,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
       _requestClose();
     } on InvalidNoteReminderException {
       if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _previewMode = false;
-        _validationMessage = 'Choose a reminder time in the future';
-        _saveError = null;
-      });
-      _syncCanPop();
+      _showReminderValidationError();
     } on PersistedNoteSaveException catch (error) {
       final persistedId = error.persistedNote.id;
       if (persistedId != null) _persistedId = persistedId;
@@ -761,6 +787,19 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
       });
       _syncCanPop();
     }
+  }
+
+  void _showReminderValidationError() {
+    setState(() {
+      _saving = false;
+      _previewMode = false;
+      _validationMessage = _reminderValidationMessage;
+      _saveError = null;
+    });
+    _syncCanPop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _metadataFocusNode.requestFocus();
+    });
   }
 
   void _openLinkedNote(String title) {

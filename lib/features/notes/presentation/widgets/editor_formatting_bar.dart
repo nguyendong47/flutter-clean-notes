@@ -47,12 +47,14 @@ class EditorFormattingBar extends StatelessWidget {
         keyName: 'h1',
         label: 'Heading 1',
         text: 'H1',
+        highScaleIcon: Icons.looks_one_rounded,
         onPressed: () => _toggleLinePrefix('# '),
       ),
       _textControl(
         keyName: 'h2',
         label: 'Heading 2',
         text: 'H2',
+        highScaleIcon: Icons.looks_two_rounded,
         onPressed: () => _toggleLinePrefix('## '),
       ),
       _iconControl(
@@ -95,7 +97,7 @@ class EditorFormattingBar extends StatelessWidget {
   }) {
     return SizedBox.square(
       key: Key('editor-format-$keyName'),
-      dimension: 44,
+      dimension: 48,
       child: IconButton(
         tooltip: label,
         onPressed: enabled ? onPressed : null,
@@ -108,11 +110,12 @@ class EditorFormattingBar extends StatelessWidget {
     required String keyName,
     required String label,
     required String text,
+    required IconData highScaleIcon,
     required VoidCallback onPressed,
   }) {
     return SizedBox.square(
       key: Key('editor-format-$keyName'),
-      dimension: 44,
+      dimension: 48,
       child: Semantics(
         button: true,
         enabled: enabled,
@@ -122,12 +125,23 @@ class EditorFormattingBar extends StatelessWidget {
           child: TextButton(
             onPressed: enabled ? onPressed : null,
             style: TextButton.styleFrom(
-              minimumSize: const Size.square(44),
+              minimumSize: const Size.square(48),
               padding: EdgeInsets.zero,
             ),
-            child: Text(
-              text,
-              style: const TextStyle(fontWeight: FontWeight.w700),
+            child: Builder(
+              builder: (context) {
+                final fontSize =
+                    Theme.of(context).textTheme.labelLarge?.fontSize ?? 14;
+                final useCompactIcon =
+                    MediaQuery.textScalerOf(context).scale(fontSize) >=
+                    fontSize * 2.5;
+                return useCompactIcon
+                    ? ExcludeSemantics(child: Icon(highScaleIcon, size: 20))
+                    : Text(
+                        text,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      );
+              },
             ),
           ),
         ),

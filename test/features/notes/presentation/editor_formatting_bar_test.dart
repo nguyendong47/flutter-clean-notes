@@ -128,52 +128,123 @@ void main() {
     });
   }
 
-  testWidgets(
-    'all nine labeled controls are reachable and at least 44 square',
-    (tester) async {
-      final controller = TextEditingController();
-      addTearDown(controller.dispose);
-      await _pumpBar(tester, controller, width: 320);
+  testWidgets('all nine labeled controls are at least 48 square', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await _pumpBar(tester, controller, width: 320);
 
-      const controls = <({String key, String tooltip})>[
-        (key: 'bold', tooltip: 'Bold'),
-        (key: 'italic', tooltip: 'Italic'),
-        (key: 'strike', tooltip: 'Strikethrough'),
-        (key: 'code', tooltip: 'Inline code'),
-        (key: 'quote', tooltip: 'Quote'),
-        (key: 'h1', tooltip: 'Heading 1'),
-        (key: 'h2', tooltip: 'Heading 2'),
-        (key: 'bullet', tooltip: 'Bulleted list'),
-        (key: 'checklist', tooltip: 'Checklist'),
-      ];
-      final scrollable = find.descendant(
-        of: find.byKey(const Key('editor-formatting-scroll')),
-        matching: find.byType(Scrollable),
+    const controls = <({String key, String tooltip})>[
+      (key: 'bold', tooltip: 'Bold'),
+      (key: 'italic', tooltip: 'Italic'),
+      (key: 'strike', tooltip: 'Strikethrough'),
+      (key: 'code', tooltip: 'Inline code'),
+      (key: 'quote', tooltip: 'Quote'),
+      (key: 'h1', tooltip: 'Heading 1'),
+      (key: 'h2', tooltip: 'Heading 2'),
+      (key: 'bullet', tooltip: 'Bulleted list'),
+      (key: 'checklist', tooltip: 'Checklist'),
+    ];
+    final scrollable = find.descendant(
+      of: find.byKey(const Key('editor-formatting-scroll')),
+      matching: find.byType(Scrollable),
+    );
+    for (final control in controls) {
+      final finder = find.byKey(
+        Key('editor-format-${control.key}'),
+        skipOffstage: false,
       );
-      for (final control in controls) {
-        final finder = find.byKey(
-          Key('editor-format-${control.key}'),
-          skipOffstage: false,
-        );
-        await tester.scrollUntilVisible(finder, 120, scrollable: scrollable);
-        expect(finder, findsOneWidget);
-        expect(find.byTooltip(control.tooltip), findsOneWidget);
-        final size = tester.getSize(finder);
-        expect(size.width, greaterThanOrEqualTo(44));
-        expect(size.height, greaterThanOrEqualTo(44));
-      }
-      expect(tester.takeException(), isNull);
-    },
-  );
+      await tester.scrollUntilVisible(finder, 120, scrollable: scrollable);
+      expect(finder, findsOneWidget);
+      expect(find.byTooltip(control.tooltip), findsOneWidget);
+      final size = tester.getSize(finder);
+      expect(size.width, greaterThanOrEqualTo(48));
+      expect(size.height, greaterThanOrEqualTo(48));
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('320 formatting bar stays overflow-free at 3x text', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await _pumpBar(
+      tester,
+      controller,
+      width: 320,
+      textScaler: const TextScaler.linear(3),
+    );
+
+    final scrollable = find.descendant(
+      of: find.byKey(const Key('editor-formatting-scroll')),
+      matching: find.byType(Scrollable),
+    );
+    for (final key in const ['bold', 'h1', 'h2', 'checklist']) {
+      await tester.scrollUntilVisible(
+        find.byKey(Key('editor-format-$key'), skipOffstage: false),
+        120,
+        scrollable: scrollable,
+      );
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('3x heading controls use labeled icons inside 48dp targets', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await _pumpBar(
+      tester,
+      controller,
+      width: 320,
+      textScaler: const TextScaler.linear(3),
+    );
+
+    final scrollable = find.descendant(
+      of: find.byKey(const Key('editor-formatting-scroll')),
+      matching: find.byType(Scrollable),
+    );
+    for (final heading in const [
+      (key: 'h1', label: 'Heading 1', icon: Icons.looks_one_rounded),
+      (key: 'h2', label: 'Heading 2', icon: Icons.looks_two_rounded),
+    ]) {
+      final control = find.byKey(
+        Key('editor-format-${heading.key}'),
+        skipOffstage: false,
+      );
+      await tester.scrollUntilVisible(control, 120, scrollable: scrollable);
+      expect(tester.getSize(control), const Size.square(48));
+      expect(
+        find.descendant(of: control, matching: find.byIcon(heading.icon)),
+        findsOneWidget,
+      );
+      final semanticControl = find.bySemanticsLabel(heading.label);
+      expect(semanticControl, findsOneWidget);
+      final controlSemantics = tester.getSemantics(semanticControl);
+      expect(controlSemantics.label, heading.label);
+      expect(controlSemantics.flagsCollection.isButton, isTrue);
+    }
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
+  });
 }
 
 Future<void> _pumpBar(
   WidgetTester tester,
   TextEditingController controller, {
   double width = 375,
+  TextScaler textScaler = TextScaler.noScaling,
 }) {
   return tester.pumpWidget(
     MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+        child: child!,
+      ),
       home: Scaffold(
         body: Align(
           alignment: Alignment.topLeft,

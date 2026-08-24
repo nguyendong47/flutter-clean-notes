@@ -61,9 +61,10 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('save rechecks a newly expired reminder before any write', (
+  testWidgets('expired reminder error is actionable and refocuses Details', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     final initialNow = DateTime.utc(2030, 1, 15, 10, 15);
     var clockReads = 0;
     final repository = _RecordingRepository(const []);
@@ -84,16 +85,164 @@ void main() {
             : initialNow.add(const Duration(minutes: 2));
       },
     );
+    await tester.enterText(
+      find.byKey(const Key('editor-body-field')),
+      'Keep this exact dirty draft',
+    );
 
     await tester.tap(find.byKey(const Key('editor-done-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Choose a reminder time in the future'), findsOneWidget);
-    expect(find.byKey(const Key('editor-validation')), findsOneWidget);
+    const reminderError = 'Open Note details to choose a future reminder.';
+    final validation = find.byKey(const Key('editor-validation'));
+    expect(find.text(reminderError), findsOneWidget);
+    expect(validation, findsOneWidget);
+    expect(
+      tester.getSemantics(validation).flagsCollection.isLiveRegion,
+      isTrue,
+    );
+    final metadataButton = find.byKey(const Key('editor-metadata-button'));
+    expect(
+      tester.widget<IconButton>(metadataButton).focusNode?.hasFocus,
+      isTrue,
+    );
+    expect(
+      tester.getSemantics(metadataButton).flagsCollection.isFocused,
+      Tristate.isTrue,
+    );
     expect(find.byType(AddEditNotePage), findsOneWidget);
     expect(repository.addCalls, 0);
     expect(harness.gateway.events, isEmpty);
     expect(harness.closeCount.value, 0);
+    expect(_text(tester, 'editor-body-field'), 'Keep this exact dirty draft');
+
+    await tester.tap(find.byKey(const Key('editor-back-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('discard-changes-dialog')), findsOneWidget);
+    expect(harness.closeCount.value, 0);
+    await tester.tap(find.byKey(const Key('keep-editing-button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('editor-metadata-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('metadata-clear-reminder')));
+    final apply = find.byKey(const Key('metadata-apply'));
+    await tester.ensureVisible(apply);
+    await tester.tap(apply);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('editor-done-button')));
+    await tester.pumpAndSettle();
+
+    expect(repository.addCalls, 1);
+    expect(repository.notes.single.content, 'Keep this exact dirty draft');
+    expect(repository.notes.single.reminder, isNull);
+    expect(harness.closeCount.value, 1);
+    semantics.dispose();
+  });
+
+  testWidgets('past reminder precheck is live and refocuses Details', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    var now = DateTime(2030, 1, 15, 10, 15);
+    final repository = _RecordingRepository(const []);
+    final harness = await _pumpEditor(
+      tester,
+      note: Note(
+        title: 'Past reminder',
+        content: 'Unsaved draft',
+        color: 0,
+        createdAt: DateTime(2030, 1, 15),
+      ),
+      repository: repository,
+      now: () => now,
+      size: const Size(320, 640),
+      disableAnimations: true,
+    );
+
+    await tester.tap(find.byKey(const Key('editor-metadata-button')));
+    await tester.pumpAndSettle();
+    final reminderButton = find.byKey(const Key('metadata-reminder-button'));
+    await tester.ensureVisible(reminderButton);
+    await tester.tap(reminderButton);
+    await tester.pumpAndSettle();
+    Navigator.of(
+      tester.element(find.byType(DatePickerDialog)),
+    ).pop(DateTime(2030, 1, 15));
+    await tester.pumpAndSettle();
+    Navigator.of(
+      tester.element(find.byType(TimePickerDialog)),
+    ).pop(const TimeOfDay(hour: 10, minute: 16));
+    await tester.pumpAndSettle();
+    final apply = find.byKey(const Key('metadata-apply'));
+    await tester.ensureVisible(apply);
+    await tester.tap(apply);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    harness.textScaler.value = const TextScaler.linear(3);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final body = find.byKey(const Key('editor-body-field'));
+    tester.widget<TextField>(body).focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(body).focusNode!.hasFocus, isTrue);
+    final shortScroll = tester
+        .state<ScrollableState>(
+          find
+              .descendant(
+                of: find.byKey(const Key('editor-short-layout-scroll')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
+        .position;
+    shortScroll.jumpTo(shortScroll.maxScrollExtent);
+    await tester.pump();
+    expect(
+      shortScroll.pixels,
+      moreOrLessEquals(shortScroll.maxScrollExtent),
+      reason: 'This regression must begin with the focused body revealed',
+    );
+    now = now.add(const Duration(minutes: 2));
+    final save = tester
+        .widget<TextButton>(find.byKey(const Key('editor-done-button')))
+        .onPressed;
+    expect(save, isNotNull);
+    save!();
+    expect(tester.widget<TextField>(body).focusNode!.hasFocus, isTrue);
+    await tester.pumpAndSettle();
+
+    const reminderError = 'Open Note details to choose a future reminder.';
+    final validation = find.byKey(const Key('editor-validation'));
+    expect(find.text(reminderError), findsOneWidget);
+    expect(
+      tester.getSemantics(validation).flagsCollection.isLiveRegion,
+      isTrue,
+    );
+    final metadataButton = find.byKey(const Key('editor-metadata-button'));
+    expect(
+      tester.widget<IconButton>(metadataButton).focusNode?.hasFocus,
+      isTrue,
+    );
+    expect(
+      tester.getSemantics(metadataButton).flagsCollection.isFocused,
+      Tristate.isTrue,
+    );
+    final viewport = find.byKey(const Key('editor-short-layout-scroll'));
+    expect(
+      shortScroll.pixels,
+      lessThan(shortScroll.maxScrollExtent),
+      reason: 'Reminder feedback must override the pending body reveal',
+    );
+    expect(
+      tester.getRect(validation).intersect(tester.getRect(viewport)).height,
+      greaterThan(0),
+      reason: 'The actionable live error must remain visibly discoverable',
+    );
+    expect(repository.addCalls, 0);
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
   });
 
   testWidgets('edit save preserves identity, state, pin, color, and metadata', (
@@ -902,10 +1051,11 @@ void main() {
   });
 
   for (final theme in <ThemeData>[AuroraTheme.light(), AuroraTheme.dark()]) {
-    for (final scale in [1.5, 2.0]) {
+    for (final scale in [1.5, 3.0]) {
       testWidgets(
         'compact ${theme.brightness.name} editor at ${scale}x keeps controls separate',
         (tester) async {
+          final semantics = tester.ensureSemantics();
           await _pumpEditor(
             tester,
             note: sampleNote,
@@ -923,8 +1073,8 @@ void main() {
           ];
           for (final control in controls) {
             final controlSize = tester.getSize(control);
-            expect(controlSize.width, greaterThanOrEqualTo(44));
-            expect(controlSize.height, greaterThanOrEqualTo(44));
+            expect(controlSize.width, greaterThanOrEqualTo(48));
+            expect(controlSize.height, greaterThanOrEqualTo(48));
           }
           for (var index = 1; index < controls.length; index++) {
             expect(
@@ -936,17 +1086,59 @@ void main() {
             tester.getSize(find.byKey(const Key('editor-top-bar'))).height,
             56,
           );
+          if (scale == 3) {
+            final done = find.byKey(const Key('editor-done-button'));
+            expect(
+              find.descendant(
+                of: done,
+                matching: find.byIcon(Icons.check_rounded),
+              ),
+              findsOneWidget,
+            );
+            final doneSemantics = tester.getSemantics(done);
+            expect(doneSemantics.label, 'Done');
+            expect(doneSemantics.flagsCollection.isButton, isTrue);
+          }
+          expect(tester.takeException(), isNull);
+          semantics.dispose();
         },
       );
     }
   }
 
-  testWidgets('640 by 320 landscape editor fits at 2x text', (tester) async {
+  testWidgets('top bar owns 48dp targets under compact inherited density', (
+    tester,
+  ) async {
+    await _pumpEditor(
+      tester,
+      note: sampleNote,
+      size: const Size(320, 640),
+      theme: AuroraTheme.light().copyWith(
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+      disableAnimations: true,
+    );
+
+    for (final key in const [
+      'editor-back-button',
+      'editor-preview-toggle',
+      'editor-metadata-button',
+      'editor-done-button',
+    ]) {
+      final size = tester.getSize(find.byKey(Key(key)));
+      expect(size.width, greaterThanOrEqualTo(48), reason: '$key width');
+      expect(size.height, greaterThanOrEqualTo(48), reason: '$key height');
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('640 by 320 landscape editor fits at 3x text', (tester) async {
     await _pumpEditor(
       tester,
       note: sampleNote,
       size: const Size(640, 320),
-      textScaler: const TextScaler.linear(2),
+      textScaler: const TextScaler.linear(3),
       viewPadding: const EdgeInsets.only(top: 20, bottom: 16),
       disableAnimations: true,
     );
@@ -1147,7 +1339,7 @@ void main() {
       await tester.pump();
       expect(
         tester.getSize(find.byKey(const Key('editor-retry-button'))).height,
-        greaterThanOrEqualTo(44),
+        greaterThanOrEqualTo(48),
       );
       expect(tester.takeException(), isNull);
     },
@@ -1177,6 +1369,7 @@ typedef _EditorHarness = ({
   InMemoryNoteRepository repository,
   FakeNoteReminderGateway gateway,
   ValueNotifier<int> closeCount,
+  ValueNotifier<TextScaler> textScaler,
   ValueNotifier<EdgeInsets> viewInsets,
 });
 
@@ -1208,8 +1401,10 @@ Future<_EditorHarness> _pumpEditor(
   );
   await container.read(notesProvider.future);
   final closeCount = ValueNotifier<int>(0);
+  final mutableTextScaler = ValueNotifier<TextScaler>(textScaler);
   final mutableViewInsets = ValueNotifier<EdgeInsets>(viewInsets);
   addTearDown(closeCount.dispose);
+  addTearDown(mutableTextScaler.dispose);
   addTearDown(mutableViewInsets.dispose);
   await tester.pumpWidget(
     UncontrolledProviderScope(
@@ -1218,27 +1413,32 @@ Future<_EditorHarness> _pumpEditor(
         theme: theme ?? AuroraTheme.light(),
         home: Builder(
           builder: (context) {
-            return ValueListenableBuilder<EdgeInsets>(
-              valueListenable: mutableViewInsets,
-              builder: (context, currentInsets, child) {
-                final bottomPadding =
-                    (viewPadding.bottom - currentInsets.bottom)
-                        .clamp(0.0, double.infinity)
-                        .toDouble();
-                return MediaQuery(
-                  data: MediaQuery.of(context).copyWith(
-                    textScaler: textScaler,
-                    padding: EdgeInsets.only(
-                      top: viewPadding.top,
-                      bottom: bottomPadding,
-                    ),
-                    viewPadding: viewPadding,
-                    viewInsets: currentInsets,
-                    disableAnimations: disableAnimations,
+            return ValueListenableBuilder<TextScaler>(
+              valueListenable: mutableTextScaler,
+              builder: (context, currentTextScaler, child) =>
+                  ValueListenableBuilder<EdgeInsets>(
+                    valueListenable: mutableViewInsets,
+                    builder: (context, currentInsets, child) {
+                      final bottomPadding =
+                          (viewPadding.bottom - currentInsets.bottom)
+                              .clamp(0.0, double.infinity)
+                              .toDouble();
+                      return MediaQuery(
+                        data: MediaQuery.of(context).copyWith(
+                          textScaler: currentTextScaler,
+                          padding: EdgeInsets.only(
+                            top: viewPadding.top,
+                            bottom: bottomPadding,
+                          ),
+                          viewPadding: viewPadding,
+                          viewInsets: currentInsets,
+                          disableAnimations: disableAnimations,
+                        ),
+                        child: child!,
+                      );
+                    },
+                    child: child,
                   ),
-                  child: child!,
-                );
-              },
               child: _editorPage(
                 note: note,
                 onClose: () => closeCount.value += 1,
@@ -1260,6 +1460,7 @@ Future<_EditorHarness> _pumpEditor(
     repository: resolvedRepository,
     gateway: resolvedGateway,
     closeCount: closeCount,
+    textScaler: mutableTextScaler,
     viewInsets: mutableViewInsets,
   );
 }

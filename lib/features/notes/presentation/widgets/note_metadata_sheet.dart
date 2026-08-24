@@ -109,8 +109,8 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
                         tooltip: 'Cancel',
                         onPressed: _cancel,
                         constraints: const BoxConstraints(
-                          minWidth: 44,
-                          minHeight: 44,
+                          minWidth: 48,
+                          minHeight: 48,
                         ),
                         icon: const Icon(Icons.close_rounded),
                       ),
@@ -152,8 +152,8 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
                         tooltip: 'Add tag',
                         onPressed: () => _addTag(_tagController.text),
                         constraints: const BoxConstraints(
-                          minWidth: 44,
-                          minHeight: 44,
+                          minWidth: 48,
+                          minHeight: 48,
                         ),
                         icon: const Icon(Icons.add_rounded),
                       ),
@@ -186,7 +186,7 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 44),
+                        constraints: const BoxConstraints(minHeight: 48),
                         child: OutlinedButton.icon(
                           key: const Key('metadata-reminder-button'),
                           onPressed: _pickReminder,
@@ -202,7 +202,7 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
                       ),
                       if (_reminder != null)
                         ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: 44),
+                          constraints: const BoxConstraints(minHeight: 48),
                           child: TextButton.icon(
                             key: const Key('metadata-clear-reminder'),
                             onPressed: () => setState(() {
@@ -238,7 +238,7 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
                     runSpacing: 8,
                     children: [
                       ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 44),
+                        constraints: const BoxConstraints(minHeight: 48),
                         child: TextButton(
                           key: const Key('metadata-cancel'),
                           onPressed: _cancel,
@@ -246,7 +246,7 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
                         ),
                       ),
                       ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 44),
+                        constraints: const BoxConstraints(minHeight: 48),
                         child: FilledButton(
                           key: const Key('metadata-apply'),
                           onPressed: _apply,
@@ -332,7 +332,7 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
               key: ValueKey('metadata-remove-tag-$tag'),
               tooltip: 'Remove $tag tag',
               onPressed: () => setState(() => _tags.remove(tag)),
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               icon: const Icon(Icons.close_rounded, size: 18),
             ),
           ],

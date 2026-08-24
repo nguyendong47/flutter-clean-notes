@@ -528,7 +528,7 @@ void main() {
 
   for (final theme in <ThemeData>[AuroraTheme.light(), AuroraTheme.dark()]) {
     testWidgets(
-      'compact ${theme.brightness.name} sheet is semantic, single-glass, and collision free',
+      'compact ${theme.brightness.name} sheet keeps every control 48dp at 3x text',
       (tester) async {
         final semantics = tester.ensureSemantics();
         final initial = NoteMetadataValue(
@@ -544,7 +544,7 @@ void main() {
           result: result,
           size: const Size(320, 640),
           theme: theme,
-          textScaler: const TextScaler.linear(2),
+          textScaler: const TextScaler.linear(3),
           viewPadding: const EdgeInsets.only(bottom: 34),
         );
 
@@ -561,6 +561,7 @@ void main() {
           final finder = find.byKey(
             ValueKey('metadata-tint-${tint.color.toARGB32()}'),
           );
+          expect(tester.getSize(finder), const Size.square(48));
           expect(
             tester.getSemantics(finder).label,
             contains('${tint.name} note tint'),
@@ -609,6 +610,11 @@ void main() {
           findsOneWidget,
         );
         for (final key in const [
+          'metadata-close',
+          'metadata-tag-field',
+          'metadata-add-tag',
+          'metadata-remove-tag-a long responsive tag',
+          'metadata-remove-tag-second',
           'metadata-reminder-button',
           'metadata-clear-reminder',
           'metadata-cancel',
@@ -617,13 +623,55 @@ void main() {
           final finder = find.byKey(Key(key), skipOffstage: false);
           await tester.ensureVisible(finder);
           await tester.pump();
-          expect(tester.getSize(finder).height, greaterThanOrEqualTo(44));
+          final size = tester.getSize(finder);
+          expect(size.width, greaterThanOrEqualTo(48), reason: '$key width');
+          expect(size.height, greaterThanOrEqualTo(48), reason: '$key height');
         }
         expect(tester.takeException(), isNull);
         semantics.dispose();
       },
     );
   }
+
+  testWidgets('metadata controls own 48dp targets under compact density', (
+    tester,
+  ) async {
+    final result = ValueNotifier<NoteMetadataValue?>(null);
+    addTearDown(result.dispose);
+    await _openSheet(
+      tester,
+      initial: NoteMetadataValue(
+        color: Colors.white,
+        tags: const ['compact'],
+        reminder: DateTime(2026, 8, 30, 9),
+      ),
+      result: result,
+      size: const Size(320, 640),
+      theme: AuroraTheme.light().copyWith(
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+
+    for (final key in const [
+      'metadata-close',
+      'metadata-tag-field',
+      'metadata-add-tag',
+      'metadata-remove-tag-compact',
+      'metadata-reminder-button',
+      'metadata-clear-reminder',
+      'metadata-cancel',
+      'metadata-apply',
+    ]) {
+      final finder = find.byKey(Key(key), skipOffstage: false);
+      await tester.ensureVisible(finder);
+      await tester.pump();
+      final size = tester.getSize(finder);
+      expect(size.width, greaterThanOrEqualTo(48), reason: '$key width');
+      expect(size.height, greaterThanOrEqualTo(48), reason: '$key height');
+    }
+    expect(tester.takeException(), isNull);
+  });
 }
 
 double _contrastRatio(Color first, Color second) {
