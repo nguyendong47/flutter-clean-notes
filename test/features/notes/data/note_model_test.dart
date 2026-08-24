@@ -5,7 +5,7 @@ import '../../../helpers/note_fixtures.dart';
 
 void main() {
   group('NoteModel.toJson', () {
-    test('round-trips JSON tag storage without splitting commas in a tag', () {
+    test('round-trips explicitly prefixed JSON tag storage', () {
       final entity = sampleNote.copyWith(
         tags: const ['finance,2026', 'roadmap'],
       );
@@ -13,8 +13,17 @@ void main() {
       final json = NoteModel.fromEntity(entity).toJson();
       final restored = NoteModel.fromJson(json);
 
-      expect(json['tags'], '["finance,2026","roadmap"]');
+      expect(json['tags'], 'json:["finance,2026","roadmap"]');
       expect(restored.tags, ['finance,2026', 'roadmap']);
+    });
+
+    test('keeps unprefixed JSON-looking v5 values as literal tags', () {
+      final stored = NoteModel.fromEntity(sampleNote).toJson();
+
+      expect(NoteModel.fromJson({...stored, 'tags': '[]'}).tags, ['[]']);
+      expect(NoteModel.fromJson({...stored, 'tags': '["urgent"]'}).tags, [
+        '["urgent"]',
+      ]);
     });
 
     test('continues to decode legacy comma-delimited tag rows', () {

@@ -27,7 +27,7 @@ void main() {
 
     final raw = await database.query('notes');
     final restored = await dataSource.getNotes();
-    expect(raw.single['tags'], '["finance,2026","work"]');
+    expect(raw.single['tags'], 'json:["finance,2026","work"]');
     expect(restored.single.tags, ['finance,2026', 'work']);
   });
 

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 
 class NoteModel extends Note {
+  static const _tagsJsonPrefix = 'json:';
+
   const NoteModel({
     super.id,
     required super.title,
@@ -39,7 +41,7 @@ class NoteModel extends Note {
       'color': color,
       'createdAt': createdAt.toIso8601String(),
       'isPinned': isPinned ? 1 : 0,
-      'tags': jsonEncode(tags),
+      'tags': _tagsToJson(tags),
       'status': status.index,
       'reminder': reminder?.toIso8601String(),
     };
@@ -59,18 +61,34 @@ class NoteModel extends Note {
     );
   }
 
+  /// Converts a v1-v5 comma-delimited value without guessing its format.
+  static String encodeLegacyTagsForMigration(String value) {
+    return _tagsToJson(_legacyTagsFromJson(value));
+  }
+
   static List<String> _tagsFromJson(dynamic value) {
     if (value == null) return const [];
     final str = value as String;
     if (str.isEmpty) return const [];
+    if (!str.startsWith(_tagsJsonPrefix)) {
+      return _legacyTagsFromJson(str);
+    }
     try {
-      final decoded = jsonDecode(str);
+      final decoded = jsonDecode(str.substring(_tagsJsonPrefix.length));
       if (decoded is List && decoded.every((tag) => tag is String)) {
         return decoded.cast<String>();
       }
     } on FormatException {
-      // Rows created before JSON tag storage remain comma-delimited.
+      // Preserve malformed recognized values rather than dropping tag data.
     }
+    return [str];
+  }
+
+  static String _tagsToJson(Iterable<String> tags) {
+    return '$_tagsJsonPrefix${jsonEncode(tags.toList(growable: false))}';
+  }
+
+  static List<String> _legacyTagsFromJson(String str) {
     return str
         .split(',')
         .map((t) => t.trim())

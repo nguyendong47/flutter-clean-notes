@@ -23,6 +23,7 @@ class LocalNoteDataSourceImpl implements LocalNoteDataSource {
   LocalNoteDataSourceImpl({Database? database}) : _databaseOverride = database;
 
   Database? _database;
+  static const int _schemaVersion = 6;
   static const String _tableName = 'notes';
   final Database? _databaseOverride;
 
@@ -57,7 +58,7 @@ class LocalNoteDataSourceImpl implements LocalNoteDataSource {
       return await databaseFactoryFfi.openDatabase(
         path,
         options: OpenDatabaseOptions(
-          version: 5,
+          version: _schemaVersion,
           onCreate: _createDB,
           onUpgrade: _upgradeDB,
         ),
@@ -68,7 +69,7 @@ class LocalNoteDataSourceImpl implements LocalNoteDataSource {
 
       return await openDatabase(
         path,
-        version: 5,
+        version: _schemaVersion,
         onCreate: _createDB,
         onUpgrade: _upgradeDB,
       );
@@ -109,6 +110,23 @@ class LocalNoteDataSourceImpl implements LocalNoteDataSource {
     }
     if (oldVersion < 5) {
       await db.execute('ALTER TABLE $_tableName ADD COLUMN reminder TEXT');
+    }
+    if (oldVersion < 6) {
+      final rows = await db.query(_tableName, columns: const ['id', 'tags']);
+      final batch = db.batch();
+      for (final row in rows) {
+        batch.update(
+          _tableName,
+          {
+            'tags': NoteModel.encodeLegacyTagsForMigration(
+              row['tags'] as String,
+            ),
+          },
+          where: 'id = ?',
+          whereArgs: [row['id']],
+        );
+      }
+      await batch.commit(noResult: true);
     }
   }
 

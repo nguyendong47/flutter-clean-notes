@@ -42,7 +42,7 @@ void main() {
     }
   });
 
-  test('upgrades a v1 file to v5 and preserves the legacy row', () async {
+  test('upgrades a v1 file to v6 and preserves the legacy row', () async {
     await _writeFixture(
       supportDirectory,
       version: 1,
@@ -71,9 +71,10 @@ void main() {
       'status': NoteStatus.active,
       'reminder': null,
     });
+    expect(await _storedTags(openedDatabases.last), ['json:[]']);
   });
 
-  test('upgrades a v2 file without losing its pinned value', () async {
+  test('upgrades a v2 file to v6 without losing its pinned value', () async {
     await _writeFixture(
       supportDirectory,
       version: 2,
@@ -103,9 +104,10 @@ void main() {
       'status': NoteStatus.active,
       'reminder': null,
     });
+    expect(await _storedTags(openedDatabases.last), ['json:[]']);
   });
 
-  test('upgrades a v3 file and keeps legacy tags readable', () async {
+  test('upgrades a v3 file to v6 and keeps legacy tags readable', () async {
     await _writeFixture(
       supportDirectory,
       version: 3,
@@ -136,13 +138,12 @@ void main() {
       'status': NoteStatus.active,
       'reminder': null,
     });
-    expect(
-      (await openedDatabases.last.query('notes')).single['tags'],
-      'finance,legacy',
-    );
+    expect(await _storedTags(openedDatabases.last), [
+      'json:["finance","legacy"]',
+    ]);
   });
 
-  test('upgrades a v4 file and preserves every note status', () async {
+  test('upgrades a v4 file to v6 and preserves every note status', () async {
     await _writeFixture(
       supportDirectory,
       version: 4,
@@ -217,44 +218,110 @@ void main() {
         'reminder': null,
       },
     ]);
+    expect(await _storedTags(openedDatabases.last), [
+      'json:["active"]',
+      'json:["archive"]',
+      'json:["trash"]',
+    ]);
   });
 
-  test('reopens a v5 file without changing its rich row', () async {
+  test(
+    'upgrades a deployed v5 file to v6 without changing its rich row',
+    () async {
+      await _writeFixture(
+        supportDirectory,
+        version: 5,
+        rows: const [
+          {
+            'id': 47,
+            'title': 'Current v5',
+            'content': 'Migrate deployed comma tags',
+            'color': 13,
+            'createdAt': '2024-05-06T07:08:09.000Z',
+            'isPinned': 1,
+            'tags': 'current,reminder',
+            'status': 1,
+            'reminder': '2027-06-07T08:09:10.000Z',
+          },
+        ],
+      );
+
+      final notes = await _upgradeAndRestart(openedDatabases);
+
+      expect(notes, hasLength(1));
+      expect(_noteSnapshot(notes.single), {
+        'id': 47,
+        'title': 'Current v5',
+        'content': 'Migrate deployed comma tags',
+        'color': 13,
+        'createdAt': DateTime.utc(2024, 5, 6, 7, 8, 9),
+        'isPinned': true,
+        'tags': const ['current', 'reminder'],
+        'status': NoteStatus.archived,
+        'reminder': DateTime.utc(2027, 6, 7, 8, 9, 10),
+      });
+      expect(await _storedTags(openedDatabases.last), [
+        'json:["current","reminder"]',
+      ]);
+    },
+  );
+
+  test('v6 migration preserves JSON-looking v5 tags as literal text', () async {
     await _writeFixture(
       supportDirectory,
       version: 5,
       rows: const [
         {
-          'id': 47,
-          'title': 'Current v5',
-          'content': 'No migration needed',
-          'color': 13,
-          'createdAt': '2024-05-06T07:08:09.000Z',
-          'isPinned': 1,
-          'tags': '["current","reminder"]',
-          'status': 1,
-          'reminder': '2027-06-07T08:09:10.000Z',
+          'id': 48,
+          'title': 'Brackets',
+          'content': 'A legacy tag that resembles an empty JSON list',
+          'color': 14,
+          'createdAt': '2024-05-07T07:08:09.000Z',
+          'isPinned': 0,
+          'tags': '[]',
+          'status': 0,
+          'reminder': null,
+        },
+        {
+          'id': 49,
+          'title': 'Quoted tag',
+          'content': 'A legacy tag that resembles a JSON string list',
+          'color': 15,
+          'createdAt': '2024-05-08T07:08:09.000Z',
+          'isPinned': 0,
+          'tags': '["urgent"]',
+          'status': 0,
+          'reminder': null,
+        },
+        {
+          'id': 50,
+          'title': 'Prefix-like tag',
+          'content': 'A legacy tag that resembles the v6 storage prefix',
+          'color': 16,
+          'createdAt': '2024-05-09T07:08:09.000Z',
+          'isPinned': 0,
+          'tags': 'json:["already"]',
+          'status': 0,
+          'reminder': null,
         },
       ],
     );
 
     final notes = await _upgradeAndRestart(openedDatabases);
 
-    expect(notes, hasLength(1));
-    expect(_noteSnapshot(notes.single), {
-      'id': 47,
-      'title': 'Current v5',
-      'content': 'No migration needed',
-      'color': 13,
-      'createdAt': DateTime.utc(2024, 5, 6, 7, 8, 9),
-      'isPinned': true,
-      'tags': const ['current', 'reminder'],
-      'status': NoteStatus.archived,
-      'reminder': DateTime.utc(2027, 6, 7, 8, 9, 10),
-    });
+    expect(notes.map((note) => note.tags), [
+      const ['[]'],
+      const ['["urgent"]'],
+      const ['json:["already"]'],
+    ]);
+    expect(await _storedTags(openedDatabases.last), [
+      'json:["[]"]',
+      r'json:["[\"urgent\"]"]',
+      r'json:["json:[\"already\"]"]',
+    ]);
   });
 
-  test('creates a fresh empty v5 file with the exact current schema', () async {
+  test('creates a fresh empty v6 file with the exact current schema', () async {
     final dataSource = LocalNoteDataSourceImpl();
     final database = await dataSource.database;
     openedDatabases.add(database);
@@ -300,6 +367,7 @@ void main() {
       'status': NoteStatus.active,
       'reminder': DateTime.utc(2027, 8, 24, 9, 10, 11),
     });
+    expect(await _storedTags(secondDatabase), ['json:["shared","live"]']);
   });
 }
 
@@ -350,8 +418,17 @@ Future<List<NoteModel>> _readAllStatuses(LocalNoteDataSource dataSource) async {
   return notes;
 }
 
+Future<List<Object?>> _storedTags(Database database) async {
+  final rows = await database.query(
+    'notes',
+    columns: const ['tags'],
+    orderBy: 'id ASC',
+  );
+  return rows.map((row) => row['tags']).toList();
+}
+
 Future<void> _expectCurrentSchema(Database database) async {
-  expect(await database.getVersion(), 5);
+  expect(await database.getVersion(), 6);
   final objects = await database.rawQuery('''
     SELECT type, name, tbl_name, sql
     FROM sqlite_master
@@ -492,7 +569,7 @@ Future<void> _expectCurrentSchema(Database database) async {
     await database.rawQuery('PRAGMA index_list(notes)'),
     isEmpty,
     reason:
-        'The v5 table uses its INTEGER PRIMARY KEY rowid, not a side index.',
+        'The v6 table uses its INTEGER PRIMARY KEY rowid, not a side index.',
   );
 }
 
