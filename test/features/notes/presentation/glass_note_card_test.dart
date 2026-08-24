@@ -96,6 +96,7 @@ void main() {
   testWidgets('keeps card geometry stable while every mutation future runs', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     final scenarios = <({String action, NoteStatus status, bool pinned})>[
       (action: 'Pin note', status: NoteStatus.active, pinned: false),
       (action: 'Archive', status: NoteStatus.active, pinned: false),
@@ -141,6 +142,19 @@ void main() {
       expect(started, isTrue, reason: scenario.action);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(tester.getSize(card), idleSize);
+      final updating = find.bySemanticsLabel('Updating note Aurora design');
+      expect(updating, findsOneWidget, reason: scenario.action);
+      final updatingNode = tester.getSemantics(updating);
+      expect(
+        updatingNode.getSemanticsData().flagsCollection.isLiveRegion,
+        isTrue,
+        reason: scenario.action,
+      );
+      expect(
+        updatingNode.childrenCountInTraversalOrder,
+        0,
+        reason: scenario.action,
+      );
 
       await tester.tap(find.bySemanticsLabel('Open note Aurora design'));
       await tester.pump();
@@ -156,6 +170,7 @@ void main() {
       await tester.pump();
       expect(opened, isTrue, reason: scenario.action);
     }
+    semantics.dispose();
   });
 
   testWidgets('limits informational tags and remains usable in dark mode', (

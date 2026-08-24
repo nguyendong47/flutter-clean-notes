@@ -115,11 +115,17 @@ class _GlassNoteCardState extends State<GlassNoteCard> {
                   top: 4,
                   end: 4,
                   child: _busy
-                      ? const SizedBox.square(
-                          dimension: 48,
-                          child: Padding(
-                            padding: EdgeInsets.all(14),
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                      ? Semantics(
+                          container: true,
+                          liveRegion: true,
+                          label: 'Updating note $title',
+                          excludeSemantics: true,
+                          child: const SizedBox.square(
+                            dimension: 48,
+                            child: Padding(
+                              padding: EdgeInsets.all(14),
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
                           ),
                         )
                       : SizedBox.square(

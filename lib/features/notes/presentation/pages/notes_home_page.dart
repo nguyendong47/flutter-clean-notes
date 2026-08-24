@@ -29,12 +29,14 @@ class NotesHomePage extends ConsumerStatefulWidget {
 class _NotesHomePageState extends ConsumerState<NotesHomePage> {
   static final _dateFormat = DateFormat('EEEE, MMMM d');
 
+  Future<void>? _refreshInFlight;
   Object? _lastAnnouncedError;
   String? _pendingTagReset;
 
   @override
   Widget build(BuildContext context) {
     ref.listen<AsyncValue<List<Note>>>(notesProvider, (previous, next) {
+      if (next.isLoading) return;
       if (next.hasError && next.hasValue) {
         _announceError(next.error!);
       } else if (!next.hasError) {
@@ -158,7 +160,21 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
     if (id != null) context.push('/note/$id');
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh() {
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) return inFlight;
+
+    final refresh = _performRefresh();
+    _refreshInFlight = refresh;
+    return refresh.whenComplete(() {
+      if (identical(_refreshInFlight, refresh)) {
+        _refreshInFlight = null;
+      }
+    });
+  }
+
+  Future<void> _performRefresh() async {
+    _lastAnnouncedError = null;
     try {
       final refresh = ref.refresh(notesProvider.future);
       await refresh;
@@ -258,6 +274,12 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
                 ? 'Could not refresh notes. Showing saved notes. Try again.'
                 : 'Could not load notes. Try again.',
           ),
+          action: hasCachedNotes
+              ? SnackBarAction(
+                  label: 'Retry',
+                  onPressed: () => unawaited(_refresh()),
+                )
+              : null,
         ),
       );
   }
@@ -333,7 +355,8 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
           label: toggleLabel,
           value: _themeBusy ? 'Saving theme preference…' : null,
           liveRegion: _themeBusy,
-          excludeSemantics: !_themeBusy,
+          onTap: _themeBusy ? null : () => unawaited(_toggleTheme()),
+          excludeSemantics: true,
           child: SizedBox.square(
             key: const Key('notes-home-theme-toggle'),
             dimension: 48,

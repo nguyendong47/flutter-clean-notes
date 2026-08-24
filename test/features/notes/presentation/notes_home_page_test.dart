@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:ui' show SemanticsAction, Tristate;
+import 'dart:ui' show SemanticsAction, SemanticsActionEvent, Tristate;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
@@ -117,6 +118,7 @@ void main() {
   testWidgets('keeps home chrome and skeleton geometry while loading', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     final repository = _DeferredNoteRepository(sampleNotes);
     await _pumpHome(tester, repository: repository, settle: false);
     await tester.pump();
@@ -125,10 +127,16 @@ void main() {
     expect(find.byType(NotesSkeleton), findsOneWidget);
     expect(find.byKey(const Key('notes-skeleton-card-0')), findsOneWidget);
     expect(find.byKey(const Key('notes-skeleton-card-3')), findsOneWidget);
+    final loading = find.bySemanticsLabel('Loading notes');
+    expect(loading, findsOneWidget);
+    final loadingNode = tester.getSemantics(loading);
+    expect(loadingNode.getSemanticsData().flagsCollection.isLiveRegion, isTrue);
+    expect(loadingNode.childrenCountInTraversalOrder, 0);
 
     repository.release();
     await tester.pumpAndSettle();
     expect(find.byType(NotesSkeleton), findsNothing);
+    semantics.dispose();
   });
 
   testWidgets('empty state retains chrome and invokes the create action', (
@@ -368,25 +376,98 @@ void main() {
     },
   );
 
-  testWidgets('cached refresh failure has one neutral feedback surface', (
+  testWidgets(
+    'cached refresh Retry supports semantics and keyboard activation',
+    (tester) async {
+      final repository = InMemoryNoteRepository.seeded(sampleNotes);
+      final container = await _pumpHome(tester, repository: repository);
+      repository.getError = StateError(r'C:\private\notes.db unavailable');
+
+      await tester
+          .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+          .onRefresh();
+      await tester.pumpAndSettle();
+
+      expect(find.text(sampleNote.title), findsOneWidget);
+      expect(
+        find.text('Could not refresh notes. Showing saved notes. Try again.'),
+        findsOneWidget,
+      );
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.textContaining('notes.db'), findsNothing);
+      expect(container.read(notesProvider).hasError, isTrue);
+
+      var retry = find.widgetWithText(TextButton, 'Retry');
+      expect(retry, findsOneWidget);
+      var semanticRetry = find.bySemanticsLabel(RegExp(r'\bRetry\b'));
+      expect(semanticRetry, findsOneWidget);
+      _performSemanticTap(tester, semanticRetry);
+      await tester.pumpAndSettle();
+      expect(container.read(notesProvider).hasError, isTrue);
+      expect(
+        find.text('Could not refresh notes. Showing saved notes. Try again.'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(TextButton, 'Retry'), findsOneWidget);
+
+      repository.getError = null;
+      semanticRetry = find.bySemanticsLabel(RegExp(r'\bRetry\b'));
+      _performSemanticTap(tester, semanticRetry);
+      await tester.pumpAndSettle();
+      expect(container.read(notesProvider), isA<AsyncData<List<Note>>>());
+      expect(find.byType(SnackBar), findsNothing);
+
+      repository.getError = StateError(
+        r'C:\private\notes.db unavailable again',
+      );
+      await tester
+          .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+          .onRefresh();
+      await tester.pump();
+      expect(container.read(notesProvider).hasError, isTrue);
+      retry = find.widgetWithText(TextButton, 'Retry');
+      expect(retry, findsOneWidget);
+      await _focus(tester, retry);
+      repository.getError = null;
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(container.read(notesProvider), isA<AsyncData<List<Note>>>());
+      expect(find.byType(SnackBar), findsNothing);
+      expect(find.textContaining('notes.db'), findsNothing);
+    },
+  );
+
+  testWidgets('cached Retry coalesces an overlapping pull refresh', (
     tester,
   ) async {
-    final repository = InMemoryNoteRepository.seeded(sampleNotes);
-    await _pumpHome(tester, repository: repository);
-    repository.getError = StateError(r'C:\private\notes.db unavailable');
+    final repository = _GatedRefreshRepository(sampleNotes);
+    final container = await _pumpHome(tester, repository: repository);
+    repository.getError = StateError('refresh unavailable');
 
     await tester
         .widget<RefreshIndicator>(find.byType(RefreshIndicator))
         .onRefresh();
-    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(container.read(notesProvider).hasError, isTrue);
 
-    expect(find.text(sampleNote.title), findsOneWidget);
-    expect(
-      find.text('Could not refresh notes. Showing saved notes. Try again.'),
-      findsOneWidget,
-    );
-    expect(find.byType(SnackBar), findsOneWidget);
-    expect(find.textContaining('notes.db'), findsNothing);
+    repository
+      ..getError = null
+      ..gateRefresh();
+    await tester.tap(find.widgetWithText(TextButton, 'Retry'));
+    await tester.pump();
+    expect(repository.gatedGetCalls, 1);
+
+    final overlappingRefresh = tester
+        .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+        .onRefresh();
+    await tester.pump();
+    expect(repository.gatedGetCalls, 1);
+
+    repository.releaseRefresh();
+    await overlappingRefresh;
+    await tester.pumpAndSettle();
+    expect(container.read(notesProvider), isA<AsyncData<List<Note>>>());
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   testWidgets('archive and trash actions each offer working Undo restoration', (
@@ -484,6 +565,26 @@ void main() {
       expect(find.text('Theme stays unchanged. Try again.'), findsOneWidget);
     },
   );
+
+  testWidgets('theme toggle exposes and handles its semantic tap action', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final store = _FakeThemeModeStore(ThemeMode.light);
+    await _pumpHome(
+      tester,
+      repository: InMemoryNoteRepository.seeded(sampleNotes),
+      themeStore: store,
+    );
+
+    final toggle = find.byKey(const Key('notes-home-theme-toggle'));
+    _performSemanticTap(tester, toggle);
+    await tester.pumpAndSettle();
+
+    expect(store.writeCalls, 1);
+    expect(store.mode, ThemeMode.dark);
+    semantics.dispose();
+  });
 
   testWidgets(
     'theme toggle announces pending persistence and prevents repeat writes',
@@ -756,6 +857,44 @@ void _expectStableChrome() {
   expect(find.text('Search notes'), findsOneWidget);
 }
 
+void _performSemanticTap(WidgetTester tester, Finder target) {
+  final node = tester.getSemantics(target);
+  expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+  tester.platformDispatcher.onSemanticsActionEvent!(
+    SemanticsActionEvent(
+      type: SemanticsAction.tap,
+      nodeId: node.id,
+      viewId: tester.view.viewId,
+    ),
+  );
+}
+
+Future<FocusNode> _focus(WidgetTester tester, Finder target) async {
+  for (var attempt = 0; attempt < 40; attempt++) {
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus != null && _isDescendantOf(focus.context, target)) return focus;
+  }
+  throw TestFailure('Could not focus the requested widget');
+}
+
+bool _isDescendantOf(BuildContext? context, Finder ancestor) {
+  if (context is! Element) return false;
+  final target = ancestor.evaluate().single;
+  Element? current = context;
+  while (current != null) {
+    if (identical(current, target)) return true;
+    Element? parent;
+    current.visitAncestorElements((element) {
+      parent = element;
+      return false;
+    });
+    current = parent;
+  }
+  return false;
+}
+
 NoteStatus _statusOf(InMemoryNoteRepository repository, int id) {
   return repository.notes.singleWhere((note) => note.id == id).status;
 }
@@ -770,6 +909,34 @@ class _DeferredNoteRepository extends InMemoryNoteRepository {
   @override
   Future<List<Note>> getNotesByStatus(NoteStatus status) async {
     await _gate.future;
+    return super.getNotesByStatus(status);
+  }
+}
+
+class _GatedRefreshRepository extends InMemoryNoteRepository {
+  _GatedRefreshRepository(super.notes) : super.seeded();
+
+  Completer<void>? _refreshGate;
+  int gatedGetCalls = 0;
+
+  void gateRefresh() {
+    _refreshGate = Completer<void>();
+    gatedGetCalls = 0;
+  }
+
+  void releaseRefresh() {
+    final gate = _refreshGate;
+    _refreshGate = null;
+    gate?.complete();
+  }
+
+  @override
+  Future<List<Note>> getNotesByStatus(NoteStatus status) async {
+    final gate = _refreshGate;
+    if (gate != null) {
+      gatedGetCalls += 1;
+      await gate.future;
+    }
     return super.getNotesByStatus(status);
   }
 }

@@ -527,10 +527,16 @@ class _LoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
-      key: Key('notes-search-loading'),
-      height: 160,
-      child: Center(child: CircularProgressIndicator()),
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: 'Loading search results',
+      excludeSemantics: true,
+      child: const SizedBox(
+        key: Key('notes-search-loading'),
+        height: 160,
+        child: Center(child: CircularProgressIndicator()),
+      ),
     );
   }
 }

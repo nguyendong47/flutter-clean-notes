@@ -9,55 +9,61 @@ class NotesSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SliverLayoutBuilder(
-      builder: (context, constraints) {
-        final viewportWidth = constraints.crossAxisExtent;
-        final horizontalInset = notesGridHorizontalInset(viewportWidth);
-        final colorScheme = Theme.of(context).colorScheme;
+    return SliverSemantics(
+      container: true,
+      liveRegion: true,
+      label: 'Loading notes',
+      excludeSemantics: true,
+      sliver: SliverLayoutBuilder(
+        builder: (context, constraints) {
+          final viewportWidth = constraints.crossAxisExtent;
+          final horizontalInset = notesGridHorizontalInset(viewportWidth);
+          final colorScheme = Theme.of(context).colorScheme;
 
-        return SliverPadding(
-          padding: EdgeInsets.symmetric(horizontal: horizontalInset),
-          sliver: SliverMasonryGrid.count(
-            crossAxisCount: notesGridColumnCount(viewportWidth),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childCount: 4,
-            itemBuilder: (context, index) => GlassSurface(
-              key: Key('notes-skeleton-card-$index'),
-              borderRadius: const BorderRadius.all(Radius.circular(20)),
-              blur: 18,
-              opacity: 0.78,
-              child: SizedBox(
-                height: index.isEven ? 150 : 184,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _SkeletonLine(
-                      widthFactor: index.isEven ? 0.64 : 0.78,
-                      color: colorScheme.surfaceContainerHighest,
-                    ),
-                    const SizedBox(height: 16),
-                    _SkeletonLine(
-                      widthFactor: 1,
-                      color: colorScheme.surfaceContainerHighest,
-                    ),
-                    const SizedBox(height: 10),
-                    _SkeletonLine(
-                      widthFactor: 0.82,
-                      color: colorScheme.surfaceContainerHighest,
-                    ),
-                    const Spacer(),
-                    _SkeletonLine(
-                      widthFactor: 0.48,
-                      color: colorScheme.surfaceContainerHighest,
-                    ),
-                  ],
+          return SliverPadding(
+            padding: EdgeInsets.symmetric(horizontal: horizontalInset),
+            sliver: SliverMasonryGrid.count(
+              crossAxisCount: notesGridColumnCount(viewportWidth),
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childCount: 4,
+              itemBuilder: (context, index) => GlassSurface(
+                key: Key('notes-skeleton-card-$index'),
+                borderRadius: const BorderRadius.all(Radius.circular(20)),
+                blur: 18,
+                opacity: 0.78,
+                child: SizedBox(
+                  height: index.isEven ? 150 : 184,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _SkeletonLine(
+                        widthFactor: index.isEven ? 0.64 : 0.78,
+                        color: colorScheme.surfaceContainerHighest,
+                      ),
+                      const SizedBox(height: 16),
+                      _SkeletonLine(
+                        widthFactor: 1,
+                        color: colorScheme.surfaceContainerHighest,
+                      ),
+                      const SizedBox(height: 10),
+                      _SkeletonLine(
+                        widthFactor: 0.82,
+                        color: colorScheme.surfaceContainerHighest,
+                      ),
+                      const Spacer(),
+                      _SkeletonLine(
+                        widthFactor: 0.48,
+                        color: colorScheme.surfaceContainerHighest,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

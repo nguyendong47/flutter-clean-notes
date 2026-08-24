@@ -776,6 +776,27 @@ void main() {
     },
   );
 
+  testWidgets('loading search results announces one contextual live region', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final deferred = _DeferredNoteRepository(sampleNotes);
+    await _pumpSearch(tester, repository: deferred, settle: false);
+    await tester.pump();
+
+    _expectStableSearchChrome();
+    expect(find.byKey(const Key('notes-search-loading')), findsOneWidget);
+    final loading = find.bySemanticsLabel('Loading search results');
+    expect(loading, findsOneWidget);
+    final loadingNode = tester.getSemantics(loading);
+    expect(loadingNode.getSemanticsData().flagsCollection.isLiveRegion, isTrue);
+    expect(loadingNode.childrenCountInTraversalOrder, 0);
+
+    deferred.release();
+    await tester.pumpAndSettle();
+    semantics.dispose();
+  });
+
   testWidgets(
     'keeps chrome stable for loading, initial error, and pre-write failure',
     (tester) async {
