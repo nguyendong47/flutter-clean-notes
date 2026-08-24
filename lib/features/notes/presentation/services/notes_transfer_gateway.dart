@@ -10,7 +10,12 @@ import 'package:share_plus/share_plus.dart' hide XFile;
 import 'notes_transfer_web_options.dart'
     if (dart.library.js_interop) 'notes_transfer_web_options.web.dart';
 
-enum NotesShareResult { completed, dismissed, unavailable }
+enum NotesShareResult {
+  completed,
+  dismissed,
+  unavailable,
+  webShareOrDownloadStarted,
+}
 
 typedef JsonFilePicker =
     Future<List<PlatformFile>?> Function({
@@ -24,11 +29,14 @@ class NotesTransferGateway {
   const NotesTransferGateway({
     @visibleForTesting Future<ShareResult> Function(ShareParams)? share,
     @visibleForTesting JsonFilePicker? pickJsonFiles,
+    @visibleForTesting bool? isWeb,
   }) : _share = share,
-       _pickJsonFiles = pickJsonFiles;
+       _pickJsonFiles = pickJsonFiles,
+       _isWeb = isWeb ?? kIsWeb;
 
   final Future<ShareResult> Function(ShareParams)? _share;
   final JsonFilePicker? _pickJsonFiles;
+  final bool _isWeb;
 
   /// Caps decode and JSON parsing memory for imports on mobile devices.
   static const int _maxImportBytes = 10 * 1024 * 1024;
@@ -120,6 +128,24 @@ class NotesTransferGateway {
     if (text.trim().isEmpty) {
       throw const FormatException('Nothing to share.');
     }
+    if (_isWeb) {
+      const fileName = 'notes.txt';
+      final file = XFile.fromData(
+        Uint8List.fromList(utf8.encode(text)),
+        mimeType: 'text/plain',
+        name: fileName,
+      );
+      return _shareContent(
+        ShareParams(
+          title: subject,
+          files: [file],
+          fileNameOverrides: const [fileName],
+          sharePositionOrigin: sharePositionOrigin,
+          downloadFallbackEnabled: true,
+          mailToFallbackEnabled: false,
+        ),
+      );
+    }
     return _shareContent(
       ShareParams(
         text: text,
@@ -152,6 +178,8 @@ class NotesTransferGateway {
         files: [file],
         fileNameOverrides: [fileName],
         sharePositionOrigin: sharePositionOrigin,
+        downloadFallbackEnabled: true,
+        mailToFallbackEnabled: false,
       ),
     );
   }
@@ -162,7 +190,10 @@ class NotesTransferGateway {
     return switch (result.status) {
       ShareResultStatus.success => NotesShareResult.completed,
       ShareResultStatus.dismissed => NotesShareResult.dismissed,
-      ShareResultStatus.unavailable => NotesShareResult.unavailable,
+      ShareResultStatus.unavailable =>
+        _isWeb
+            ? NotesShareResult.webShareOrDownloadStarted
+            : NotesShareResult.unavailable,
     };
   }
 }

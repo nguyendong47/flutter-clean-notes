@@ -93,6 +93,92 @@ void main() {
   });
 
   test(
+    'web text export uses a downloadable file without a mailto body',
+    () async {
+      // Mutation caught: sending the note as ShareParams.text lets the web
+      // fallback copy private note content into an email draft.
+      ShareParams? captured;
+      final gateway = NotesTransferGateway(
+        isWeb: true,
+        share: (params) async {
+          captured = params;
+          return ShareResult.unavailable;
+        },
+      );
+      const origin = Rect.fromLTWH(8, 12, 44, 44);
+
+      expect(
+        await gateway.shareText(
+          text: 'Private note body',
+          subject: 'My Notes',
+          sharePositionOrigin: origin,
+        ),
+        NotesShareResult.webShareOrDownloadStarted,
+      );
+
+      final params = captured!;
+      expect(params.text, isNull);
+      expect(params.subject, isNull);
+      expect(params.title, 'My Notes');
+      expect(params.files, hasLength(1));
+      expect(params.fileNameOverrides, ['notes.txt']);
+      expect(params.files!.single.mimeType, 'text/plain');
+      expect(
+        utf8.decode(await params.files!.single.readAsBytes()),
+        'Private note body',
+      );
+      expect(params.mailToFallbackEnabled, isFalse);
+      expect(params.downloadFallbackEnabled, isTrue);
+      expect(params.sharePositionOrigin, origin);
+    },
+  );
+
+  test('native text export keeps the direct platform share contract', () async {
+    // Mutation caught: applying the web file workaround to native platforms
+    // would replace their established plain-text share-sheet experience.
+    ShareParams? captured;
+    final gateway = NotesTransferGateway(
+      isWeb: false,
+      share: (params) async {
+        captured = params;
+        return ShareResult.unavailable;
+      },
+    );
+    const origin = Rect.fromLTWH(4, 6, 44, 44);
+
+    await gateway.shareText(
+      text: 'Readable notes',
+      subject: 'My Notes',
+      sharePositionOrigin: origin,
+    );
+
+    final params = captured!;
+    expect(params.text, 'Readable notes');
+    expect(params.subject, 'My Notes');
+    expect(params.files, isNull);
+    expect(params.sharePositionOrigin, origin);
+  });
+
+  test('file export keeps download fallback and disables mailto', () async {
+    ShareParams? captured;
+    final gateway = NotesTransferGateway(
+      share: (params) async {
+        captured = params;
+        return ShareResult.unavailable;
+      },
+    );
+
+    await gateway.shareFile(
+      text: '{"notes":[]}',
+      fileName: 'notes.json',
+      mimeType: 'application/json',
+    );
+
+    expect(captured!.downloadFallbackEnabled, isTrue);
+    expect(captured!.mailToFallbackEnabled, isFalse);
+  });
+
+  test(
     'platform picker returns null on cancellation and configures JSON',
     () async {
       final picker = _FakeJsonFilePicker();
@@ -587,6 +673,26 @@ void main() {
     final outcome = container.read(notesTransferProvider).requireValue!;
     expect(outcome.operation, NotesTransferOperation.exportMarkdown);
     expect(outcome.status, NotesTransferOutcomeStatus.shareSheetOpened);
+  });
+
+  test('web share or download result exposes a truthful handoff', () async {
+    final gateway = _FakeNotesTransferGateway()
+      ..shareResult = NotesShareResult.webShareOrDownloadStarted;
+    final container = _container(gateway: gateway);
+    addTearDown(container.dispose);
+    await container.read(notesProvider.future);
+
+    final result = await container
+        .read(notesTransferProvider.notifier)
+        .exportText();
+
+    expect(result, NotesTransferResult.unavailable);
+    final outcome = container.read(notesTransferProvider).requireValue!;
+    expect(outcome.operation, NotesTransferOperation.exportText);
+    expect(
+      outcome.status,
+      NotesTransferOutcomeStatus.webShareOrDownloadStarted,
+    );
   });
 
   test(

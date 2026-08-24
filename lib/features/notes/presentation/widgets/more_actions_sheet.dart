@@ -224,8 +224,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                         operation: NotesTransferOperation.exportText,
                         icon: Icons.ios_share_outlined,
                         label: 'Export text',
-                        description:
-                            'Share Active and Archive; Trash is excluded',
+                        description: 'Export Active and Archive, not Trash',
                         state: transferState,
                         activeOperation: transferNotifier.operation,
                         enabled: !busy,
@@ -253,8 +252,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                         operation: NotesTransferOperation.exportMarkdown,
                         icon: Icons.text_snippet_outlined,
                         label: 'Export Markdown',
-                        description:
-                            'Share Active and Archive; Trash is excluded',
+                        description: 'Export Active and Archive, not Trash',
                         state: transferState,
                         activeOperation: transferNotifier.operation,
                         enabled: !busy,
@@ -707,6 +705,18 @@ String _transferProgress(NotesTransferOperation operation) {
 }
 
 String _transferSuccess(NotesTransferOutcome outcome) {
+  if (outcome.status == NotesTransferOutcomeStatus.webShareOrDownloadStarted) {
+    return switch (outcome.operation) {
+      NotesTransferOperation.exportText =>
+        'Text export handed off. Check your share target or Downloads.',
+      NotesTransferOperation.backupJson =>
+        'Backup handed off. Check your share target or Downloads.',
+      NotesTransferOperation.exportMarkdown =>
+        'Markdown export handed off. Check your share target or Downloads.',
+      NotesTransferOperation.importBackup =>
+        'Transfer handed off. Check your share target or Downloads.',
+    };
+  }
   if (outcome.status == NotesTransferOutcomeStatus.shareSheetOpened) {
     return 'Share sheet opened.';
   }

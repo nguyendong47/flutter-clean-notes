@@ -81,7 +81,7 @@ final class NotesTransferProvider
   NotesTransfer create() => NotesTransfer();
 }
 
-String _$notesTransferHash() => r'5cfed61e301956338af7d15e755299b240544fc3';
+String _$notesTransferHash() => r'0a716a76bb555cc7b235f21fff53cb98f1dae649';
 
 abstract class _$NotesTransfer extends $AsyncNotifier<NotesTransferOutcome?> {
   FutureOr<NotesTransferOutcome?> build();

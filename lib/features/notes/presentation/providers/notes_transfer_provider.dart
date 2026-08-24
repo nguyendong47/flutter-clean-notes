@@ -19,7 +19,11 @@ enum NotesTransferOperation {
 
 enum NotesTransferResult { completed, cancelled, unavailable, busy, failed }
 
-enum NotesTransferOutcomeStatus { completed, shareSheetOpened }
+enum NotesTransferOutcomeStatus {
+  completed,
+  shareSheetOpened,
+  webShareOrDownloadStarted,
+}
 
 class NotesTransferOutcome {
   const NotesTransferOutcome({
@@ -136,6 +140,10 @@ class NotesTransfer extends _$NotesTransfer {
         operation: operation,
         status: NotesTransferOutcomeStatus.shareSheetOpened,
       ),
+      NotesShareResult.webShareOrDownloadStarted => NotesTransferOutcome(
+        operation: operation,
+        status: NotesTransferOutcomeStatus.webShareOrDownloadStarted,
+      ),
     };
   }
 
@@ -155,7 +163,7 @@ class NotesTransfer extends _$NotesTransfer {
         return NotesTransferResult.cancelled;
       }
       state = AsyncData(outcome);
-      if (outcome.status == NotesTransferOutcomeStatus.shareSheetOpened) {
+      if (outcome.status != NotesTransferOutcomeStatus.completed) {
         return NotesTransferResult.unavailable;
       }
       return NotesTransferResult.completed;

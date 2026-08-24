@@ -165,9 +165,9 @@ void main() {
   ) async {
     await _pumpMore(tester);
     const disclosures = {
-      'more-row-export-text': 'Share Active and Archive; Trash is excluded',
+      'more-row-export-text': 'Export Active and Archive, not Trash',
       'more-row-backup-json': 'Includes Active, Archive, and Trash',
-      'more-row-export-markdown': 'Share Active and Archive; Trash is excluded',
+      'more-row-export-markdown': 'Export Active and Archive, not Trash',
       'more-row-import-backup':
           'Append copies as Active; reminders are cleared',
     };
@@ -494,7 +494,7 @@ void main() {
     tester,
   ) async {
     final gateway = _FakeNotesTransferGateway()
-      ..shareResult = NotesShareResult.unavailable;
+      ..shareResult = NotesShareResult.webShareOrDownloadStarted;
     final harness = await _pumpMore(tester, gateway: gateway);
     final backupRow = find.byKey(const Key('more-row-backup-json'));
     await tester.ensureVisible(backupRow);
@@ -502,11 +502,22 @@ void main() {
     await tester.tap(backupRow);
     await tester.pumpAndSettle();
 
-    expect(find.text('Share sheet opened.'), findsOneWidget);
+    expect(
+      find.text('Backup handed off. Check your share target or Downloads.'),
+      findsOneWidget,
+    );
+    final handoffStatus = tester
+        .getSemantics(find.byKey(const Key('more-transfer-status-backupJson')))
+        .getSemanticsData();
+    expect(
+      handoffStatus.value,
+      'Backup handed off. Check your share target or Downloads.',
+    );
+    expect(handoffStatus.flagsCollection.isLiveRegion, isTrue);
     expect(find.text('Backup sharing complete.'), findsNothing);
     expect(
       harness.container.read(notesTransferProvider).requireValue?.status,
-      NotesTransferOutcomeStatus.shareSheetOpened,
+      NotesTransferOutcomeStatus.webShareOrDownloadStarted,
     );
 
     await tester.binding.handlePopRoute();
@@ -514,7 +525,10 @@ void main() {
     await tester.tap(find.text('Open more'));
     await tester.pump();
 
-    expect(find.text('Share sheet opened.'), findsNothing);
+    expect(
+      find.text('Backup handed off. Check your share target or Downloads.'),
+      findsNothing,
+    );
     expect(find.text('Backup sharing complete.'), findsNothing);
     await tester.pumpAndSettle();
 
@@ -526,7 +540,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Text export complete.'), findsNothing);
-    expect(find.text('Share sheet opened.'), findsNothing);
+    expect(
+      find.text(
+        'Text export handed off. Check your share target or Downloads.',
+      ),
+      findsNothing,
+    );
     expect(harness.container.read(notesTransferProvider).requireValue, isNull);
 
     await tester.binding.handlePopRoute();
@@ -535,7 +554,31 @@ void main() {
     await tester.pump();
 
     expect(find.text('Text export complete.'), findsNothing);
-    expect(find.text('Share sheet opened.'), findsNothing);
+    expect(
+      find.text(
+        'Text export handed off. Check your share target or Downloads.',
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('native unavailable result keeps share-sheet feedback', (
+    tester,
+  ) async {
+    final gateway = _FakeNotesTransferGateway()
+      ..shareResult = NotesShareResult.unavailable;
+    await _pumpMore(tester, gateway: gateway);
+    final backupRow = find.byKey(const Key('more-row-backup-json'));
+    await tester.ensureVisible(backupRow);
+
+    await tester.tap(backupRow);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Share sheet opened.'), findsOneWidget);
+    expect(
+      find.text('Backup handed off. Check your share target or Downloads.'),
+      findsNothing,
+    );
   });
 
   testWidgets('silent import cancellation restores import focus', (
@@ -942,7 +985,7 @@ const _moreRowSemantics = {
   ),
   'more-row-export-text': (
     label: 'Export text',
-    value: 'Share Active and Archive; Trash is excluded',
+    value: 'Export Active and Archive, not Trash',
   ),
   'more-row-backup-json': (
     label: 'Backup JSON',
@@ -950,7 +993,7 @@ const _moreRowSemantics = {
   ),
   'more-row-export-markdown': (
     label: 'Export Markdown',
-    value: 'Share Active and Archive; Trash is excluded',
+    value: 'Export Active and Archive, not Trash',
   ),
   'more-row-import-backup': (
     label: 'Import backup',
