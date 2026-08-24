@@ -22,7 +22,7 @@ abstract class LocalNoteDataSource {
 class LocalNoteDataSourceImpl implements LocalNoteDataSource {
   LocalNoteDataSourceImpl({Database? database}) : _databaseOverride = database;
 
-  static Database? _database;
+  Database? _database;
   static const String _tableName = 'notes';
   final Database? _databaseOverride;
 
