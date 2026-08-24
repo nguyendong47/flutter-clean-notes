@@ -6,7 +6,6 @@
     "background_color": "#15172B",
     "theme_color": "#15172B",
     "description": "Clean Notes is a local-first note-taking app.",
-    "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
         {

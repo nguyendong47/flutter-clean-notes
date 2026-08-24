@@ -101,6 +101,28 @@ void main() {
       );
     });
 
+    test('web manifest supports portrait and landscape', () {
+      final manifest =
+          jsonDecode(_read('web/manifest.json')) as Map<String, Object?>;
+
+      expect(manifest.containsKey('orientation'), isFalse);
+    });
+
+    test('web document declares English as its language', () {
+      final index = _read('web/index.html');
+
+      expect(
+        _capture(
+          index,
+          RegExp(
+            r'''<html\b[^>]*\blang\s*=\s*["']([^"']+)["'][^>]*>''',
+            caseSensitive: false,
+          ),
+        ),
+        'en',
+      );
+    });
+
     test('Windows displays Clean Notes without renaming the executable', () {
       // Mutation caught: changing the binary identity while aligning the
       // window title and Explorer-visible product metadata.
