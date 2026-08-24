@@ -83,6 +83,11 @@ dev_dependencies:
 # meta 1.17.0 constraint.
 dependency_overrides:
   xml: 7.0.1
+  # path_provider_foundation 2.6.0 bundles objective_c native assets that can
+  # crash iOS at runtime and produce malformed App Store IPA archives. Keep the
+  # method-channel 2.5.1 release until the Flutter/Xcode regressions are fixed.
+  # See flutter/flutter#186794 and flutter/flutter#187752.
+  path_provider_foundation: 2.5.1
 
 flutter_launcher_icons:
   android: true
