@@ -10,6 +10,7 @@ import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_home
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_library_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_search_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_shell_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/pages/privacy_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/search_focus_request.dart';
 
 part 'router.g.dart';
@@ -84,6 +85,12 @@ GoRouter router(Ref ref) {
       ),
       GoRoute(
         parentNavigatorKey: rootNavigatorKey,
+        path: '/privacy',
+        builder: (context, state) =>
+            PrivacyPage(onClose: () => _closePrivacy(context)),
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
         path: '/note/new',
         builder: (context, state) =>
             AddEditNotePage(onClose: () => _closeEditor(context)),
@@ -111,6 +118,14 @@ GoRouter router(Ref ref) {
     router.dispose();
   });
   return router;
+}
+
+void _closePrivacy(BuildContext context) {
+  if (context.canPop()) {
+    context.pop();
+  } else {
+    context.go('/');
+  }
 }
 
 void _closeEditor(BuildContext context) {

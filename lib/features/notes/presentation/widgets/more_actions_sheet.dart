@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/widgets/busy_aware_modal_bottom_sheet.dart';
@@ -131,6 +132,8 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                       _SheetHeader(
                         title: 'More',
                         closeEnabled: !busy,
+                        privacyEnabled: !busy,
+                        onPrivacy: () => unawaited(_openPrivacy()),
                         onClose: () => Navigator.of(context).maybePop(),
                       ),
                       const SizedBox(height: 16),
@@ -330,6 +333,13 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
     _restoreFocus(_manageTagsFocusNode);
   }
 
+  Future<void> _openPrivacy() async {
+    final navigator = Navigator.of(context);
+    final router = GoRouter.of(context);
+    final dismissed = await navigator.maybePop();
+    if (dismissed) unawaited(router.push<void>('/privacy'));
+  }
+
   Future<NotesTransferResult> _importBackup() async {
     final result = await ref
         .read(notesTransferProvider.notifier)
@@ -350,11 +360,15 @@ class _SheetHeader extends StatelessWidget {
   const _SheetHeader({
     required this.title,
     required this.closeEnabled,
+    required this.privacyEnabled,
+    required this.onPrivacy,
     required this.onClose,
   });
 
   final String title;
   final bool closeEnabled;
+  final bool privacyEnabled;
+  final VoidCallback onPrivacy;
   final VoidCallback onClose;
 
   @override
@@ -369,6 +383,26 @@ class _SheetHeader extends StatelessWidget {
             ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
           ),
         ),
+        const SizedBox(width: 8),
+        Semantics(
+          key: const Key('more-privacy-button'),
+          button: true,
+          enabled: privacyEnabled,
+          label: 'Privacy',
+          hint: 'How Clean Notes handles data',
+          onTap: privacyEnabled ? onPrivacy : null,
+          excludeSemantics: true,
+          child: TextButton.icon(
+            onPressed: privacyEnabled ? onPrivacy : null,
+            style: TextButton.styleFrom(
+              minimumSize: const Size(48, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+            ),
+            icon: const Icon(Icons.privacy_tip_outlined, size: 20),
+            label: const Text('Privacy'),
+          ),
+        ),
+        const SizedBox(width: 4),
         IconButton(
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           tooltip: 'Close $title',
