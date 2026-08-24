@@ -397,9 +397,33 @@ class NotesNotifier extends _$NotesNotifier {
   }
 
   Future<void> removeTag(String tag) async {
-    await _mutate(() async {
-      await ref.read(removeTagUsecaseProvider)(tag);
-    });
+    var committed = false;
+    try {
+      await _mutate(() async {
+        await ref.read(removeTagUsecaseProvider)(tag);
+        committed = true;
+      });
+    } on PersistedNoteMutationException catch (error) {
+      if (!committed ||
+          error.kind != PersistedNoteMutationFailureKind.refresh) {
+        rethrow;
+      }
+      final cachedNotes = state.value;
+      if (cachedNotes != null) {
+        state = AsyncData([
+          for (final note in cachedNotes)
+            if (note.tags.contains(tag))
+              note.copyWith(
+                tags: List<String>.unmodifiable(
+                  note.tags.where((candidate) => candidate != tag),
+                ),
+              )
+            else
+              note,
+        ]);
+        state = AsyncError(error.cause, error.causeStackTrace);
+      }
+    }
     if (ref.read(selectedTagProvider) == tag) {
       ref.read(selectedTagProvider.notifier).select(null);
     }

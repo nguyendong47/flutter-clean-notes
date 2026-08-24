@@ -890,6 +890,42 @@ void main() {
     expect(find.text('shared'), findsNothing);
   });
 
+  testWidgets(
+    'committed tag removal closes dialog and refresh retry never removes twice',
+    (tester) async {
+      final repository = _ControlledRepository.seeded(_tagNotes);
+      final harness = await _pumpMore(tester, repository: repository);
+      harness.container.read(selectedTagProvider.notifier).select('shared');
+      await _openTags(tester);
+      await tester.tap(find.byTooltip('Remove shared tag'));
+      await tester.pumpAndSettle();
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+      await tester.pumpAndSettle();
+
+      expect(repository.removeTagInvocations, 1);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(
+        find.text('Could not refresh tag counts. Showing saved counts.'),
+        findsOneWidget,
+      );
+      expect(find.text('shared'), findsNothing);
+      expect(harness.container.read(selectedTagProvider), isNull);
+
+      repository.getErrorAtCall = null;
+      await tester.tap(find.byKey(const Key('tag-retry')));
+      await tester.pumpAndSettle();
+
+      expect(repository.removeTagInvocations, 1);
+      expect(find.text('shared'), findsNothing);
+      expect(
+        find.text('Could not refresh tag counts. Showing saved counts.'),
+        findsNothing,
+      );
+    },
+  );
+
   testWidgets('both sheets fit 320 pixels at 1.5 text scale in both themes', (
     tester,
   ) async {

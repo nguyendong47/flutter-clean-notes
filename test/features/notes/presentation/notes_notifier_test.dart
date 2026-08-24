@@ -1505,6 +1505,32 @@ void main() {
     expect(container.read(notesProvider), isA<AsyncData<List<Note>>>());
     expect(container.read(notesProvider).requireValue, initial);
   });
+
+  test(
+    'committed removeTag refresh failure reconciles cache and filter without retry',
+    () async {
+      final repository = InMemoryNoteRepository.seeded([
+        sampleNote.copyWith(tags: const ['shared', 'work']),
+      ]);
+      final container = ProviderContainer(
+        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+      await container.read(notesProvider.future);
+      container.read(selectedTagProvider.notifier).select('shared');
+      repository.getErrorAtCall = repository.getCalls + 1;
+
+      await container.read(notesProvider.notifier).removeTag('shared');
+
+      expect(repository.removeTagCalls, 1);
+      expect(repository.notes.single.tags, ['work']);
+      expect(container.read(selectedTagProvider), isNull);
+      final state = container.read(notesProvider);
+      expect(state, isA<AsyncError<List<Note>>>());
+      expect(state.error, isA<StateError>());
+      expect(state.requireValue.single.tags, ['work']);
+    },
+  );
 }
 
 ProviderContainer _container(
