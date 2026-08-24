@@ -26,6 +26,16 @@ The launcher mark is a folded note forming a subtle abstract N with an aurora
 sparkle. Keep the silhouette recognizable at 32-48 px. Operating systems apply
 their own outer masks; the source artwork has no simulated rounded-square frame.
 
+Android notification status bars use the separate monochrome drawable
+`android/app/src/main/res/drawable/ic_stat_clean_notes.xml`, not any launcher
+image. Keep that resource referenced by
+`android/app/src/main/res/raw/keep.xml` so release shrinking cannot remove it.
+Changes must retain a transparent background and a solid white silhouette, then
+pass `test/app/android_notification_small_icon_test.dart`. The notification
+drawable is maintained independently and is not an output of
+`flutter_launcher_icons`; launcher regeneration must leave it and its keep rule
+intact.
+
 ## Versioned source assets
 
 | Asset | Purpose | Properties | SHA-256 |

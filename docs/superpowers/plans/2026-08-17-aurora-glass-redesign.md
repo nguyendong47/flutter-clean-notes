@@ -11,7 +11,7 @@
 
 **Architecture:** Keep the domain, repository, SQLite datasource, Riverpod code generation, and go_router boundaries. Add a small app-level visual system, split presentation into focused pages/widgets, make NotesNotifier hold all note statuses, and keep platform operations behind testable presentation services.
 
-**Tech Stack:** Flutter, Dart 3.11.1, Material 3, flutter_riverpod/riverpod_annotation, go_router, sqflite, flutter_markdown, share_plus, file_picker, flutter_staggered_grid_view 0.7.0, flutter_test.
+**Tech Stack:** Flutter, Dart 3.11.1, Material 3, flutter_riverpod/riverpod_annotation, go_router, sqflite, flutter_markdown_plus 1.0.12, share_plus, file_picker, flutter_staggered_grid_view 0.7.0, flutter_test.
 
 ## Global Constraints
 
@@ -1130,7 +1130,7 @@ Run:
 dart run build_runner build
 dart format --output=none --set-exit-if-changed lib test integration_test
 flutter analyze
-flutter test
+flutter test --concurrency=1
 git diff --check
 ~~~
 
@@ -1147,3 +1147,72 @@ git commit -m "test: verify aurora notes experience"
 - [ ] **Step 8: Request final code review**
 
 Invoke superpowers:requesting-code-review. Review the complete diff from the pre-redesign commit through Task 9 along standards and regression axes. Resolve findings through the original task implementer when possible, rerun full verification, and only then use superpowers:finishing-a-development-branch.
+
+---
+
+## Post-implementation hardening addendum (2026-08-24)
+
+This plan remains a historical implementation recipe, so its unchecked boxes do
+not describe current progress. The [Project Sync / Handoff](../handoff.md) owns
+the live branch, commits, evidence, blockers, and next action. This addendum
+records durable invariants added during final hardening and supersedes older
+snippets above wherever they differ.
+
+### Dependency and Android build baseline
+
+- `pubspec.lock` is tracked application input. Resolve a checkout with
+  `flutter pub get --enforce-lockfile`. Use plain `flutter pub get` only for an
+  intentional dependency change, then review and commit the lockfile diff.
+- Markdown preview uses the exact `flutter_markdown_plus 1.0.12` dependency.
+- Android pins Android Gradle Plugin 8.11.1 and Gradle 8.14 and requires JDK 17
+  or newer. The wrapper's official distribution SHA-256 is
+  `efe9a3d147d948d7528a9887fa35abcf24ca1a43ad06439996490f77569b02d1`.
+- Machine-specific JDK locations stay local. Never track
+  `org.gradle.java.home`; use local `JAVA_HOME`, the Android Studio Gradle JDK,
+  or `flutter config --jdk-dir="<jdk-path>"`.
+
+### Hardened runtime contracts
+
+- Bootstrap creates one `ProviderContainer`, awaits
+  `appThemeProvider.future` before the first frame, and passes the same container
+  to `UncontrolledProviderScope`. Missing, invalid, or unreadable saved modes
+  fall back to `ThemeMode.system`, and the theme provider stays alive.
+- Editor dirty state compares title, body, color, ordered tags, and reminder.
+  Top-bar Back, system Back, and route pops share one explicit discard guard;
+  **Keep editing** is the safe default. A clean iOS edge-back gesture remains
+  native, while a dirty gesture is vetoed synchronously.
+- Markdown preview replaces every authored image with an inert accessible
+  placeholder. Only `note://` links are handled; note content cannot open or
+  fetch network, file, data, or other external URIs.
+- Text and Markdown exports select Active plus Archive and exclude Trash. JSON
+  backup selects every status. Import validates the typed format and appends
+  Active copies with fresh IDs and cleared reminders. `NoteExportFormatter`,
+  `NotesTransferGateway`, the Riverpod transfer controller, and `ImportNotes`
+  retain their formatter, platform, orchestration, and domain boundaries.
+- Android uses the dedicated monochrome `ic_stat_clean_notes` notification small
+  icon retained by `res/raw/keep.xml`. When reminder cancellation fails after a
+  permanent deletion commits, the note remains deleted and the UI offers only a
+  sanitized, coalesced cancellation retry; retry never repeats deletion or
+  recreates the note.
+
+### Final verification contract
+
+Run the full host-side Dart/Flutter suite serially because concurrent test
+workers can contend for shared plugin and filesystem state:
+
+~~~text
+flutter pub get --enforce-lockfile
+dart run build_runner build
+dart format --output=none --set-exit-if-changed lib test integration_test
+flutter analyze
+flutter test --concurrency=1
+git diff --check
+~~~
+
+This host-side suite does not replace platform smoke coverage. Run
+`integration_test/aurora_smoke_test.dart` on each targeted device through the
+separate procedures and evidence gates owned by QA.
+
+Current completion state, exact test counts, artifact evidence, device coverage,
+and owner-controlled release blockers belong only in the Project Sync, not this
+historical plan or the stable design specification.

@@ -13,14 +13,25 @@ provenance.
 
 ## Features
 
-- Markdown editing and preview with formatting controls, colors, tags, and pinning.
+- Markdown editing and preview with `flutter_markdown_plus 1.0.12`, formatting
+  controls, colors, tags, and pinning. Preview images are inert, and only
+  `note://` links navigate inside the app; note content cannot open or fetch
+  network, file, data, or other external URIs.
+- Title, body, color, tags, and reminder make up the editor's unsaved-change
+  snapshot. Top-bar Back, system Back, and direct route pops require explicit
+  **Discard changes** while dirty, **Keep editing** is the safe default, and a
+  clean iOS edge-back gesture remains native.
 - Responsive Home, Search, Library, and More surfaces with filtering and sorting.
 - Archive, Trash, restore, permanent deletion, and Undo for reversible mutations.
-- Reminder scheduling with tap/open handling and Android snooze actions; platform
-  permission, delivery, and relaunch behavior remain release-gated.
+- Reminder scheduling with tap/open handling and Android snooze actions. A
+  failed reminder cancellation after permanent deletion offers a sanitized,
+  coalesced cancellation-only retry; it never recreates or deletes the note
+  again. Platform permission, delivery, and relaunch behavior remain
+  release-gated.
 - Text and Markdown export of Active and Archive notes (Trash excluded),
   all-status JSON backup, and append-as-Active JSON import with reminders cleared.
-- System, light, and dark themes.
+- System, light, and dark themes. The saved mode is resolved before the first
+  app frame; missing, invalid, or unreadable preferences fall back to system.
 - Accessibility behavior for scaled text, high contrast, and reduced motion.
 
 ## Project Sync
@@ -42,7 +53,7 @@ The app uses feature-first Clean Architecture under `lib/features/notes/`:
 | `domain/` | Notes entities, use cases, and repository abstractions |
 | `data/` | SQLite models/datasource and repository implementations |
 | `lib/app/` | Routing, theme, notifications, and app-level wiring |
-| `lib/main.dart` | Flutter bootstrap and `ProviderScope` |
+| `lib/main.dart` | Flutter bootstrap and one preloaded `ProviderContainer` handed to `UncontrolledProviderScope` |
 
 Dependencies flow from presentation to domain; data implements interfaces owned
 by domain. See [AGENTS.md](AGENTS.md) for contributor constraints and the desktop
@@ -66,13 +77,16 @@ Replace `emulator-5554` with the intended ID printed by `flutter devices`. Omit
 `-d $deviceId` only when Flutter can select that target without ambiguity. No
 external database service is required.
 
-Android builds use Android Gradle Plugin 8.11.1 and require JDK 17 or newer.
-Keep machine-specific JDK paths out of tracked Gradle properties. Flutter uses
-Android Studio's bundled JDK by default; confirm its selected Java runtime with
-`flutter doctor -v`. If Flutter cannot find a compatible JDK, select one in
-local developer configuration with `flutter config --jdk-dir="<jdk-path>"`.
-For direct Gradle commands, set `JAVA_HOME` locally or choose the Gradle JDK in
-Android Studio instead of editing `android/gradle.properties`.
+Android builds pin Android Gradle Plugin 8.11.1 and Gradle 8.14 and require JDK
+17 or newer. The Gradle wrapper verifies the official 8.14 distribution with
+SHA-256
+`efe9a3d147d948d7528a9887fa35abcf24ca1a43ad06439996490f77569b02d1`.
+Keep machine-specific JDK paths out of tracked Gradle properties; in particular,
+do not commit `org.gradle.java.home`. Flutter uses Android Studio's bundled JDK
+by default; confirm its selected Java runtime with `flutter doctor -v`. If
+Flutter cannot find a compatible JDK, select one in local developer
+configuration with `flutter config --jdk-dir="<jdk-path>"`. For direct Gradle
+commands, set `JAVA_HOME` locally or choose the Gradle JDK in Android Studio.
 
 ## Common commands
 

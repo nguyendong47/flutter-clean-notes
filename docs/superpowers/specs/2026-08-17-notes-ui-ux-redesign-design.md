@@ -9,6 +9,13 @@
 
 Operational status and evidence live in the [Project Sync / Handoff](../handoff.md). Ordered implementation details live in the [Aurora implementation plan](../plans/2026-08-17-aurora-glass-redesign.md).
 
+This specification owns stable product, interaction, visual, accessibility, and
+acceptance requirements. The implementation plan is a historical recipe; the
+Project Sync owns volatile progress and evidence. Technical data disclosure
+lives in [Privacy and Data Flow](../../privacy.md), identity assets live in
+[Branding](../../branding.md), repeatable checks live in [QA](../../qa.md), and
+production gates live in [Release readiness](../../release.md).
+
 ## Implementation mapping
 
 | Task | Design surface |
@@ -97,7 +104,7 @@ The mobile shell uses a floating bottom navigation bar with four destinations:
 
 A raised central **New note** control sits between Search and Library. It opens the editor as a primary action and is not a fifth navigation destination.
 
-The bottom navigation stays within safe areas and never obscures scrollable content. `go_router` remains responsible for navigation and deep links. Back behavior follows platform expectations: the editor returns to its source view, nested sheets dismiss before routes, and the system back gesture remains predictable.
+The bottom navigation stays within safe areas and never obscures scrollable content. `go_router` remains responsible for navigation and deep links. Back behavior follows platform expectations: the editor returns to its source view, nested sheets dismiss before routes, and a clean editor preserves the native iOS edge-back gesture. A dirty editor synchronously vetoes route pop and requires an explicit discard decision.
 
 ## Screen designs
 
@@ -156,6 +163,13 @@ The editor is a distraction-free full-screen route with:
 
 The Done action awaits persistence before closing. While saving, it is disabled and displays progress. A failed save keeps the editor open, preserves typed content, and presents an inline error with Retry. Empty notes remain blocked with a nearby validation message.
 
+Unsaved-change detection compares one semantic snapshot containing title, body,
+color, tags in order, and reminder. Top-bar Back, system Back, and direct route
+pop all use the same guard. When dirty, the editor offers **Discard changes** and
+the autofocus safe default **Keep editing**; no exit occurs until discard is
+explicit. When clean, normal platform navigation remains unobstructed, including
+the native iOS edge-back gesture.
+
 ## Component boundaries
 
 The existing large presentation files should be divided into focused widgets without changing domain boundaries. Proposed UI units are:
@@ -192,6 +206,36 @@ Widget interaction
 ```
 
 Presentation state must not leak into domain entities.
+
+The persisted theme is part of startup, not a post-frame correction. Bootstrap
+creates one `ProviderContainer`, awaits `appThemeProvider.future`, and gives that
+same container to `UncontrolledProviderScope`. The provider stays alive, and a
+missing, invalid, or failed preference read resolves to `ThemeMode.system`; the
+first rendered frame therefore uses the resolved mode without a light/dark
+flash.
+
+## Content, transfer, and notification boundaries
+
+- Markdown preview is pinned to `flutter_markdown_plus 1.0.12`. Its
+  `imageBuilder` renders an inert accessible placeholder for every authored
+  image. Only internal `note://` links are handled; network, file, data, and
+  other external URI schemes are neither opened nor fetched from note content.
+- Text and Markdown exports include Active and Archive notes and exclude Trash.
+  JSON backup includes Active, Archive, and Trash. The More sheet discloses that
+  scope before platform work begins. Import validates the typed JSON boundary
+  and appends every accepted entry as an Active copy with a fresh ID and cleared
+  reminder; it never replaces the existing collection.
+- `NoteExportFormatter` owns validated `Note` encoding/decoding,
+  `NotesTransferGateway` owns picker/share platform types, the Riverpod transfer
+  controller owns operation state and status filtering, and `ImportNotes` owns
+  normalization plus the repository transaction. Platform values do not enter
+  domain entities.
+- Android reminder notifications use the dedicated monochrome
+  `ic_stat_clean_notes` small icon retained by `res/raw/keep.xml`, not a launcher
+  asset. Permanent deletion commits the database removal first. If reminder
+  cancellation then fails, the deleted note stays deleted and only a sanitized,
+  coalesced cancellation retry is offered; retry never recreates the note or
+  repeats the database delete.
 
 ## Loading, feedback, and errors
 
@@ -236,12 +280,25 @@ Widget tests should cover public behavior rather than implementation details:
 8. Light and dark themes render the same hierarchy and semantic states.
 9. Compact widths and large text scales do not overflow.
 10. Important icon buttons and navigation elements expose semantic labels.
+11. The first frame uses the persisted theme, with system fallback on read error.
+12. Every dirty editor field triggers one discard guard while a clean iOS edge
+    swipe remains native.
+13. Markdown images stay inert and non-`note://` links cannot cross the app
+    boundary.
+14. Text/Markdown, JSON backup, and import use their documented status scopes.
+15. Reminder cancellation retry is cancellation-only and overlap is coalesced.
 
 ### Implementation verification gate
 
 At every task boundary, completion requires all of the following:
 
-- Task-focused tests, the existing notification-service tests, and the full `flutter test` suite pass.
+- Task-focused tests, the existing notification-service tests, and the full
+  host-side `flutter test --concurrency=1` suite pass. Platform integration
+  smoke tests remain separate device gates owned by QA.
+- The tracked `pubspec.lock` resolves unchanged with
+  `flutter pub get --enforce-lockfile`; plain `flutter pub get` is reserved for
+  an intentional dependency update whose lockfile diff is reviewed and
+  committed.
 - `flutter analyze` passes, and annotated Riverpod changes include regenerated and reviewed `.g.dart` output.
 - Presentation, domain, repository, SQLite, notification, and routing boundaries remain intact unless the plan records a narrowly scoped correction with regression coverage.
 - Every code-symbol edit has the repository-required GitNexus impact check, and the task commit has staged change detection.

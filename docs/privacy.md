@@ -10,7 +10,8 @@
 | Flow | Data | Boundary and trigger |
 | --- | --- | --- |
 | Note storage | ID, title, content, color, creation time, pin state, tags, status, and optional reminder time | Stored in the app's local `notes_database.db` SQLite database. Desktop uses the application-support directory and sqflite FFI; other targets use the sqflite database path. |
-| Theme preference | System, light, or dark selection | Stored locally through platform shared preferences. |
+| Theme preference | System, light, or dark selection | Stored locally through platform shared preferences and resolved before the first app frame. A missing, invalid, or unreadable value falls back to the system setting. |
+| Markdown preview | User-authored note body and embedded image/link URIs | Rendered locally with `flutter_markdown_plus 1.0.12`. Every image is replaced by an inert accessible placeholder, and only the internal `note://` scheme is handled. Preview content does not open or fetch network, file, data, or other external URIs. |
 | Text export | Titles, content, and tags from Active and Archive notes only | Sent to the operating-system share sheet only after the user selects **Export text**. Trash is excluded. The destination selected in that sheet controls subsequent handling. |
 | Markdown export | Titles, content, and tags from Active and Archive notes only | A generated `notes.md` file is sent to the operating-system share sheet only after the user selects **Export Markdown**. Trash is excluded. |
 | JSON backup | IDs, titles, content, tags, color, creation time, pin state, status, and reminder time from Active, Archive, and Trash | A generated `notes_backup.json` file containing every status is sent to the operating-system share sheet only after the user selects **Backup JSON**. |
@@ -31,12 +32,21 @@ The More sheet displays these scopes before starting platform share or file
 picker work: readable exports exclude Trash, JSON backup includes every status,
 and import appends Active copies with reminders cleared.
 
+The transfer implementation keeps each boundary typed and testable:
+`NoteExportFormatter` validates and serializes `Note` values,
+`NotesTransferGateway` owns platform picker/share values, the Riverpod controller
+owns operation state and selects the status-appropriate collection, and the
+`ImportNotes` use case normalizes imported copies before one repository
+transaction. Platform objects do not cross into the domain model.
+
 ## Retention and deletion
 
 - Notes remain in SQLite while active, archived, or in Trash.
 - The visible Trash flow allows restore or confirmed permanent deletion. Permanent
   deletion removes the database row and asks the notification plugin to cancel
-  that note's reminder.
+  that note's reminder. If cancellation fails after the database commit, the
+  note stays deleted and the UI offers a sanitized, coalesced cancellation-only
+  retry. Retrying does not recreate or delete the note again.
 - A repository cleanup operation exists for trashed rows whose original
   `createdAt` is more than 30 days old, but no production UI invocation is
   currently wired. Do not promise automatic 30-day deletion from this code.

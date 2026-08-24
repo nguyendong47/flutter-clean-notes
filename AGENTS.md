@@ -6,7 +6,7 @@ Flutter note-taking app using feature-first Clean Architecture, Riverpod code ge
 
 - Resolve dependencies after checkout with `flutter pub get --enforce-lockfile`. Use plain `flutter pub get` only for an intentional dependency update, then review and commit the lockfile diff.
 - Run the app with `flutter run`.
-- Run static analysis with `flutter analyze` and the full test suite with `flutter test`.
+- Run static analysis with `flutter analyze` and the full host-side test suite serially with `flutter test --concurrency=1`. Device integration tests remain separate commands documented in `docs/qa.md`.
 - Add focused tests under the matching `test/` subtree and run them during implementation. Do not cache test counts in this file; inspect the test tree and current command output.
 - Run `git diff --check` before staging. Follow the GitNexus gates in the managed block below before editing code symbols or committing.
 
@@ -15,7 +15,7 @@ Flutter note-taking app using feature-first Clean Architecture, Riverpod code ge
 - Keep note functionality under `lib/features/notes/`, split into `presentation/`, `domain/`, and `data/`.
 - Dependency direction is `presentation -> domain` and `data -> domain`. The domain layer owns `NoteRepository`; it must not import data or presentation implementations.
 - Put feature wiring in annotated providers such as `lib/features/notes/presentation/providers/note_providers.dart`. Add feature UI under `lib/features/<feature>/presentation/` and app-wide services, theme, routing, or primitives under `lib/app/`.
-- `lib/main.dart` owns process bootstrap: Flutter binding setup, desktop sqflite FFI initialization, notification initialization, `ProviderScope`, persisted theme selection, Aurora themes, and router wiring.
+- `lib/main.dart` owns process bootstrap: Flutter binding setup, desktop sqflite FFI initialization, notification initialization, persisted theme preload, Aurora themes, and router wiring. It must await `appThemeProvider.future` before the first frame and pass that same `ProviderContainer` to `UncontrolledProviderScope`; missing, invalid, or unreadable preferences fall back to `ThemeMode.system`.
 
 ## Riverpod code generation
 
@@ -28,6 +28,12 @@ Flutter note-taking app using feature-first Clean Architecture, Riverpod code ge
 - The SQLite schema is version 5. Keep `_createDB`, `_upgradeDB`, model serialization, and migration coverage aligned when persistence changes.
 - `lib/main.dart` initializes the global FFI database factory on Windows, Linux, and macOS. `local_note_datasource.dart` also initializes FFI and opens the desktop database through `databaseFactoryFfi`; its non-desktop branch uses regular `openDatabase`. Preserve this split.
 - Reminder scheduling is initialized before `runApp`. Changes to note persistence must preserve notification scheduling, cancellation, snooze, and nullable-reminder behavior.
+- Android builds pin Android Gradle Plugin 8.11.1 and Gradle 8.14. Use JDK 17 or newer and preserve the wrapper SHA-256 `efe9a3d147d948d7528a9887fa35abcf24ca1a43ad06439996490f77569b02d1`. Keep `org.gradle.java.home` and every machine-specific JDK path out of tracked Gradle properties; use local `JAVA_HOME`, Android Studio Gradle JDK, or `flutter config --jdk-dir="<jdk-path>"` instead.
+- Markdown preview uses `flutter_markdown_plus 1.0.12`. Keep every user-authored image inert through the preview `imageBuilder`, and handle only the documented `note://` link scheme; note content must not open or fetch network, file, data, or other external URIs.
+- The editor dirty snapshot covers title, body, color, tags, and reminder. Back, system back, and route-pop requests require explicit discard while dirty; **Keep editing** remains the safe default. Preserve the native iOS edge-back gesture when the snapshot is clean and veto it synchronously when dirty.
+- Transfer orchestration keeps typed seams: `NoteExportFormatter` owns validated `Note` serialization, `NotesTransferGateway` owns picker/share types, the provider owns operation state and status filtering, and `ImportNotes` owns normalization plus the repository transaction. Text and Markdown use Active plus Archive and exclude Trash; JSON uses every status; imports append Active copies with fresh IDs and cleared reminders.
+- Android notifications use the dedicated monochrome `ic_stat_clean_notes` small icon, retained by `android/app/src/main/res/raw/keep.xml`. Do not substitute a launcher asset.
+- Permanent note deletion stays committed when reminder cancellation fails. Preserve the sanitized, coalesced cancellation-retry path; a retry must never recreate the deleted note or repeat the database delete.
 
 ## Aurora Glass work
 
@@ -39,6 +45,8 @@ Flutter note-taking app using feature-first Clean Architecture, Riverpod code ge
 
 - `README.md` is the discoverable project entry point and documentation index.
 - This file owns contributor and agent workflow, architecture boundaries, code generation, and platform constraints.
+- `docs/privacy.md` owns implemented data flows, technical disclosure, residual privacy risk, and unresolved owner decisions. `docs/branding.md` owns user-visible identity, source assets, icon provenance, and regeneration guardrails.
+- `docs/qa.md` owns repeatable verification procedures and evidence requirements. `docs/release.md` owns production signing, store, policy, rollout, and rollback gates.
 - `docs/superpowers/handoff.md` is the only tracked source for current task state, commits, checkpoint deviations, and operational evidence. Update it after each Aurora task commit or session handoff.
 - The Aurora specification owns approved design requirements and the stable task-to-design-surface mapping. The plan owns task instructions and order; neither records current completion state.
 - `.superpowers/sdd/2026-08-17-aurora-glass-redesign/` is ignored local execution evidence. When present, update its ledger and task reports, but do not treat it as tracked documentation available in every clone.
