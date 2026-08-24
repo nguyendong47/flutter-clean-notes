@@ -119,6 +119,16 @@ generated dependency files belong in the candidate before calling the worktree
 clean. A successful Windows analysis/build cannot substitute for this gate, and
 the final signed Apple archive/device evidence remains separate.
 
+For the signed release candidate, create an Xcode archive, open **Window >
+Organizer > Archives**, control-click the archive, and choose **Generate Privacy
+Report**. Retain the report beside the archive SHA-256. Verify the aggregated
+Flutter and plugin manifests are present and valid and that the report has no
+unresolved required-reason API warning. Do not add an empty app manifest merely
+to satisfy this checklist. If the archive identifies an API used directly by the
+Runner executable, add an accurate `PrivacyInfo.xcprivacy` to that Runner target's
+Copy Bundle Resources, declare only the applicable Apple reason codes, rebuild,
+and regenerate the report.
+
 Within the approved set, cover these layout/accessibility combinations:
 
 | Dimension | Required values |

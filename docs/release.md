@@ -306,8 +306,13 @@ process-scoped secret environment variables when the build finishes.
   capabilities, bundle ID, and App Store Connect record; archive and validate a
   signed build.
 - [ ] **[OWNER: macOS Release]** Approve and replace the macOS bundle ID, product
-  name, copyright, signing, entitlements, and notarization identity, or attach an
-  owner-approved non-shipping rationale to the release record.
+  name, copyright, signing, entitlements, and distribution channel, or attach an
+  owner-approved non-shipping rationale to the release record. For Mac App Store,
+  set `LSApplicationCategoryType` to `public.app-category.productivity`, keep App
+  Sandbox, and match the category in App Store Connect. For direct distribution,
+  enable Hardened Runtime for Release, sign with Developer ID Application and a
+  secure timestamp, submit with `xcrun notarytool ... --wait`, then staple the
+  approved app or disk image with `xcrun stapler`.
 - [ ] **[OWNER: Windows Release]** Approve and replace the Windows binary/product,
   company, copyright, package/publisher identity, and signing configuration, or
   attach an owner-approved non-shipping rationale to the release record.
@@ -340,6 +345,13 @@ process-scoped secret environment variables when the build finishes.
   before freezing the candidate, then produce the signed archive/device evidence.
   A Podfile fabricated on Windows and a Windows-only Flutter analysis are both
   invalid substitutes for this gate.
+- [ ] **[OWNER: Apple Engineering/Privacy]** In Xcode Organizer, control-click the
+  signed candidate archive and choose **Generate Privacy Report**. Store the report
+  with the archive SHA-256; verify aggregated Flutter/plugin manifests are valid
+  and resolve every required-reason API warning. Do not add an empty Runner
+  manifest pre-emptively. Add and bundle an accurate Runner
+  `PrivacyInfo.xcprivacy` only when the archive proves app-owned required API use,
+  then rebuild and regenerate the report.
 
 ## Store listing and policy
 

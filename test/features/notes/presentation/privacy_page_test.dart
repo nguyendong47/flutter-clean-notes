@@ -5,7 +5,7 @@ import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/privacy_page.dart';
 
 void main() {
-  testWidgets('explains local storage reminders and user-directed transfers', (
+  testWidgets('explains storage reminders transfers and network behavior', (
     tester,
   ) async {
     // Mutation caught: removing a storage boundary, reminder disclosure, or
@@ -18,6 +18,7 @@ void main() {
     expect(find.text('Reminders use platform services'), findsOneWidget);
     expect(find.text('Import, export, and backup'), findsOneWidget);
     expect(find.text('You control app-initiated transfers'), findsOneWidget);
+    expect(find.text('Network behavior'), findsOneWidget);
     expect(find.text('Retention and deletion'), findsOneWidget);
     expect(find.textContaining('IndexedDB'), findsOneWidget);
     expect(
@@ -37,6 +38,9 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('temporary or cache copies'), findsOneWidget);
+    expect(find.textContaining('no app-owned remote API'), findsOneWidget);
+    expect(find.textContaining('deployment origin'), findsOneWidget);
+    expect(find.textContaining('third-party font CDN'), findsOneWidget);
     expect(find.textContaining('title, content, and tags'), findsOneWidget);
     expect(
       find.textContaining(

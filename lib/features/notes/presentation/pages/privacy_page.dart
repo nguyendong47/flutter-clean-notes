@@ -123,6 +123,25 @@ class PrivacyPage extends StatelessWidget {
                         ),
                         SizedBox(height: 12),
                         _PrivacyCard(
+                          key: Key('privacy-network-card'),
+                          icon: Icons.language_outlined,
+                          title: 'Network behavior',
+                          body:
+                              'Clean Notes has no app-owned remote API, '
+                              'analytics, crash reporting, or telemetry in '
+                              'this version. Markdown preview does not fetch '
+                              'external images or links. On Web, Flutter '
+                              'engine, database worker, and bundled font '
+                              'resources load from the deployment origin. '
+                              'Five fallback font shards cover the tested '
+                              'editor sample. Other glyphs may fail locally '
+                              'and show a missing-glyph box, but the app does '
+                              'not switch to a third-party font CDN. After '
+                              'the app loads, opening this notice makes no '
+                              'additional network request.',
+                        ),
+                        SizedBox(height: 12),
+                        _PrivacyCard(
                           key: Key('privacy-retention-card'),
                           icon: Icons.delete_outline_rounded,
                           title: 'Retention and deletion',
