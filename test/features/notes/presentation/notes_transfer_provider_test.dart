@@ -101,6 +101,8 @@ void main() {
       expect(await gateway.pickJsonText(), isNull);
       expect(picker.type, FileType.custom);
       expect(picker.allowedExtensions, ['json']);
+      expect(picker.withData, isFalse);
+      expect(picker.withReadStream, isTrue);
     },
   );
 
@@ -137,7 +139,8 @@ void main() {
     expect(text.codeUnitAt(0), 0x5B);
     expect(text.codeUnitAt(text.length - 1), 0x5D);
     expect(file.lengthCalls, 1);
-    expect(file.readAsBytesCalls, 1);
+    expect(file.readAsByteStreamCalls, 1);
+    expect(file.readAsBytesCalls, 0);
   });
 
   test('platform picker bounds unknown-size imports by actual bytes', () async {
@@ -159,8 +162,46 @@ void main() {
         ),
       ),
     );
-    expect(file.readAsBytesCalls, 1);
+    expect(file.readAsByteStreamCalls, 1);
+    expect(file.readAsBytesCalls, 0);
   });
+
+  test(
+    'platform picker stops unknown and misreported streams at 10 MiB plus one byte',
+    () async {
+      const maxImportBytes = 10 * 1024 * 1024;
+      final maxSizedChunk = Uint8List(maxImportBytes);
+
+      for (final reportedLength in [0, 1]) {
+        final file = _FakePlatformFile.stream(
+          name: 'backup.json',
+          chunks: [
+            maxSizedChunk,
+            Uint8List.fromList([0x20]),
+            Uint8List.fromList([0x5D]),
+          ],
+          reportedLength: reportedLength,
+        );
+        final picker = _FakeJsonFilePicker()..result = [file];
+        final gateway = NotesTransferGateway(pickJsonFiles: picker.call);
+
+        await expectLater(
+          gateway.pickJsonText(),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'The selected backup file is too large. Choose a file up to 10 MB.',
+            ),
+          ),
+        );
+        expect(file.readAsByteStreamCalls, 1);
+        expect(file.emittedChunkCount, 2);
+        expect(file.streamCancelledEarly, isTrue);
+        expect(file.readAsBytesCalls, 0);
+      }
+    },
+  );
 
   test('platform picker accepts an unknown-size path-backed file', () async {
     final directory = await Directory.systemTemp.createTemp(
@@ -179,7 +220,8 @@ void main() {
 
     expect(await gateway.pickJsonText(), '[{"title":"path backed"}]');
     expect(pickedFile.lengthCalls, 1);
-    expect(pickedFile.readAsBytesCalls, 1);
+    expect(pickedFile.readAsByteStreamCalls, 1);
+    expect(pickedFile.readAsBytesCalls, 0);
   });
 
   test('platform picker rejects a path-backed file over 10 MiB', () async {
@@ -209,6 +251,7 @@ void main() {
       ),
     );
     expect(pickedFile.lengthCalls, 1);
+    expect(pickedFile.readAsByteStreamCalls, 0);
     expect(pickedFile.readAsBytesCalls, 0);
   });
 
@@ -259,7 +302,8 @@ void main() {
       ),
     );
     expect(file.lengthCalls, 1);
-    expect(file.readAsBytesCalls, 1);
+    expect(file.readAsByteStreamCalls, 1);
+    expect(file.readAsBytesCalls, 0);
   });
 
   test('platform picker exceptions are replaced with safe user copy', () async {
@@ -1005,14 +1049,20 @@ class _FakeJsonFilePicker {
   Object? error;
   FileType? type;
   List<String>? allowedExtensions;
+  bool? withData;
+  bool? withReadStream;
 
   Future<List<PlatformFile>?> call({
     required FileType type,
     required List<String> allowedExtensions,
+    bool? withData,
+    bool? withReadStream,
   }) async {
     if (error case final error?) throw error;
     this.type = type;
     this.allowedExtensions = allowedExtensions;
+    this.withData = withData;
+    this.withReadStream = withReadStream;
     return result;
   }
 }
@@ -1023,6 +1073,7 @@ final class _FakePlatformFile extends PlatformFile {
     required Uint8List bytes,
     int? reportedLength,
   }) : _bytes = bytes,
+       _streamChunks = null,
        _reportedLength = reportedLength ?? bytes.length,
        _readError = null,
        uri = Uri(scheme: 'memory', path: '/$name');
@@ -1032,6 +1083,7 @@ final class _FakePlatformFile extends PlatformFile {
     required String path,
     int? reportedLength,
   }) : _bytes = null,
+       _streamChunks = null,
        _reportedLength = reportedLength,
        _readError = null,
        uri = Uri.file(path, windows: Platform.isWindows);
@@ -1040,8 +1092,19 @@ final class _FakePlatformFile extends PlatformFile {
     required this.name,
     required int reportedLength,
   }) : _bytes = null,
+       _streamChunks = null,
        _reportedLength = reportedLength,
        _readError = StateError('Unreadable fake platform file'),
+       uri = Uri(scheme: 'memory', path: '/$name');
+
+  _FakePlatformFile.stream({
+    required this.name,
+    required List<Uint8List> chunks,
+    required int reportedLength,
+  }) : _bytes = null,
+       _streamChunks = chunks,
+       _reportedLength = reportedLength,
+       _readError = null,
        uri = Uri(scheme: 'memory', path: '/$name');
 
   @override
@@ -1051,11 +1114,15 @@ final class _FakePlatformFile extends PlatformFile {
   final Uri uri;
 
   final Uint8List? _bytes;
+  final List<Uint8List>? _streamChunks;
   final int? _reportedLength;
   final Object? _readError;
 
   int lengthCalls = 0;
   int readAsBytesCalls = 0;
+  int readAsByteStreamCalls = 0;
+  int emittedChunkCount = 0;
+  bool streamCancelledEarly = false;
 
   @override
   XFile get xFile {
@@ -1095,7 +1162,28 @@ final class _FakePlatformFile extends PlatformFile {
 
   @override
   Stream<Uint8List> readAsByteStream() async* {
-    yield await readAsBytes();
+    readAsByteStreamCalls += 1;
+    if (_readError case final error?) throw error;
+    final chunks = _streamChunks;
+    if (chunks != null) {
+      try {
+        for (final chunk in chunks) {
+          emittedChunkCount += 1;
+          yield chunk;
+        }
+      } finally {
+        streamCancelledEarly = emittedChunkCount < chunks.length;
+      }
+      return;
+    }
+    final bytes = _bytes;
+    if (bytes != null) {
+      yield bytes;
+      return;
+    }
+    final filePath = path;
+    if (filePath == null) throw StateError('Fake file has no readable path');
+    yield* File(filePath).openRead().map(Uint8List.fromList);
   }
 }
 

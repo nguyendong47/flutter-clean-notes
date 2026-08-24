@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:cross_file/cross_file.dart';
@@ -6,12 +7,17 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart' hide XFile;
 
+import 'notes_transfer_web_options.dart'
+    if (dart.library.js_interop) 'notes_transfer_web_options.web.dart';
+
 enum NotesShareResult { completed, dismissed, unavailable }
 
 typedef JsonFilePicker =
     Future<List<PlatformFile>?> Function({
       required FileType type,
       required List<String> allowedExtensions,
+      required bool withData,
+      required bool withReadStream,
     });
 
 class NotesTransferGateway {
@@ -30,13 +36,13 @@ class NotesTransferGateway {
   Future<String?> pickJsonText() async {
     final List<PlatformFile>? result;
     try {
-      final picker = _pickJsonFiles;
-      result = picker == null
-          ? await _pickSingleJsonFile()
-          : await picker(
-              type: FileType.custom,
-              allowedExtensions: const ['json'],
-            );
+      final picker = _pickJsonFiles ?? _pickSingleJsonFile;
+      result = await picker(
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        withData: false,
+        withReadStream: true,
+      );
     } catch (_) {
       throw const FormatException('Could not open the file picker. Try again.');
     }
@@ -49,11 +55,10 @@ class NotesTransferGateway {
 
     try {
       _checkImportSize(await file.length());
-      final bytes = await file.readAsBytes();
+      final bytes = await _readImportBytes(file);
       if (bytes.isEmpty) {
         throw const FormatException('The selected backup file is empty.');
       }
-      _checkImportSize(bytes.length);
       var text = utf8.decode(bytes, allowMalformed: false);
       if (text.startsWith('\uFEFF')) text = text.substring(1);
       if (text.trim().isEmpty) {
@@ -73,10 +78,19 @@ class NotesTransferGateway {
     }
   }
 
-  static Future<List<PlatformFile>?> _pickSingleJsonFile() async {
+  static Future<List<PlatformFile>?> _pickSingleJsonFile({
+    required FileType type,
+    required List<String> allowedExtensions,
+    required bool withData,
+    required bool withReadStream,
+  }) async {
     final file = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: const ['json'],
+      type: type,
+      allowedExtensions: allowedExtensions,
+      webOptions: notesTransferWebOptions(
+        withData: withData,
+        withReadStream: withReadStream,
+      ),
     );
     return file == null ? null : [file];
   }
@@ -87,6 +101,15 @@ class NotesTransferGateway {
         'The selected backup file is too large. Choose a file up to 10 MB.',
       );
     }
+  }
+
+  static Future<Uint8List> _readImportBytes(PlatformFile file) async {
+    final bytes = BytesBuilder(copy: false);
+    await for (final chunk in file.readAsByteStream()) {
+      _checkImportSize(bytes.length + chunk.length);
+      bytes.add(chunk);
+    }
+    return bytes.takeBytes();
   }
 
   Future<NotesShareResult> shareText({
