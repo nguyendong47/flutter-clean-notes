@@ -61,6 +61,7 @@ product/release owner and decision instead of silently omitting it.
 | Windows | Signed or release-mode desktop run covering SQLite FFI, file picker/share behavior, resizing, keyboard, restart, and upgrade. |
 | macOS | Signed or release-mode desktop run covering SQLite FFI, notifications, picker/share, resizing, keyboard, restart, and upgrade. |
 | Linux | Release-mode run covering SQLite FFI, notifications where supported, picker/share behavior, resizing, keyboard, restart, and upgrade. |
+| Web (supported candidate) | Release-mode Chrome and Edge runs from the intended origin. Verify `sqflite_sw.js` and `sqlite3.wasm` return HTTP 200 with the expected JavaScript and WebAssembly MIME types; first load reaches the empty/content state without a database error; create, edit, search, archive, restore, and delete work; IndexedDB data persists across reload and browser restart on the same origin; and responsive, keyboard, accessibility, share/import, and cleared-site-data behavior are recorded. |
 
 Within the approved set, cover these layout/accessibility combinations:
 

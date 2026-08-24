@@ -63,8 +63,14 @@ with any Android build-hygiene change.
 Build only the platforms approved for the release. Typical artifact commands are
 `flutter build appbundle --release`, `flutter build ipa --release` (macOS/Xcode
 required), `flutter build windows --release`, `flutter build macos --release`,
-and `flutter build linux --release`. Archive the exact commands and hashes of
-submitted artifacts.
+`flutter build linux --release`, and `flutter build web --release`. Archive the
+exact commands and hashes of submitted artifacts.
+
+Web is a supported release candidate when the exact release build includes
+`sqflite_sw.js` and `sqlite3.wasm` and passes the browser runtime and persistence
+checks in [the QA matrix](qa.md). Candidate support does not by itself approve Web
+as a shipping target; record product/release-owner approval and the deployment
+origin with the release evidence.
 
 ## Identity, signing, and versioning
 
