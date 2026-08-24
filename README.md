@@ -77,7 +77,7 @@ Replace `emulator-5554` with the intended ID printed by `flutter devices`. Omit
 `-d $deviceId` only when Flutter can select that target without ambiguity. No
 external database service is required.
 
-Android builds pin Android Gradle Plugin 8.11.1 and Gradle 8.14 and require JDK
+Android builds pin Android Gradle Plugin 8.12.3, Gradle 8.14, and Kotlin 2.2.20 and require JDK
 17 or newer. The Gradle wrapper verifies the official 8.14 distribution with
 SHA-256
 `efe9a3d147d948d7528a9887fa35abcf24ca1a43ad06439996490f77569b02d1`.

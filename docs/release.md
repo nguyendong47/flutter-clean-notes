@@ -53,7 +53,8 @@ git status --short
 - [ ] **[OWNER: Security]** Scan the resolved dependency set and release artifacts;
   record tool name/version, database timestamp, findings, and disposition.
 
-Android gates require JDK 17 or newer, Android Gradle Plugin `8.11.1`, and the
+Android gates require JDK 17 or newer, Android Gradle Plugin `8.12.3`, Kotlin
+`2.2.20`, and the
 checksum-pinned Gradle `8.14-all` wrapper. `android/gradle.properties` must not
 track a machine-specific `org.gradle.java.home`; select the JDK through process
 `JAVA_HOME` instead. Verify these invariants again after integrating this work

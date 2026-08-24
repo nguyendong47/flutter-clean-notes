@@ -262,7 +262,8 @@ already-read bytes in-process, match both launcher hashes and the official Gradl
 the committed `LF`/`CRLF` line-ending contract. All wrapper tasks must run through
 the verified temporary wrapper snapshot, not a mutable repository launcher.
 
-Run Android gates with JDK 17 or newer, Android Gradle Plugin `8.11.1`, and the
+Run Android gates with JDK 17 or newer, Android Gradle Plugin `8.12.3`, Kotlin
+`2.2.20`, and the
 checksum-pinned Gradle `8.14-all` wrapper. Reject a final tree that tracks
 `org.gradle.java.home`; set process `JAVA_HOME` instead. For the candidate, use
 only the ignored `android/key.properties` contract or direct `CLEAN_NOTES_*`

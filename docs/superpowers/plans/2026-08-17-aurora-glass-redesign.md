@@ -1164,7 +1164,7 @@ snippets above wherever they differ.
   `flutter pub get --enforce-lockfile`. Use plain `flutter pub get` only for an
   intentional dependency change, then review and commit the lockfile diff.
 - Markdown preview uses the exact `flutter_markdown_plus 1.0.12` dependency.
-- Android pins Android Gradle Plugin 8.11.1 and Gradle 8.14 and requires JDK 17
+- Android pins Android Gradle Plugin 8.12.3, Gradle 8.14, and Kotlin 2.2.20 and requires JDK 17
   or newer. The wrapper's official distribution SHA-256 is
   `efe9a3d147d948d7528a9887fa35abcf24ca1a43ad06439996490f77569b02d1`.
 - Machine-specific JDK locations stay local. Never track
