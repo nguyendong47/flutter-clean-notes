@@ -213,9 +213,11 @@ verifier resolves `HEAD` with a trusted absolute Git executable, clones that
 exact commit without hard links into a system-temporary directory, runs locked
 dependency resolution there, and performs all Gradle and Flutter work against
 the isolated snapshot. Uncommitted working-tree content is outside the proof.
-It uses absolute Java, `keytool`, `jarsigner`, Flutter, `apkanalyzer`, and
+It uses absolute Java, `jar`, `keytool`, `jarsigner`, Flutter, `apkanalyzer`, and
 `apksigner` paths, a reduced trusted `PATH`, sanitized Git/JVM environments, and
-a fresh system-temporary `GRADLE_USER_HOME`.
+a fresh system-temporary `GRADLE_USER_HOME`. The Git environment must ignore
+system/global config and attributes and disable inherited hook and filesystem-
+monitor paths before cloning or inspecting the candidate.
 
 The default mode must prove both `:app:assembleRelease` and
 `:app:bundleRelease` fail at `validateReleaseConfiguration` without usable
@@ -241,9 +243,14 @@ a temporary minimal launcher shim must launch the pinned wrapper JAR with truste
 Java and forward Flutter's Gradle arguments without batch `call` reparsing. The
 verifier must check the shim and snapshot
 before and after each build, restore the original launcher byte-for-byte, and
-reject any tracked candidate mutation. It
-validates and reads the AAB with pinned bundletool, `jarsigner`, and `keytool`; it
-inspects the APK with `apkanalyzer` and `apksigner`. The full gate must run on Windows; a
+reject any tracked candidate mutation. It validates and reads the AAB with
+pinned bundletool, strict `jarsigner`, and `keytool`. Strict verification must
+use the expected upload keystore and alias as explicit trust material, pass the
+temporary password only through a scrubbed subprocess environment, and accept
+only exit status `0`. It must prove that appending an otherwise permitted
+metadata entry after signing is rejected with the exact unsigned-entry strict
+status. It inspects the APK with
+`apkanalyzer` and `apksigner`. The full gate must run on Windows; a
 non-Windows host must report the Windows path proof as incomplete/nonzero.
 Conflicting positive modes must exit with usage status `64` before any build
 starts. Synthetic artifacts are never store candidates. The verifier must delete
@@ -273,7 +280,16 @@ process environment described in
 `-P` or `ORG_GRADLE_PROJECT_*` for signing inputs. Verify direct values override
 file values, a complete six-value direct configuration bypasses the unused file,
 relative file-based keystore paths resolve from the selected properties file,
-and relative direct-environment paths resolve from `android/`. Inspect the
+and relative direct-environment paths resolve from `android/`. Prove inherited
+`CLEAN_NOTES_*` signing values are absent from dependency-resolution and build
+subprocesses. Prove that every `android.injected.signing.*` name supplied by a
+project/user `gradle.properties` file, `-P`, `ORG_GRADLE_PROJECT_*`,
+`-Dorg.gradle.project.*`, or raw `-D` fails during settings evaluation, before
+Android Gradle Plugin configuration, with one constant error that exposes
+neither the name nor a malformed value. This forbidden input intentionally
+blocks every task; separately prove that normal missing or unusable release
+configuration still leaves debug, profile, and help/configuration usable.
+Inspect the
 packaged application ID and signing certificate from both the exact candidate
 APK and finished AAB. The release ID must be the owner-approved non-template
 value; debug must use `<release-id>.debug`, and profile must use

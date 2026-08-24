@@ -76,15 +76,138 @@ zipStorePath=wrapper/dists
         'git_work_tree': r'C:\attacker\work-tree',
         'Git_Index_File': r'C:\attacker\index',
         'GIT_CONFIG_GLOBAL': r'C:\attacker\config',
+        'clean_notes_application_id': 'owner.private.id',
+        'CLEAN_NOTES_STORE_FILE': r'C:\owner-private\upload.p12',
+        'CLEAN_NOTES_STORE_PASSWORD': 'owner-store-secret',
+        'CLEAN_NOTES_KEY_ALIAS': 'owner-upload-alias',
+        'CLEAN_NOTES_KEY_PASSWORD': 'owner-key-secret',
+        'CLEAN_NOTES_UPLOAD_CERT_SHA256': 'owner-private-pin',
+        'CLEAN_NOTES_KEY_PROPERTIES_FILE': r'C:\owner-private\key.properties',
         'UNRELATED': 'preserved',
       });
 
       expect(environment['PATH'], 'safe-path');
       expect(environment['SystemRoot'], r'C:\Windows');
       expect(environment['UNRELATED'], 'preserved');
+      final nullDevice = Platform.isWindows ? 'NUL' : '/dev/null';
+      expect(environment['GIT_ATTR_NOSYSTEM'], '1');
+      expect(environment['GIT_CONFIG_NOSYSTEM'], '1');
+      expect(environment['GIT_CONFIG_GLOBAL'], nullDevice);
+      expect(environment['GIT_CONFIG_COUNT'], '3');
+      expect(environment['GIT_CONFIG_KEY_0'], 'core.hooksPath');
+      expect(environment['GIT_CONFIG_VALUE_0'], nullDevice);
+      expect(environment['GIT_CONFIG_KEY_1'], 'core.fsmonitor');
+      expect(environment['GIT_CONFIG_VALUE_1'], 'false');
+      expect(environment['GIT_CONFIG_KEY_2'], 'core.attributesFile');
+      expect(environment['GIT_CONFIG_VALUE_2'], nullDevice);
       expect(
-        environment.keys.map((key) => key.toUpperCase()),
-        everyElement(isNot(startsWith('GIT_'))),
+        environment.keys
+            .map((key) => key.toUpperCase())
+            .where((key) => key.startsWith('GIT_')),
+        unorderedEquals(const <String>{
+          'GIT_ATTR_NOSYSTEM',
+          'GIT_CONFIG_NOSYSTEM',
+          'GIT_CONFIG_GLOBAL',
+          'GIT_CONFIG_COUNT',
+          'GIT_CONFIG_KEY_0',
+          'GIT_CONFIG_VALUE_0',
+          'GIT_CONFIG_KEY_1',
+          'GIT_CONFIG_VALUE_1',
+          'GIT_CONFIG_KEY_2',
+          'GIT_CONFIG_VALUE_2',
+        }),
+      );
+      for (final inheritedSecret in <String>{
+        r'C:\owner-private\upload.p12',
+        'owner-store-secret',
+        'owner-key-secret',
+        'owner.private.id',
+        'owner-upload-alias',
+        'owner-private-pin',
+        r'C:\owner-private\key.properties',
+      }) {
+        expect(environment.values, isNot(contains(inheritedSecret)));
+      }
+    });
+
+    test('Git subprocess environment ignores host config and hooks', () async {
+      final fixture = await Directory.systemTemp.createTemp(
+        'clean-notes-git-config-contract-',
+      );
+      addTearDown(() => deleteTemporaryDirectoryWithRetries(fixture));
+      final source = Directory(path.join(fixture.path, 'source'))..createSync();
+      await _runGit(source, ['init']);
+      await _runGit(source, ['config', 'user.name', 'Contract Test']);
+      await _runGit(source, [
+        'config',
+        'user.email',
+        'contract@example.invalid',
+      ]);
+      File(path.join(source.path, 'tracked.txt')).writeAsStringSync(
+        r'tracked $Id$'
+        '\n',
+      );
+      await _runGit(source, ['add', 'tracked.txt']);
+      await _runGit(source, ['commit', '-m', 'fixture']);
+
+      final hostileHome = Directory(path.join(fixture.path, 'hostile-home'))
+        ..createSync();
+      final hostileHooks = Directory(path.join(fixture.path, 'hostile-hooks'))
+        ..createSync();
+      final hook = File(path.join(hostileHooks.path, 'post-checkout'))
+        ..writeAsStringSync('#!/bin/sh\ntouch inherited-hook-ran\n');
+      if (!Platform.isWindows) {
+        final chmod = await Process.run('/bin/chmod', ['700', hook.path]);
+        expect(chmod.exitCode, 0, reason: chmod.stderr as String);
+      }
+      File(path.join(hostileHome.path, '.gitconfig')).writeAsStringSync(
+        '[core]\n'
+        'hooksPath = ${hostileHooks.path.replaceAll('\\', '/')}\n',
+      );
+      final hostileAttributes = File(
+        path.join(hostileHome.path, '.config', 'git', 'attributes'),
+      )..parent.createSync(recursive: true);
+      hostileAttributes.writeAsStringSync('tracked.txt ident\n');
+
+      final destination = Directory(path.join(fixture.path, 'destination'));
+      final gitExecutable = resolveTrustedGitExecutable(
+        Directory.current,
+        Platform.environment,
+      );
+      final environment = sanitizedGitEnvironment(<String, String>{
+        ...Platform.environment,
+        'HOME': hostileHome.path,
+        'USERPROFILE': hostileHome.path,
+        'XDG_CONFIG_HOME': path.join(hostileHome.path, '.config'),
+      });
+      final clone = await Process.run(
+        gitExecutable.path,
+        ['clone', '--no-checkout', '--', source.path, destination.path],
+        environment: environment,
+        includeParentEnvironment: false,
+        runInShell: false,
+      );
+      expect(clone.exitCode, 0, reason: '${clone.stdout}\n${clone.stderr}');
+      final checkout = await Process.run(
+        gitExecutable.path,
+        ['-C', destination.path, 'checkout', '--detach', 'HEAD'],
+        environment: environment,
+        includeParentEnvironment: false,
+        runInShell: false,
+      );
+      expect(
+        checkout.exitCode,
+        0,
+        reason: '${checkout.stdout}\n${checkout.stderr}',
+      );
+      expect(
+        File(path.join(destination.path, 'inherited-hook-ran')).existsSync(),
+        isFalse,
+      );
+      expect(
+        File(path.join(destination.path, 'tracked.txt')).readAsStringSync(),
+        r'tracked $Id$'
+        '\n',
       );
     });
 
@@ -96,6 +219,13 @@ zipStorePath=wrapper/dists
         '_java_options': '-Duser.home=attacker',
         'JDK_JAVA_OPTIONS': '--class-path attacker.jar',
         'CLASSPATH': 'attacker.jar',
+        'clean_notes_application_id': 'owner.private.id',
+        'CLEAN_NOTES_STORE_FILE': r'C:\owner-private\upload.p12',
+        'CLEAN_NOTES_STORE_PASSWORD': 'owner-store-secret',
+        'CLEAN_NOTES_KEY_ALIAS': 'owner-upload-alias',
+        'CLEAN_NOTES_KEY_PASSWORD': 'owner-key-secret',
+        'CLEAN_NOTES_UPLOAD_CERT_SHA256': 'owner-private-pin',
+        'CLEAN_NOTES_KEY_PROPERTIES_FILE': r'C:\owner-private\key.properties',
         'UNRELATED': 'preserved',
       });
 
@@ -109,9 +239,60 @@ zipStorePath=wrapper/dists
         'JDK_JAVA_OPTIONS',
         'JAVA_OPTS',
         'CLASSPATH',
+        'CLEAN_NOTES_APPLICATION_ID',
+        'CLEAN_NOTES_STORE_FILE',
+        'CLEAN_NOTES_STORE_PASSWORD',
+        'CLEAN_NOTES_KEY_ALIAS',
+        'CLEAN_NOTES_KEY_PASSWORD',
+        'CLEAN_NOTES_UPLOAD_CERT_SHA256',
+        'CLEAN_NOTES_KEY_PROPERTIES_FILE',
       }) {
         expect(normalizedKeys, isNot(contains(forbidden)));
       }
+    });
+
+    test('generic verifier subprocess environment strips signing inputs', () {
+      expect(androidReleaseSigningValueEnvironmentNames, const <String>{
+        'CLEAN_NOTES_APPLICATION_ID',
+        'CLEAN_NOTES_STORE_FILE',
+        'CLEAN_NOTES_STORE_PASSWORD',
+        'CLEAN_NOTES_KEY_ALIAS',
+        'CLEAN_NOTES_KEY_PASSWORD',
+        'CLEAN_NOTES_UPLOAD_CERT_SHA256',
+      });
+      expect(androidReleaseSigningSelectorEnvironmentNames, const <String>{
+        'CLEAN_NOTES_KEY_PROPERTIES_FILE',
+      });
+      expect(
+        androidReleaseVerifierInternalSigningEnvironmentNames,
+        const <String>{androidReleaseJarsignerPasswordEnvironmentName},
+      );
+      expect(androidReleaseSigningEnvironmentNames, const <String>{
+        ...androidReleaseSigningValueEnvironmentNames,
+        ...androidReleaseSigningSelectorEnvironmentNames,
+        ...androidReleaseVerifierInternalSigningEnvironmentNames,
+      });
+      final environment = sanitizedVerifierEnvironment(const {
+        'PATH': 'safe-path',
+        'CLEAN_NOTES_APPLICATION_ID': 'owner.private.id',
+        'CLEAN_NOTES_STORE_FILE': 'owner-private/upload.p12',
+        'CLEAN_NOTES_STORE_PASSWORD': 'owner-store-secret',
+        'CLEAN_NOTES_KEY_ALIAS': 'owner-upload-alias',
+        'CLEAN_NOTES_KEY_PASSWORD': 'owner-key-secret',
+        'CLEAN_NOTES_UPLOAD_CERT_SHA256': 'owner-private-pin',
+        'CLEAN_NOTES_KEY_PROPERTIES_FILE': 'owner-private.properties',
+        'ORG_GRADLE_PROJECT_CLEAN_NOTES_KEY_PASSWORD':
+            'owner-wrapped-key-secret',
+        'GRADLE_OPTS':
+            '-Dorg.gradle.project.CLEAN_NOTES_STORE_PASSWORD=owner-option-secret',
+        'JAVA_TOOL_OPTIONS':
+            '-Dorg.gradle.project.CLEAN_NOTES_KEY_PASSWORD=owner-java-secret',
+        'CLEAN_NOTES_VERIFIER_JARSIGNER_STORE_PASSWORD':
+            'hostile-inherited-verifier-secret',
+        'UNRELATED': 'preserved',
+      });
+
+      expect(environment, {'PATH': 'safe-path', 'UNRELATED': 'preserved'});
     });
 
     test('SHA-256 is computed in-process from exact bytes', () {
@@ -119,6 +300,34 @@ zipStorePath=wrapper/dists
         sha256Hex(utf8.encode('abc')),
         'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
       );
+    });
+
+    test('trusted strict jarsigner status rejects every warning and crash', () {
+      expect(isAcceptedTrustedJarsignerStrictExitCode(0), isTrue);
+      for (final rejectedExitCode in <int>{
+        -1073741819,
+        -11,
+        -9,
+        1,
+        4,
+        8,
+        16,
+        20,
+        32,
+        64,
+        144,
+      }) {
+        expect(
+          isAcceptedTrustedJarsignerStrictExitCode(rejectedExitCode),
+          isFalse,
+        );
+      }
+      expect(hasUnsignedJarsignerEntries(16), isTrue);
+      expect(hasUnsignedJarsignerEntries(20), isTrue);
+      expect(hasUnsignedJarsignerEntries(4), isFalse);
+      expect(hasUnsignedJarsignerEntries(-9), isFalse);
+      expect(hasUnsignedJarsignerEntries(-11), isFalse);
+      expect(hasUnsignedJarsignerEntries(144), isFalse);
     });
 
     test('artifact evidence parsers reject ambiguity and spoof text', () {
@@ -306,11 +515,18 @@ zipStorePath=wrapper/dists
             'GRADLE_HOME': 'host-gradle-install',
             'ORG_GRADLE_PROJECT_CLEAN_NOTES_APPLICATION_ID': 'host.id',
             'CLEAN_NOTES_APPLICATION_ID': 'host-direct.id',
+            'CLEAN_NOTES_STORE_FILE': 'owner-private/upload.p12',
+            'CLEAN_NOTES_STORE_PASSWORD': 'owner-store-secret',
+            'CLEAN_NOTES_KEY_ALIAS': 'owner-upload',
+            'CLEAN_NOTES_KEY_PASSWORD': 'owner-key-secret',
+            'CLEAN_NOTES_UPLOAD_CERT_SHA256': 'owner-pin',
+            'CLEAN_NOTES_KEY_PROPERTIES_FILE': 'owner-private.properties',
             'org_gradle_project_unrelated': 'host-project-value',
           },
           projectProperties: const {
             'CLEAN_NOTES_APPLICATION_ID': 'dev.contract.clean_notes',
             'CLEAN_NOTES_KEY_ALIAS': 'contract-upload',
+            'CLEAN_NOTES_KEY_PROPERTIES_FILE': 'synthetic.properties',
           },
           gradleUserHome: isolatedHome,
         );
@@ -323,6 +539,10 @@ zipStorePath=wrapper/dists
           'dev.contract.clean_notes',
         );
         expect(environment['CLEAN_NOTES_KEY_ALIAS'], 'contract-upload');
+        expect(
+          environment['CLEAN_NOTES_KEY_PROPERTIES_FILE'],
+          'synthetic.properties',
+        );
         final normalizedKeys = environment.keys.map((key) => key.toUpperCase());
         for (final forbidden in <String>{
           'GRADLE_HOME',
@@ -332,8 +552,22 @@ zipStorePath=wrapper/dists
           '_JAVA_OPTIONS',
           'JDK_JAVA_OPTIONS',
           'ORG_GRADLE_PROJECT_UNRELATED',
+          'CLEAN_NOTES_STORE_FILE',
+          'CLEAN_NOTES_STORE_PASSWORD',
+          'CLEAN_NOTES_KEY_PASSWORD',
+          'CLEAN_NOTES_UPLOAD_CERT_SHA256',
         }) {
           expect(normalizedKeys, isNot(contains(forbidden)));
+        }
+        for (final inheritedSecret in <String>{
+          'owner-private/upload.p12',
+          'owner-store-secret',
+          'owner-upload',
+          'owner-key-secret',
+          'owner-pin',
+          'owner-private.properties',
+        }) {
+          expect(environment.values, isNot(contains(inheritedSecret)));
         }
       },
     );

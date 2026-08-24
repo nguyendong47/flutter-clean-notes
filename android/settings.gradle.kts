@@ -23,4 +23,36 @@ plugins {
     id("org.jetbrains.kotlin.android") version "2.2.20" apply false
 }
 
+val injectedSigningPropertyPrefix = "android.injected.signing."
+val gradleProjectSystemPropertyPrefix = "org.gradle.project."
+val gradleProjectEnvironmentPrefix = "ORG_GRADLE_PROJECT_"
+
+fun isInjectedSigningPropertyName(propertyName: String): Boolean {
+    val unwrappedPropertyName =
+        if (propertyName.startsWith(gradleProjectSystemPropertyPrefix, ignoreCase = true)) {
+            propertyName.substring(gradleProjectSystemPropertyPrefix.length)
+        } else {
+            propertyName
+        }
+    return unwrappedPropertyName.startsWith(injectedSigningPropertyPrefix, ignoreCase = true)
+}
+
+val hasInjectedSigningOverride =
+    providers
+        .gradlePropertiesPrefixedBy(injectedSigningPropertyPrefix)
+        .get()
+        .isNotEmpty() ||
+        gradle.startParameter.projectProperties.keys.any(::isInjectedSigningPropertyName) ||
+        System.getProperties().stringPropertyNames().any(::isInjectedSigningPropertyName) ||
+        System.getenv().keys.any { environmentName ->
+            environmentName.startsWith(gradleProjectEnvironmentPrefix, ignoreCase = true) &&
+                isInjectedSigningPropertyName(
+                    environmentName.substring(gradleProjectEnvironmentPrefix.length),
+                )
+        }
+
+if (hasInjectedSigningOverride) {
+    throw GradleException("Android injected signing overrides are forbidden.")
+}
+
 include(":app")

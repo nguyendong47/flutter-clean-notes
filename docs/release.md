@@ -86,8 +86,19 @@ depends on `validateReleaseConfiguration`, which rejects a missing or placeholde
 application ID, a missing/unreadable or repository-local keystore, missing
 credentials, an alias without a private key, a certificate that does not match
 the approved SHA-256 fingerprint, and any Android debug certificate before
-signing. The release build type references only the `release` signing config and
-never falls back to the debug key. The Kotlin namespace and `MainActivity`
+signing. During settings evaluation, before the Android app plugin is applied,
+the build rejects every `android.injected.signing.*` name supplied through
+project/user `gradle.properties`, `-P`, `ORG_GRADLE_PROJECT_*`,
+`-Dorg.gradle.project.*`, or raw `-D`. This prevents Android Gradle Plugin
+signing overrides from replacing the checked identity, keystore, certificate
+pin, or debug/profile signer. The guard emits one constant error without
+printing the property name or value, including when the value is malformed for
+a typed Android option. Because the guard is settings-wide, a forbidden
+injected-signing source blocks debug, profile, IDE sync, and help as well as
+release. Without a forbidden override, missing or unusable release
+configuration still leaves those non-release operations usable. The release
+build type references only the `release` signing config and never falls back to
+the debug key. The Kotlin namespace and `MainActivity`
 package remain `com.example.flutter_clean_notes`; only the packaged application
 ID is externally overridden.
 
@@ -136,11 +147,15 @@ the exact `HEAD` commit with a trusted absolute Git executable, clones that
 commit without hard links into a system-temporary directory, runs locked
 dependency resolution there, and performs every build against that isolated
 snapshot. Uncommitted working-tree content is not part of the proof. It resolves
-Java, `keytool`, `jarsigner`, Flutter, `apkanalyzer`, and `apksigner` from the
+Java, `jar`, `keytool`, `jarsigner`, Flutter, `apkanalyzer`, and `apksigner` from the
 absolute external roots supplied below, replaces `PATH` with trusted entries,
-and removes inherited Git, Gradle, and JVM hook/configuration sources. Wrapper
-bootstrap and every Gradle/Flutter subprocess use a fresh system-temporary
-`GRADLE_USER_HOME`.
+and removes inherited Git, Gradle, and JVM hook/configuration sources. Git
+commands ignore system/global configuration and attributes, disable inherited
+hook paths and filesystem-monitor hooks, and use only the verifier's explicit
+Git controls. All inherited `CLEAN_NOTES_*` signing inputs are removed before
+dependency resolution or build subprocesses start; contract builds then receive
+only their explicit ephemeral inputs. Wrapper bootstrap and every Gradle/Flutter
+subprocess use a fresh system-temporary `GRADLE_USER_HOME`.
 
 The verifier requires `.gitattributes`, `android/gradlew`,
 `android/gradlew.bat`, `android/gradle/wrapper/gradle-wrapper.jar`, and its
@@ -167,8 +182,13 @@ with the trusted Java executable and forwards Flutter's arguments without batch
 before and after each build, restores the original launcher byte-for-byte, and
 rejects any tracked candidate mutation. It reads each fresh
 release artifact's application ID, signing-certificate SHA-256, and file SHA-256;
-it also validates and inspects the AAB with pinned bundletool `1.18.3`,
-`jarsigner`, and `keytool`. Use
+it also validates and inspects the AAB with pinned bundletool `1.18.3`, strict
+`jarsigner`, and `keytool`. Strict verification uses the expected upload
+keystore and alias as explicit trust material and supplies its temporary
+password only through a scrubbed subprocess environment, never a command-line
+argument. The positive proof appends a permitted metadata file to a signed AAB
+fixture and requires strict signature verification to reject the new unsigned
+entry. Use
 `--build-positive-release-artifacts-only` only when the fail-closed checks were
 already recorded for the exact commit and only the two positive artifacts need
 regeneration. Neither synthetic artifact is a store candidate. All credentials,

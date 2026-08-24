@@ -7,9 +7,11 @@ import '../../tool/src/android_release_signing_support.dart';
 void main() {
   group('Android release signing contract', () {
     late String gradle;
+    late String settings;
 
     setUpAll(() {
       gradle = File('android/app/build.gradle.kts').readAsStringSync();
+      settings = File('android/settings.gradle.kts').readAsStringSync();
     });
 
     test(
@@ -104,6 +106,91 @@ void main() {
       expect(gradle, contains('worktrees'));
       expect(gradle, contains('isRepositoryLocal'));
       expect(gradle, isNot(contains('providers.gradleProperty')));
+    });
+
+    test('settings rejects Android injected signing before AGP applies', () {
+      // Mutation caught: AGP parses some typed injected options while applying
+      // its plugin, before an app-level task guard can redact malformed values.
+      expect(settings, contains('android.injected.signing.'));
+      expect(settings, contains('gradlePropertiesPrefixedBy'));
+      expect(settings, contains('gradle.startParameter.projectProperties'));
+      expect(
+        settings,
+        contains('System.getProperties().stringPropertyNames()'),
+      );
+      expect(settings, contains('System.getenv().keys'));
+      expect(settings, contains('org.gradle.project.'));
+      expect(settings, contains('ORG_GRADLE_PROJECT_'));
+      expect(
+        settings,
+        contains('Android injected signing overrides are forbidden.'),
+      );
+      expect(
+        settings.indexOf('if (hasInjectedSigningOverride)'),
+        lessThan(settings.indexOf('include(":app")')),
+      );
+      expect(gradle, isNot(contains('hasInjectedSigningOverride')));
+    });
+
+    test('verifier exercises inherited and JVM signing injection paths', () {
+      final verifier = File(
+        'tool/verify_android_release_signing.dart',
+      ).readAsStringSync();
+      final support = File(
+        'tool/src/android_release_signing_support.dart',
+      ).readAsStringSync();
+      expect(verifier, contains('...hostileReleaseProperties'));
+      expect(verifier, contains('androidReleaseSigningValueEnvironmentNames'));
+      expect(verifier, contains('androidReleaseSigningEnvironmentNames'));
+      expect(verifier, isNot(contains('const _propertyNames')));
+      expect(
+        verifier,
+        contains('Unable to resolve trusted build toolchain paths.'),
+      );
+      expect(verifier, contains("toolchain.environment['JAVA_HOME']!"));
+      expect(verifier, contains('commandLineProjectProperties'));
+      for (final caseLabel in <String>{
+        '-P project property',
+        'ORG_GRADLE_PROJECT_ environment property',
+        '-Dorg.gradle.project system property',
+        'raw -D system property',
+        'project gradle.properties',
+        'user gradle.properties',
+      }) {
+        expect(verifier, contains(caseLabel));
+      }
+      expect(verifier, contains('projectGradleProperties'));
+      expect(verifier, contains('originalProjectGradleProperties'));
+      expect(verifier, contains('Help configures without usable'));
+      expect(verifier, contains('_injectedSigningPropertyName'));
+      expect(
+        verifier,
+        contains("'ORG_GRADLE_PROJECT_android.injected.signing.v1-enabled'"),
+      );
+      expect(
+        verifier,
+        contains("'org.gradle.project.android.injected.signing.v1-enabled'"),
+      );
+      expect(
+        verifier,
+        contains('Injected signing rejection must not expose property names.'),
+      );
+      expect(
+        verifier,
+        contains('Injected signing rejection must not expose property values.'),
+      );
+      expect(verifier, contains('nonReleaseTasksForUnusableProperties'));
+      expect(verifier, contains('for (final nonReleaseTask'));
+      expect(verifier, contains('in nonReleaseTasksForUnusableProperties'));
+      for (final source in <String>[verifier, support]) {
+        expect(
+          RegExp(r'Process\.run\(').allMatches(source),
+          hasLength(
+            RegExp('includeParentEnvironment: false').allMatches(source).length,
+          ),
+          reason: 'Every verifier subprocess must use an explicit environment.',
+        );
+      }
     });
 
     test(
@@ -335,11 +422,72 @@ void main() {
         final apkInspection = verifier.indexOf('await _inspectApk(', apkBuild);
         final aabBuild = verifier.indexOf("artifact: 'appbundle'");
         final aabInspection = verifier.indexOf('await _inspectAab(', aabBuild);
+        final strictAabProof = verifier.indexOf(
+          'await _proveStrictAabSignatureCoverage(',
+          aabInspection,
+        );
+        final strictVerificationSource = verifier.substring(
+          verifier.indexOf(
+            'Future<_CommandResult> _runStrictAabSignatureVerification(',
+          ),
+        );
+        final strictVerification = _braceBlock(
+          strictVerificationSource,
+          ') async {',
+        );
+        final strictCoverageProofSource = verifier.substring(
+          verifier.indexOf('Future<void> _proveStrictAabSignatureCoverage({'),
+        );
+        final strictCoverageProof = _braceBlock(
+          strictCoverageProofSource,
+          ') async {',
+        );
 
         expect(apkBuild, isNonNegative);
         expect(apkInspection, greaterThan(apkBuild));
         expect(aabBuild, greaterThan(apkInspection));
         expect(aabInspection, greaterThan(aabBuild));
+        expect(strictAabProof, greaterThan(aabInspection));
+        expect(strictVerification, contains("'-strict'"));
+        expect(strictVerification, contains("'-keystore'"));
+        expect(strictVerification, contains("'-storetype'"));
+        expect(strictVerification, contains("'PKCS12'"));
+        expect(strictVerification, contains("'-storepass:env'"));
+        expect(
+          strictVerification,
+          contains('androidReleaseJarsignerPasswordEnvironmentName'),
+        );
+        expect(strictVerification, contains('trustedStorePassword'));
+        expect(strictVerification, isNot(contains("'-storepass'")));
+        expect('trustedStore: uploadStore'.allMatches(verifier), hasLength(2));
+        expect(
+          'trustedStorePassword: password'.allMatches(verifier),
+          hasLength(2),
+        );
+        expect('trustedAlias: uploadAlias'.allMatches(verifier), hasLength(2));
+        expect(verifier, contains('required this.jar'));
+        final appendFixture = strictCoverageProof.indexOf("'--update'");
+        final structuralValidation = strictCoverageProof.indexOf(
+          '_runBundletoolValidation(',
+          appendFixture,
+        );
+        final strictRejection = strictCoverageProof.indexOf(
+          '_runStrictAabSignatureVerification(',
+          structuralValidation,
+        );
+        final unsignedStatusCheck = strictCoverageProof.indexOf(
+          'hasUnsignedJarsignerEntries',
+          strictRejection,
+        );
+        expect(appendFixture, isNonNegative);
+        expect(structuralValidation, greaterThan(appendFixture));
+        expect(strictRejection, greaterThan(structuralValidation));
+        expect(unsignedStatusCheck, greaterThan(strictRejection));
+        expect(strictCoverageProof, contains('signature.exitCode == 16'));
+        expect(
+          verifier,
+          contains('BUNDLE-METADATA/dev.codex.cleannotes/unsigned-entry.txt'),
+        );
         expect(
           'await _runFlutterReleaseBuild('.allMatches(verifier),
           hasLength(2),

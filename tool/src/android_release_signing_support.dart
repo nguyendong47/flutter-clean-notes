@@ -15,6 +15,32 @@ const _gradleAndJvmOptionSources = <String>{
   'JDK_JAVA_OPTIONS',
 };
 
+const androidReleaseSigningValueEnvironmentNames = <String>{
+  'CLEAN_NOTES_APPLICATION_ID',
+  'CLEAN_NOTES_STORE_FILE',
+  'CLEAN_NOTES_STORE_PASSWORD',
+  'CLEAN_NOTES_KEY_ALIAS',
+  'CLEAN_NOTES_KEY_PASSWORD',
+  'CLEAN_NOTES_UPLOAD_CERT_SHA256',
+};
+
+const androidReleaseSigningSelectorEnvironmentNames = <String>{
+  'CLEAN_NOTES_KEY_PROPERTIES_FILE',
+};
+
+const androidReleaseJarsignerPasswordEnvironmentName =
+    'CLEAN_NOTES_VERIFIER_JARSIGNER_STORE_PASSWORD';
+
+const androidReleaseVerifierInternalSigningEnvironmentNames = <String>{
+  androidReleaseJarsignerPasswordEnvironmentName,
+};
+
+const androidReleaseSigningEnvironmentNames = <String>{
+  ...androidReleaseSigningValueEnvironmentNames,
+  ...androidReleaseSigningSelectorEnvironmentNames,
+  ...androidReleaseVerifierInternalSigningEnvironmentNames,
+};
+
 typedef DirectoryDeletion = Future<void> Function(Directory directory);
 typedef FileSystemEntityDeletion =
     Future<void> Function(FileSystemEntity entity);
@@ -32,11 +58,38 @@ const _gradle814UnixLauncherSha256 =
 const _gradle814WindowsLauncherSha256 =
     '1d297e00bd21de3ace22b4d7f2de1f9dfa858883d66bbf7c1ccbecccec8f4f3b';
 
+Map<String, String> sanitizedVerifierEnvironment(
+  Map<String, String> inheritedEnvironment,
+) => Map<String, String>.from(inheritedEnvironment)
+  ..removeWhere((key, _) {
+    final normalizedKey = key.toUpperCase();
+    return androidReleaseSigningEnvironmentNames.contains(normalizedKey) ||
+        normalizedKey.startsWith('ORG_GRADLE_PROJECT_') ||
+        _gradleAndJvmOptionSources.contains(normalizedKey);
+  });
+
 Map<String, String> sanitizedGitEnvironment(
   Map<String, String> inheritedEnvironment,
-) =>
-    Map<String, String>.from(inheritedEnvironment)
-      ..removeWhere((key, _) => key.toUpperCase().startsWith('GIT_'));
+) {
+  final nullDevice = Platform.isWindows ? 'NUL' : '/dev/null';
+  return sanitizedVerifierEnvironment(inheritedEnvironment)
+    ..removeWhere((key, _) {
+      final normalizedKey = key.toUpperCase();
+      return normalizedKey.startsWith('GIT_');
+    })
+    ..addAll(<String, String>{
+      'GIT_ATTR_NOSYSTEM': '1',
+      'GIT_CONFIG_NOSYSTEM': '1',
+      'GIT_CONFIG_GLOBAL': nullDevice,
+      'GIT_CONFIG_COUNT': '3',
+      'GIT_CONFIG_KEY_0': 'core.hooksPath',
+      'GIT_CONFIG_VALUE_0': nullDevice,
+      'GIT_CONFIG_KEY_1': 'core.fsmonitor',
+      'GIT_CONFIG_VALUE_1': 'false',
+      'GIT_CONFIG_KEY_2': 'core.attributesFile',
+      'GIT_CONFIG_VALUE_2': nullDevice,
+    });
+}
 
 Map<String, String> sanitizedJavaEnvironment(
   Map<String, String> inheritedEnvironment,
@@ -48,11 +101,28 @@ Map<String, String> sanitizedJavaEnvironment(
     'JAVA_OPTS',
     'CLASSPATH',
   };
-  return Map<String, String>.from(inheritedEnvironment)
-    ..removeWhere((key, _) => forbidden.contains(key.toUpperCase()));
+  return sanitizedVerifierEnvironment(inheritedEnvironment)
+    ..removeWhere((key, _) {
+      final normalizedKey = key.toUpperCase();
+      return forbidden.contains(normalizedKey);
+    });
 }
 
 String sha256Hex(List<int> bytes) => sha256.convert(bytes).toString();
+
+// The expected upload keystore supplies explicit trust material, so every
+// strict jarsigner warning and every abnormal process exit remains a failure.
+bool isAcceptedTrustedJarsignerStrictExitCode(int exitCode) => exitCode == 0;
+
+// jarsigner's documented strict-warning mask is 4 | 8 | 16 | 32 | 64. Reject
+// process failures and out-of-domain codes before interpreting the unsigned
+// entry bit (16).
+bool hasUnsignedJarsignerEntries(int exitCode) {
+  const documentedStrictWarningMask = 4 | 8 | 16 | 32 | 64;
+  return exitCode >= 0 &&
+      (exitCode & ~documentedStrictWarningMask) == 0 &&
+      (exitCode & 16) != 0;
+}
 
 String trustedGradleLauncherShim({
   required String javaExecutablePath,
@@ -526,7 +596,7 @@ Map<String, String> hermeticGradleEnvironment({
   final controlledKeys = projectProperties.keys
       .map((key) => key.toUpperCase())
       .toSet();
-  final environment = Map<String, String>.from(inheritedEnvironment)
+  final environment = sanitizedVerifierEnvironment(inheritedEnvironment)
     ..removeWhere((key, _) {
       final normalizedKey = key.toUpperCase();
       return normalizedKey.startsWith('ORG_GRADLE_PROJECT_') ||

@@ -13,14 +13,13 @@ const _gradleDistributionSha256 =
     'efe9a3d147d948d7528a9887fa35abcf24ca1a43ad06439996490f77569b02d1';
 const _bundletoolSha256 =
     'a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29';
-const _propertyNames = <String>[
-  'CLEAN_NOTES_APPLICATION_ID',
-  'CLEAN_NOTES_STORE_FILE',
-  'CLEAN_NOTES_STORE_PASSWORD',
-  'CLEAN_NOTES_KEY_ALIAS',
-  'CLEAN_NOTES_KEY_PASSWORD',
-  'CLEAN_NOTES_UPLOAD_CERT_SHA256',
-];
+const _injectedSigningFailure =
+    'Android injected signing overrides are forbidden.';
+const _injectedSigningPropertyName = 'android.injected.signing.v1-enabled';
+const _malformedInjectedSigningMarker =
+    'synthetic-malformed-injected-signing-marker';
+const _unsignedAabEntryPath =
+    'BUNDLE-METADATA/dev.codex.cleannotes/unsigned-entry.txt';
 
 final class _CommandResult {
   const _CommandResult(this.exitCode, this.output);
@@ -46,8 +45,10 @@ final class _HermeticBuildRunner {
 
   Future<_CommandResult> runGradle(
     String task,
-    Map<String, String> properties,
-  ) => _runGradle(
+    Map<String, String> properties, {
+    Map<String, String> commandLineProjectProperties = const {},
+    Map<String, String> systemProperties = const {},
+  }) => _runGradle(
     repository,
     wrapper,
     java,
@@ -55,6 +56,8 @@ final class _HermeticBuildRunner {
     inheritedEnvironment,
     task,
     properties,
+    commandLineProjectProperties,
+    systemProperties,
   );
 }
 
@@ -62,6 +65,7 @@ final class _TrustedToolchain {
   const _TrustedToolchain({
     required this.flutter,
     required this.java,
+    required this.jar,
     required this.keytool,
     required this.jarsigner,
     required this.apkanalyzer,
@@ -74,6 +78,7 @@ final class _TrustedToolchain {
 
   final File flutter;
   final File java;
+  final File jar;
   final File keytool;
   final File jarsigner;
   final File apkanalyzer;
@@ -150,6 +155,16 @@ Future<void> main(List<String> arguments) async {
   _PositiveReleaseEvidence? positiveReleaseEvidence;
   final sensitiveValues = <String>{};
   final sensitivePaths = <String>{repository.path};
+  for (final name in androidReleaseSigningEnvironmentNames) {
+    final value = Platform.environment[name]?.trim();
+    if (value != null && value.isNotEmpty) sensitiveValues.add(value);
+    if ((name == 'CLEAN_NOTES_STORE_FILE' ||
+            name == 'CLEAN_NOTES_KEY_PROPERTIES_FILE') &&
+        value != null &&
+        value.isNotEmpty) {
+      sensitivePaths.add(value);
+    }
+  }
   for (final name in const <String>{
     'CLEAN_NOTES_GIT_EXECUTABLE',
     'JAVA_HOME',
@@ -196,12 +211,30 @@ Future<void> main(List<String> arguments) async {
     }
     sensitivePaths.add(temporaryDirectory.path);
     _assertSafeTemporaryDirectory(temporaryDirectory, protectedRoots);
-    final toolchain = _resolveTrustedToolchain(
-      repository,
-      protectedRoots,
-      gitExecutable,
-      requireBundletool: buildPositiveReleaseArtifacts,
-    );
+    late _TrustedToolchain toolchain;
+    try {
+      toolchain = _resolveTrustedToolchain(
+        repository,
+        protectedRoots,
+        gitExecutable,
+        requireBundletool: buildPositiveReleaseArtifacts,
+      );
+    } on FileSystemException {
+      throw StateError('Unable to resolve trusted build toolchain paths.');
+    }
+    sensitivePaths.addAll(<String>{
+      toolchain.flutter.path,
+      toolchain.java.path,
+      toolchain.jar.path,
+      toolchain.keytool.path,
+      toolchain.jarsigner.path,
+      toolchain.apkanalyzer.path,
+      toolchain.apksigner.path,
+      toolchain.androidSdk.path,
+      toolchain.flutterRoot.path,
+      toolchain.environment['JAVA_HOME']!,
+      if (toolchain.bundletool != null) toolchain.bundletool!.path,
+    });
     final candidateCommit = await _candidateCommit(repository, gitExecutable);
     final buildRepository = await _cloneExactCandidate(
       source: repository,
@@ -365,6 +398,7 @@ Future<void> main(List<String> arguments) async {
     );
     final hostileInheritedEnvironment = <String, String>{
       ...toolchain.environment,
+      ...hostileReleaseProperties,
       'GRADLE_USER_HOME': hostileGradleUserHome.path,
       'GRADLE_HOME': hostileGradleUserHome.path,
       'GRADLE_OPTS': '-Dgradle.user.home=$hostileGradleUserHomeOption',
@@ -395,7 +429,7 @@ Future<void> main(List<String> arguments) async {
     if (runContractChecks) {
       progress('Debug assembles without usable release configuration');
       final blankProperties = {
-        for (final name in _propertyNames) name: '',
+        for (final name in androidReleaseSigningValueEnvironmentNames) name: '',
         'CLEAN_NOTES_KEY_PROPERTIES_FILE': emptyProperties.path,
       };
       final defaultDebugStarted = DateTime.now().toUtc();
@@ -436,12 +470,22 @@ Future<void> main(List<String> arguments) async {
         result: defaultProfile,
       );
 
+      progress('Help configures without usable release configuration');
+      final defaultHelp = await buildRunner.runGradle(
+        ':app:help',
+        blankProperties,
+      );
+      _expectSuccess(defaultHelp, 'help without release inputs');
+
       progress('Missing release inputs fail validation');
       final missing = await buildRunner.runGradle(
         ':app:validateReleaseConfiguration',
         {'CLEAN_NOTES_KEY_PROPERTIES_FILE': emptyProperties.path},
       );
-      _expectValidationFailure(missing, _propertyNames);
+      _expectValidationFailure(
+        missing,
+        androidReleaseSigningValueEnvironmentNames,
+      );
 
       progress(
         'Inherited Gradle properties and JVM hooks cannot shadow inputs',
@@ -457,22 +501,183 @@ Future<void> main(List<String> arguments) async {
         ':app:validateReleaseConfiguration',
         {'CLEAN_NOTES_KEY_PROPERTIES_FILE': emptyProperties.path},
       );
-      _expectValidationFailure(hermeticValidation, _propertyNames);
-
-      progress('Malformed or unreadable properties fail release, not debug');
-      final malformedDebug = await buildRunner.runGradle(':app:assembleDebug', {
-        'CLEAN_NOTES_KEY_PROPERTIES_FILE': malformedProperties.path,
-      });
-      _expectSuccess(malformedDebug, 'assembleDebug with malformed properties');
-      _require(
-        _packagedDebugApplicationId(buildRepository) == _templateApplicationId,
-        'Malformed release properties must not prevent template-ID debug.',
-        result: malformedDebug,
+      _expectValidationFailure(
+        hermeticValidation,
+        androidReleaseSigningValueEnvironmentNames,
       );
+
+      sensitiveValues.addAll(<String>{
+        _malformedInjectedSigningMarker,
+        _injectedSigningPropertyName,
+        'android.injected.signing.',
+      });
+      void expectInjectedSigningRejected(_CommandResult result) {
+        _expectFailureContaining(result, _injectedSigningFailure);
+        _require(
+          !result.output.toLowerCase().contains('android.injected.signing.'),
+          'Injected signing rejection must not expose property names.',
+          result: result,
+        );
+        _require(
+          !result.output.contains(_malformedInjectedSigningMarker),
+          'Injected signing rejection must not expose property values.',
+          result: result,
+        );
+      }
+
+      final injectedSigningCases =
+          <
+            ({
+              String label,
+              Map<String, String> environmentProperties,
+              Map<String, String> commandLineProjectProperties,
+              Map<String, String> systemProperties,
+            })
+          >[
+            (
+              label: '-P project property',
+              environmentProperties: const {},
+              commandLineProjectProperties: const {
+                _injectedSigningPropertyName: _malformedInjectedSigningMarker,
+              },
+              systemProperties: const {},
+            ),
+            (
+              label: 'ORG_GRADLE_PROJECT_ environment property',
+              environmentProperties: const {
+                'ORG_GRADLE_PROJECT_android.injected.signing.v1-enabled':
+                    _malformedInjectedSigningMarker,
+              },
+              commandLineProjectProperties: const {},
+              systemProperties: const {},
+            ),
+            (
+              label: '-Dorg.gradle.project system property',
+              environmentProperties: const {},
+              commandLineProjectProperties: const {},
+              systemProperties: const {
+                'org.gradle.project.android.injected.signing.v1-enabled':
+                    _malformedInjectedSigningMarker,
+              },
+            ),
+            (
+              label: 'raw -D system property',
+              environmentProperties: const {},
+              commandLineProjectProperties: const {},
+              systemProperties: const {
+                _injectedSigningPropertyName: _malformedInjectedSigningMarker,
+              },
+            ),
+          ];
+      for (final injectedSigningCase in injectedSigningCases) {
+        progress(
+          'Android injected signing via ${injectedSigningCase.label} fails '
+          'before AGP configuration',
+        );
+        final injectedSigningOverride = await buildRunner.runGradle(
+          ':app:help',
+          injectedSigningCase.environmentProperties,
+          commandLineProjectProperties:
+              injectedSigningCase.commandLineProjectProperties,
+          systemProperties: injectedSigningCase.systemProperties,
+        );
+        expectInjectedSigningRejected(injectedSigningOverride);
+      }
+
+      progress(
+        'Android injected signing via project gradle.properties fails before '
+        'AGP configuration',
+      );
+      final projectGradleProperties = File(
+        path.join(androidDirectory.path, 'gradle.properties'),
+      );
+      _require(
+        FileSystemEntity.typeSync(
+              projectGradleProperties.path,
+              followLinks: false,
+            ) ==
+            FileSystemEntityType.file,
+        'The isolated project Gradle properties file is unavailable.',
+      );
+      final originalProjectGradleProperties = projectGradleProperties
+          .readAsBytesSync();
+      try {
+        projectGradleProperties.writeAsBytesSync(<int>[
+          ...originalProjectGradleProperties,
+          if (originalProjectGradleProperties.isNotEmpty &&
+              originalProjectGradleProperties.last != 10)
+            10,
+          ...utf8.encode(
+            '$_injectedSigningPropertyName=$_malformedInjectedSigningMarker\n',
+          ),
+        ], flush: true);
+        final projectPropertiesFileOverride = await buildRunner.runGradle(
+          ':app:help',
+          const {},
+        );
+        expectInjectedSigningRejected(projectPropertiesFileOverride);
+      } finally {
+        projectGradleProperties.writeAsBytesSync(
+          originalProjectGradleProperties,
+          flush: true,
+        );
+      }
+      await _requireTrackedCandidateUnchanged(buildRepository, gitExecutable);
+
+      progress(
+        'Android injected signing via user gradle.properties fails before '
+        'AGP configuration',
+      );
+      final injectedGradleProperties = File(
+        path.join(isolatedGradleUserHome.path, 'gradle.properties'),
+      );
+      _require(
+        !injectedGradleProperties.existsSync(),
+        'The isolated Gradle user home must not contain inherited properties.',
+      );
+      try {
+        injectedGradleProperties.writeAsStringSync(
+          '$_injectedSigningPropertyName=$_malformedInjectedSigningMarker\n',
+          flush: true,
+        );
+        final propertiesFileOverride = await buildRunner.runGradle(
+          ':app:help',
+          const {},
+        );
+        expectInjectedSigningRejected(propertiesFileOverride);
+      } finally {
+        if (injectedGradleProperties.existsSync()) {
+          injectedGradleProperties.deleteSync();
+        }
+      }
+
+      const nonReleaseTasksForUnusableProperties = <String>[
+        ':app:assembleDebug',
+        ':app:assembleProfile',
+        ':app:help',
+      ];
       for (final unusableProperties in <FileSystemEntity>[
         malformedProperties,
         unreadableProperties,
       ]) {
+        for (final nonReleaseTask in nonReleaseTasksForUnusableProperties) {
+          progress(
+            '$nonReleaseTask remains usable with malformed or unreadable '
+            'release properties',
+          );
+          final nonReleaseResult = await buildRunner.runGradle(nonReleaseTask, {
+            'CLEAN_NOTES_KEY_PROPERTIES_FILE': unusableProperties.path,
+          });
+          _expectSuccess(
+            nonReleaseResult,
+            '$nonReleaseTask with unusable release properties',
+          );
+          _require(
+            !nonReleaseResult.output.contains(unusableProperties.path),
+            'Non-release tasks must not expose a private properties path.',
+            result: nonReleaseResult,
+          );
+        }
         final unusableRelease = await buildRunner.runGradle(
           ':app:validateReleaseConfiguration',
           {'CLEAN_NOTES_KEY_PROPERTIES_FILE': unusableProperties.path},
@@ -486,6 +691,10 @@ Future<void> main(List<String> arguments) async {
           result: unusableRelease,
         );
       }
+      _require(
+        _packagedDebugApplicationId(buildRepository) == _templateApplicationId,
+        'Unusable release properties must not prevent template-ID debug.',
+      );
 
       progress('Shipped placeholders keep debug runnable and release redacted');
       final placeholderDebug = await buildRunner.runGradle(
@@ -815,12 +1024,24 @@ Future<void> main(List<String> arguments) async {
         _releaseAab(buildRepository),
         toolchain,
         notBefore: positiveAabStarted,
+        trustedStore: uploadStore,
+        trustedStorePassword: password,
+        trustedAlias: uploadAlias,
       );
       _require(
         aabEvidence.applicationId == _applicationId &&
             aabEvidence.certificateSha256 == uploadFingerprint.toLowerCase(),
         'The release AAB identity or signer does not match the approved proof.',
         result: positiveAab,
+      );
+      progress('Strict AAB proof rejects post-sign unsigned metadata');
+      await _proveStrictAabSignatureCoverage(
+        signedAab: _releaseAab(buildRepository),
+        temporaryDirectory: temporaryDirectory,
+        toolchain: toolchain,
+        trustedStore: uploadStore,
+        trustedStorePassword: password,
+        trustedAlias: uploadAlias,
       );
       positiveReleaseEvidence = _PositiveReleaseEvidence(
         commit: candidateCommit,
@@ -956,6 +1177,12 @@ _TrustedToolchain _resolveTrustedToolchain(
     path.join(javaHome.path, 'bin', 'keytool$executableSuffix'),
     'keytool executable',
   );
+  final jar = _requiredExternalFile(
+    repository,
+    protectedRoots,
+    path.join(javaHome.path, 'bin', 'jar$executableSuffix'),
+    'jar executable',
+  );
   final jarsigner = _requiredExternalFile(
     repository,
     protectedRoots,
@@ -1034,6 +1261,7 @@ _TrustedToolchain _resolveTrustedToolchain(
   return _TrustedToolchain(
     flutter: flutter,
     java: java,
+    jar: jar,
     keytool: keytool,
     jarsigner: jarsigner,
     apkanalyzer: apkanalyzer,
@@ -1256,7 +1484,13 @@ Future<_CommandResult> _runFlutterReleaseBuild({
 }
 
 Future<void> _makeExecutable(File file) async {
-  final result = await Process.run('/bin/chmod', ['700', file.path]);
+  final result = await Process.run(
+    '/bin/chmod',
+    ['700', file.path],
+    environment: sanitizedVerifierEnvironment(Platform.environment),
+    includeParentEnvironment: false,
+    runInShell: false,
+  );
   _require(result.exitCode == 0, 'Unable to secure a Gradle launcher.');
 }
 
@@ -1485,14 +1719,7 @@ Future<File> _materializeTrustedGradleWrapper(
     ),
   );
   if (!Platform.isWindows) {
-    final chmod = await Process.run('/bin/chmod', [
-      '700',
-      trustedLauncher.path,
-    ]);
-    _require(
-      chmod.exitCode == 0,
-      'Unable to secure the trusted Gradle launcher.',
-    );
+    await _makeExecutable(trustedLauncher);
   }
   return trustedLauncher;
 }
@@ -1508,6 +1735,8 @@ Future<_CommandResult> _runGradle(
   Map<String, String> inheritedEnvironment,
   String task,
   Map<String, String> properties,
+  Map<String, String> commandLineProjectProperties,
+  Map<String, String> systemProperties,
 ) async {
   final wrapperJar = File(
     path.join(wrapper.parent.path, 'gradle', 'wrapper', 'gradle-wrapper.jar'),
@@ -1523,6 +1752,10 @@ Future<_CommandResult> _runGradle(
             '-Dorg.gradle.appname=gradlew',
             '-jar',
             wrapperJar.path,
+            for (final entry in systemProperties.entries)
+              '-D${entry.key}=${entry.value}',
+            for (final entry in commandLineProjectProperties.entries)
+              '-P${entry.key}=${entry.value}',
             '-p',
             path.join(repository.path, 'android'),
             '--no-daemon',
@@ -1614,23 +1847,14 @@ Future<_ArtifactEvidence> _inspectAab(
   File artifact,
   _TrustedToolchain toolchain, {
   required DateTime notBefore,
+  required File trustedStore,
+  required String trustedStorePassword,
+  required String trustedAlias,
 }) async {
   _requireFreshArtifact(artifact, notBefore);
-  final bundletool = toolchain.bundletool;
-  if (bundletool == null) {
-    throw StateError('Pinned bundletool is required for AAB proof.');
-  }
-  final validate = await Process.run(
-    toolchain.java.path,
-    ['-jar', bundletool.path, 'validate', '--bundle=${artifact.path}'],
-    environment: sanitizedJavaEnvironment(toolchain.environment),
-    includeParentEnvironment: false,
-    runInShell: false,
-  );
-  _expectSuccess(
-    _CommandResult(validate.exitCode, '${validate.stdout}\n${validate.stderr}'),
-    'bundletool AAB validation',
-  );
+  final validate = await _runBundletoolValidation(artifact, toolchain);
+  _expectSuccess(validate, 'bundletool AAB validation');
+  final bundletool = toolchain.bundletool!;
   final applicationId = await Process.run(
     toolchain.java.path,
     [
@@ -1645,25 +1869,17 @@ Future<_ArtifactEvidence> _inspectAab(
     includeParentEnvironment: false,
     runInShell: false,
   );
-  final signature = await Process.run(
-    toolchain.jarsigner.path,
-    [
-      '-J-Duser.language=en',
-      '-J-Duser.country=US',
-      '-verify',
-      '-certs',
-      artifact.path,
-    ],
-    environment: sanitizedJavaEnvironment(toolchain.environment),
-    includeParentEnvironment: false,
-    runInShell: false,
+  final signature = await _runStrictAabSignatureVerification(
+    artifact,
+    toolchain,
+    trustedStore: trustedStore,
+    trustedStorePassword: trustedStorePassword,
+    trustedAlias: trustedAlias,
   );
-  _expectSuccess(
-    _CommandResult(
-      signature.exitCode,
-      '${signature.stdout}\n${signature.stderr}',
-    ),
-    'AAB JAR-signature verification',
+  _require(
+    isAcceptedTrustedJarsignerStrictExitCode(signature.exitCode),
+    'Strict AAB JAR-signature verification failed.',
+    result: signature,
   );
   final certificate = await Process.run(
     toolchain.keytool.path,
@@ -1688,6 +1904,116 @@ Future<_ArtifactEvidence> _inspectAab(
       exitCode: certificate.exitCode,
     ),
     artifactSha256: await _fileSha256(artifact),
+  );
+}
+
+Future<_CommandResult> _runBundletoolValidation(
+  File artifact,
+  _TrustedToolchain toolchain,
+) async {
+  final bundletool = toolchain.bundletool;
+  if (bundletool == null) {
+    throw StateError('Pinned bundletool is required for AAB proof.');
+  }
+  final result = await Process.run(
+    toolchain.java.path,
+    ['-jar', bundletool.path, 'validate', '--bundle=${artifact.path}'],
+    environment: sanitizedJavaEnvironment(toolchain.environment),
+    includeParentEnvironment: false,
+    runInShell: false,
+  );
+  return _CommandResult(result.exitCode, '${result.stdout}\n${result.stderr}');
+}
+
+Future<_CommandResult> _runStrictAabSignatureVerification(
+  File artifact,
+  _TrustedToolchain toolchain, {
+  required File trustedStore,
+  required String trustedStorePassword,
+  required String trustedAlias,
+}) async {
+  final environment = sanitizedJavaEnvironment(toolchain.environment)
+    ..[androidReleaseJarsignerPasswordEnvironmentName] = trustedStorePassword;
+  final result = await Process.run(
+    toolchain.jarsigner.path,
+    [
+      '-J-Duser.language=en',
+      '-J-Duser.country=US',
+      '-verify',
+      '-strict',
+      '-certs',
+      '-keystore',
+      trustedStore.path,
+      '-storetype',
+      'PKCS12',
+      '-storepass:env',
+      androidReleaseJarsignerPasswordEnvironmentName,
+      artifact.path,
+      trustedAlias,
+    ],
+    environment: environment,
+    includeParentEnvironment: false,
+    runInShell: false,
+  );
+  return _CommandResult(result.exitCode, '${result.stdout}\n${result.stderr}');
+}
+
+Future<void> _proveStrictAabSignatureCoverage({
+  required File signedAab,
+  required Directory temporaryDirectory,
+  required _TrustedToolchain toolchain,
+  required File trustedStore,
+  required String trustedStorePassword,
+  required String trustedAlias,
+}) async {
+  final unsignedEntryRoot = Directory(
+    path.join(temporaryDirectory.path, 'unsigned-aab-entry'),
+  );
+  final relativeEntryPath = _unsignedAabEntryPath.replaceAll(
+    '/',
+    Platform.pathSeparator,
+  );
+  final unsignedEntry = File(
+    path.join(unsignedEntryRoot.path, relativeEntryPath),
+  );
+  unsignedEntry.parent.createSync(recursive: true);
+  unsignedEntry.writeAsStringSync('unsigned signing-attestation fixture\n');
+  final tamperedAab = await signedAab.copy(
+    path.join(temporaryDirectory.path, 'post-sign-unsigned-entry.aab'),
+  );
+  final append = await Process.run(
+    toolchain.jar.path,
+    [
+      '--update',
+      '--file',
+      tamperedAab.path,
+      '-C',
+      unsignedEntryRoot.path,
+      relativeEntryPath,
+    ],
+    environment: sanitizedJavaEnvironment(toolchain.environment),
+    includeParentEnvironment: false,
+    runInShell: false,
+  );
+  _expectSuccess(
+    _CommandResult(append.exitCode, '${append.stdout}\n${append.stderr}'),
+    'post-sign unsigned-entry fixture creation',
+  );
+  final validate = await _runBundletoolValidation(tamperedAab, toolchain);
+  _expectSuccess(validate, 'tampered AAB structural validation fixture');
+  final signature = await _runStrictAabSignatureVerification(
+    tamperedAab,
+    toolchain,
+    trustedStore: trustedStore,
+    trustedStorePassword: trustedStorePassword,
+    trustedAlias: trustedAlias,
+  );
+  _require(
+    signature.exitCode == 16 &&
+        hasUnsignedJarsignerEntries(signature.exitCode) &&
+        !isAcceptedTrustedJarsignerStrictExitCode(signature.exitCode),
+    'Strict jarsigner must reject a post-sign unsigned AAB entry.',
+    result: signature,
   );
 }
 
