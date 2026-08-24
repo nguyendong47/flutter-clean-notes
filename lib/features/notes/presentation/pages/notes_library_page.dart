@@ -324,9 +324,40 @@ class _DeleteForeverDialog extends StatefulWidget {
   State<_DeleteForeverDialog> createState() => _DeleteForeverDialogState();
 }
 
-class _DeleteForeverDialogState extends State<_DeleteForeverDialog> {
+class _DeleteForeverDialogState extends State<_DeleteForeverDialog>
+    implements PopEntry<Object?> {
+  ModalRoute<dynamic>? _route;
+
+  @override
+  late final ValueNotifier<bool> canPopNotifier;
+
   bool _busy = false;
   bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    canPopNotifier = ValueNotifier<bool>(true);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextRoute = ModalRoute.of(context);
+    if (nextRoute != _route) {
+      _route?.unregisterPopEntry(this);
+      _route = nextRoute;
+      _route?.registerPopEntry(this);
+    }
+    _syncCanPop();
+  }
+
+  @override
+  void dispose() {
+    _route?.unregisterPopEntry(this);
+    canPopNotifier.dispose();
+    super.dispose();
+  }
 
   Future<void> _delete() async {
     if (_busy) return;
@@ -334,6 +365,7 @@ class _DeleteForeverDialogState extends State<_DeleteForeverDialog> {
       _busy = true;
       _failed = false;
     });
+    _syncCanPop();
     PersistedNoteMutationFailureKind? failureKind;
     try {
       await widget.onDelete();
@@ -345,6 +377,7 @@ class _DeleteForeverDialogState extends State<_DeleteForeverDialog> {
           _busy = false;
           _failed = true;
         });
+        _syncCanPop();
       }
       return;
     }
@@ -353,6 +386,17 @@ class _DeleteForeverDialogState extends State<_DeleteForeverDialog> {
         context,
       ).pop((noteId: widget.note.id!, failureKind: failureKind));
     }
+  }
+
+  @override
+  void onPopInvoked(bool didPop) {}
+
+  @override
+  void onPopInvokedWithResult(bool didPop, Object? result) {}
+
+  void _syncCanPop() {
+    if (!mounted) return;
+    canPopNotifier.value = !_busy;
   }
 
   @override

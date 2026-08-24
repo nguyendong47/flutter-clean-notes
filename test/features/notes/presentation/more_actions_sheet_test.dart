@@ -228,8 +228,14 @@ void main() {
       final darkRow = find.byKey(const Key('theme-mode-dark'));
 
       await tester.tap(darkRow);
-      await tester.pump();
+      expect(
+        ModalRoute.of(tester.element(darkRow))!.popDisposition,
+        RoutePopDisposition.doNotPop,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pump(const Duration(seconds: 1));
 
+      expect(find.byType(MoreActionsSheet), findsOneWidget);
       expect(store.writeCalls, 1);
       expect(
         find.descendant(
@@ -265,10 +271,6 @@ void main() {
       await tester.pump();
       expect(find.byType(MoreActionsSheet), findsOneWidget);
 
-      await tester.binding.handlePopRoute();
-      await tester.pump();
-      expect(find.byType(MoreActionsSheet), findsOneWidget);
-
       await tester.tap(darkRow, warnIfMissed: false);
       await tester.pump();
       expect(store.writeCalls, 1);
@@ -295,7 +297,12 @@ void main() {
     final sizeBefore = tester.getSize(exportRow);
 
     await tester.tap(exportRow);
-    await tester.pump();
+    expect(
+      ModalRoute.of(tester.element(exportRow))!.popDisposition,
+      RoutePopDisposition.doNotPop,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pump(const Duration(seconds: 1));
 
     expect(find.byType(MoreActionsSheet), findsOneWidget);
     expect(gateway.shareTextCalls, 1);
@@ -346,10 +353,6 @@ void main() {
     await tester.pump();
     expect(find.byType(MoreActionsSheet), findsOneWidget);
     expect(find.bySemanticsLabel('Scrim'), findsNothing);
-
-    await tester.binding.handlePopRoute();
-    await tester.pump();
-    expect(find.byType(MoreActionsSheet), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('more-row-backup-json')));
     await tester.pump();
@@ -664,8 +667,16 @@ void main() {
         ..getError = null
         ..readGate = Completer<void>();
       await tester.tap(find.byKey(const Key('tag-retry')));
-      await tester.pump();
+      expect(
+        ModalRoute.of(
+          tester.element(find.byType(TagManagerSheet)),
+        )!.popDisposition,
+        RoutePopDisposition.doNotPop,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pump(const Duration(seconds: 1));
 
+      expect(find.byType(TagManagerSheet), findsOneWidget);
       final remove = find.bySemanticsLabel('Remove shared tag');
       expect(remove, findsOneWidget);
       final removeSemantics = tester.getSemantics(remove).getSemanticsData();
@@ -682,10 +693,6 @@ void main() {
       await tester.tapAt(const Offset(4, 4));
       await tester.pump();
       expect(find.byType(TagManagerSheet), findsOneWidget);
-      await tester.binding.handlePopRoute();
-      await tester.pump();
-      expect(find.byType(TagManagerSheet), findsOneWidget);
-
       repository.readGate!.complete();
       await tester.pumpAndSettle();
 
@@ -712,6 +719,12 @@ void main() {
     final remove = find.byTooltip('Remove shared tag');
     expect(tester.getSize(remove).height, greaterThanOrEqualTo(48));
     await tester.tap(remove);
+    expect(
+      ModalRoute.of(
+        tester.element(find.byType(TagManagerSheet)),
+      )!.popDisposition,
+      RoutePopDisposition.doNotPop,
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Remove “shared” from 3 notes?'), findsOneWidget);
@@ -719,16 +732,18 @@ void main() {
     expect(find.text('Remove'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
-    await tester.pump();
+    expect(
+      ModalRoute.of(tester.element(find.byType(AlertDialog)))!.popDisposition,
+      RoutePopDisposition.doNotPop,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pump(const Duration(seconds: 1));
 
     expect(repository.removeTagInvocations, 1);
     expect(find.text('Removing…'), findsOneWidget);
     expect(find.byType(AlertDialog), findsOneWidget);
     expect(find.bySemanticsLabel('Scrim'), findsNothing);
     await tester.tapAt(const Offset(4, 4));
-    await tester.pump();
-    expect(find.byType(AlertDialog), findsOneWidget);
-    await tester.binding.handlePopRoute();
     await tester.pump();
     expect(find.byType(AlertDialog), findsOneWidget);
     expect(repository.removeTagInvocations, 1);

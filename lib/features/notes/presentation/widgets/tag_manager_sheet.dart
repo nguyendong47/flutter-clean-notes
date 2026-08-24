@@ -27,12 +27,43 @@ class TagManagerSheet extends ConsumerStatefulWidget {
   ConsumerState<TagManagerSheet> createState() => _TagManagerSheetState();
 }
 
-class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
+class _TagManagerSheetState extends ConsumerState<TagManagerSheet>
+    implements PopEntry<Object?> {
   static final _confirmationBusySource = Object();
   static final _retryBusySource = Object();
 
+  ModalRoute<dynamic>? _route;
+
+  @override
+  late final ValueNotifier<bool> canPopNotifier;
+
   bool _confirmationOpen = false;
   bool _retrying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    canPopNotifier = ValueNotifier<bool>(true);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextRoute = ModalRoute.of(context);
+    if (nextRoute != _route) {
+      _route?.unregisterPopEntry(this);
+      _route = nextRoute;
+      _route?.registerPopEntry(this);
+    }
+    _syncCanPop();
+  }
+
+  @override
+  void dispose() {
+    _route?.unregisterPopEntry(this);
+    canPopNotifier.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -142,6 +173,7 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
     if (_retrying) return;
     widget.modalController?.setBusy(_retryBusySource, busy: true);
     setState(() => _retrying = true);
+    _syncCanPop();
     ref.invalidate(notesProvider);
     try {
       await ref.read(notesProvider.future);
@@ -149,7 +181,10 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
       // The provider retains cached data and exposes the refreshed error state.
     } finally {
       widget.modalController?.setBusy(_retryBusySource, busy: false);
-      if (mounted) setState(() => _retrying = false);
+      if (mounted) {
+        setState(() => _retrying = false);
+        _syncCanPop();
+      }
     }
   }
 
@@ -158,6 +193,7 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
     final originFocus = FocusManager.instance.primaryFocus;
     widget.modalController?.setBusy(_confirmationBusySource, busy: true);
     setState(() => _confirmationOpen = true);
+    _syncCanPop();
     try {
       await showDialog<void>(
         context: context,
@@ -169,7 +205,10 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
       );
     } finally {
       widget.modalController?.setBusy(_confirmationBusySource, busy: false);
-      if (mounted) setState(() => _confirmationOpen = false);
+      if (mounted) {
+        setState(() => _confirmationOpen = false);
+        _syncCanPop();
+      }
       if (mounted && originFocus?.canRequestFocus == true) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && originFocus?.canRequestFocus == true) {
@@ -178,6 +217,17 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet> {
         });
       }
     }
+  }
+
+  @override
+  void onPopInvoked(bool didPop) {}
+
+  @override
+  void onPopInvokedWithResult(bool didPop, Object? result) {}
+
+  void _syncCanPop() {
+    if (!mounted) return;
+    canPopNotifier.value = !_confirmationOpen && !_retrying;
   }
 }
 
@@ -384,9 +434,40 @@ class _RemoveTagDialog extends StatefulWidget {
   State<_RemoveTagDialog> createState() => _RemoveTagDialogState();
 }
 
-class _RemoveTagDialogState extends State<_RemoveTagDialog> {
+class _RemoveTagDialogState extends State<_RemoveTagDialog>
+    implements PopEntry<Object?> {
+  ModalRoute<dynamic>? _route;
+
+  @override
+  late final ValueNotifier<bool> canPopNotifier;
+
   bool _busy = false;
   bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    canPopNotifier = ValueNotifier<bool>(true);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextRoute = ModalRoute.of(context);
+    if (nextRoute != _route) {
+      _route?.unregisterPopEntry(this);
+      _route = nextRoute;
+      _route?.registerPopEntry(this);
+    }
+    _syncCanPop();
+  }
+
+  @override
+  void dispose() {
+    _route?.unregisterPopEntry(this);
+    canPopNotifier.dispose();
+    super.dispose();
+  }
 
   Future<void> _remove() async {
     if (_busy) return;
@@ -394,6 +475,7 @@ class _RemoveTagDialogState extends State<_RemoveTagDialog> {
       _busy = true;
       _failed = false;
     });
+    _syncCanPop();
     try {
       await widget.onRemove();
     } catch (_) {
@@ -402,10 +484,22 @@ class _RemoveTagDialogState extends State<_RemoveTagDialog> {
           _busy = false;
           _failed = true;
         });
+        _syncCanPop();
       }
       return;
     }
     if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  void onPopInvoked(bool didPop) {}
+
+  @override
+  void onPopInvokedWithResult(bool didPop, Object? result) {}
+
+  void _syncCanPop() {
+    if (!mounted) return;
+    canPopNotifier.value = !_busy;
   }
 
   @override

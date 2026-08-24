@@ -354,7 +354,12 @@ void main() {
     await _openDeleteDialog(tester, 'Discarded draft');
 
     await tester.tap(find.widgetWithText(FilledButton, 'Delete forever'));
-    await tester.pump();
+    expect(
+      ModalRoute.of(tester.element(find.byType(AlertDialog)))!.popDisposition,
+      RoutePopDisposition.doNotPop,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pump(const Duration(seconds: 1));
 
     expect(find.byType(AlertDialog), findsOneWidget);
     expect(find.text('Deleting…'), findsOneWidget);
@@ -363,11 +368,6 @@ void main() {
       tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
       isNull,
     );
-
-    await tester.binding.handlePopRoute();
-    await tester.pump();
-    expect(find.byType(AlertDialog), findsOneWidget);
-    expect(repository.deleteCalls, 1);
 
     repository.deleteGate!.complete();
     await tester.pumpAndSettle();

@@ -32,7 +32,8 @@ class MoreActionsSheet extends ConsumerStatefulWidget {
   ConsumerState<MoreActionsSheet> createState() => _MoreActionsSheetState();
 }
 
-class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet> {
+class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
+    implements PopEntry<Object?> {
   static final _themeBusySource = Object();
   static final _transferBusySource = Object();
 
@@ -40,28 +41,52 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet> {
   final FocusNode _importFocusNode = FocusNode(debugLabel: 'Import backup');
   late final ProviderSubscription<AsyncValue<NotesTransferOutcome?>>
   _transferSubscription;
+  ModalRoute<dynamic>? _route;
+
+  @override
+  late final ValueNotifier<bool> canPopNotifier;
 
   bool _themeChoicesVisible = true;
   bool _themeBusy = false;
+  bool _transferBusy = false;
   ThemeMode? _pendingTheme;
   String? _themeError;
 
   @override
   void initState() {
     super.initState();
+    canPopNotifier = ValueNotifier<bool>(true);
     _transferSubscription = ref.listenManual<AsyncValue<NotesTransferOutcome?>>(
       notesTransferProvider,
-      (previous, next) => widget.modalController?.setBusy(
-        _transferBusySource,
-        busy: next.isLoading,
-      ),
+      (previous, next) {
+        _transferBusy = next.isLoading;
+        widget.modalController?.setBusy(
+          _transferBusySource,
+          busy: _transferBusy,
+        );
+        _syncCanPop();
+      },
       fireImmediately: true,
     );
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextRoute = ModalRoute.of(context);
+    if (nextRoute != _route) {
+      _route?.unregisterPopEntry(this);
+      _route = nextRoute;
+      _route?.registerPopEntry(this);
+    }
+    _syncCanPop();
+  }
+
+  @override
   void dispose() {
     _transferSubscription.close();
+    _route?.unregisterPopEntry(this);
+    canPopNotifier.dispose();
     _manageTagsFocusNode.dispose();
     _importFocusNode.dispose();
     super.dispose();
@@ -270,6 +295,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet> {
       _pendingTheme = mode;
       _themeError = null;
     });
+    _syncCanPop();
     try {
       await ref.read(appThemeProvider.notifier).setMode(mode);
     } catch (_) {
@@ -285,8 +311,20 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet> {
           _themeBusy = false;
           _pendingTheme = null;
         });
+        _syncCanPop();
       }
     }
+  }
+
+  @override
+  void onPopInvoked(bool didPop) {}
+
+  @override
+  void onPopInvokedWithResult(bool didPop, Object? result) {}
+
+  void _syncCanPop() {
+    if (!mounted) return;
+    canPopNotifier.value = !_themeBusy && !_transferBusy;
   }
 
   Future<void> _showTags() async {
