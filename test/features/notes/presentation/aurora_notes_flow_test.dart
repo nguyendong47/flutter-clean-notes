@@ -423,6 +423,8 @@ void main() {
       );
       expect(router.routeInformationProvider.value.uri, uriBefore);
 
+      await tester.tap(find.byKey(const Key('more-row-theme')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('theme-mode-dark')));
       await tester.pumpAndSettle();
 
