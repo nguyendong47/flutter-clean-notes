@@ -64,6 +64,14 @@ Replace `emulator-5554` with the intended ID printed by `flutter devices`. Omit
 `-d $deviceId` only when Flutter can select that target without ambiguity. No
 external database service is required.
 
+Android builds use Android Gradle Plugin 8.11.1 and require JDK 17 or newer.
+Keep machine-specific JDK paths out of tracked Gradle properties. Flutter uses
+Android Studio's bundled JDK by default; confirm its selected Java runtime with
+`flutter doctor -v`. If Flutter cannot find a compatible JDK, select one in
+local developer configuration with `flutter config --jdk-dir="<jdk-path>"`.
+For direct Gradle commands, set `JAVA_HOME` locally or choose the Gradle JDK in
+Android Studio instead of editing `android/gradle.properties`.
+
 ## Common commands
 
 | Task | Command |

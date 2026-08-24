@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -96,7 +97,7 @@ GoRouter router(Ref ref) {
         ),
       ),
     ],
-    debugLogDiagnostics: true,
+    debugLogDiagnostics: kDebugMode,
   );
   notificationService
     ..onNotificationTap = (note, _) {
