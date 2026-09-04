@@ -11,6 +11,10 @@ This document is for the next coding agent taking over `flutter-clean-notes`.
 - Product scope: Aurora Glass responsive UI, durable reminders, offline Web
   resources, privacy disclosure, release hardening, and project QA contracts.
 
+Latest local verification after merge: `flutter analyze --no-pub` passed with
+no issues; `flutter test --no-pub --concurrency=1` passed `637/637` after the
+date-picker test was made deterministic.
+
 ## What is already integrated
 
 The candidate contains the reviewed Home, Editor, Search, Library, Reminder,
@@ -45,6 +49,10 @@ and `CLEAN_NOTES_BUNDLETOOL_JAR` to the local toolchain paths first. Run the
 Android smoke test from `integration_test/aurora_smoke_test.dart` on an API 36
 emulator. Store publication still needs real Android/iOS identities,
 credentials, URLs, metadata, and Apple/macOS archive evidence.
+
+The full release build matrix, signing verifier, emulator smoke run, final
+GitNexus re-index/compare, and external store gates were not run in this
+handoff session. Treat them as pending rather than inferred from host tests.
 
 ## Safe integration rules
 
