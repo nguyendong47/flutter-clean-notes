@@ -4,9 +4,10 @@ This document is for the next coding agent taking over `flutter-clean-notes`.
 
 ## Snapshot
 
-- Candidate branch: `feat/aurora-glass-redesign`
-- Candidate commit at handoff creation: `45720a2`
-- Intended integration: fast-forward into `main`; never force-push.
+- Integrated branch: `main`
+- Aurora merge commit: `26c0d97` (fast-forward from `feat/aurora-glass-redesign`)
+- Post-merge test-stability fix: `test/features/notes/presentation/note_metadata_sheet_test.dart`
+- The local `feat/aurora-glass-redesign` branch and linked worktree were removed after integration; never force-push.
 - Product scope: Aurora Glass responsive UI, durable reminders, offline Web
   resources, privacy disclosure, release hardening, and project QA contracts.
 
@@ -60,7 +61,9 @@ candidate. Do not claim hosted CI or store approval without external evidence.
 
 ## Cleanup boundary
 
-After the handoff document and verification evidence are safely committed and
-the candidate is merged, remove only the linked `aurora-glass-redesign`
-worktree and then delete the local feature branch. Do not delete `.claude/skills`,
-`.superpowers`, other worktrees, user stashes, or backup evidence.
+The merge and cleanup are complete. The root still intentionally contains the
+user's dirty `.metadata`, `AGENTS.md`, and `CLAUDE.md`, untracked `.claude/skills`,
+`.superpowers`, and `worktrees.txt`. The pre-merge stash remains as
+`user-root-changes-before-aurora-ff-20260905`; ignored build-artifact originals
+and the feature worktree's protected skills are in
+`H:\\source\\flutter-clean-notes-merge-backup-20260905`.

@@ -493,7 +493,12 @@ void main() {
     );
     final result = ValueNotifier<NoteMetadataValue?>(null);
     addTearDown(result.dispose);
-    await _openSheet(tester, initial: initial, result: result);
+    await _openSheet(
+      tester,
+      initial: initial,
+      result: result,
+      now: () => DateTime(2026, 8, 1, 9),
+    );
 
     await tester.tap(find.byKey(const Key('metadata-reminder-button')));
     await tester.pumpAndSettle();
