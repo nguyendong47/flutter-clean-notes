@@ -157,6 +157,11 @@ jobs:
 
       - name: Verify SDK versions
         run: |
+          # First invocation on a freshly extracted SDK can print one-time
+          # "Building flutter tool..." / "Running pub upgrade..." text to
+          # stdout ahead of the JSON, which breaks ConvertFrom-Json. Warm up
+          # the tool with a throwaway call first so only pure JSON follows.
+          flutter --version | Out-Null
           $flutterVersion = (flutter --version --machine | ConvertFrom-Json).frameworkVersion
           if ($flutterVersion -ne $env:FLUTTER_VERSION) {
             throw "Expected Flutter $env:FLUTTER_VERSION, got $flutterVersion."
