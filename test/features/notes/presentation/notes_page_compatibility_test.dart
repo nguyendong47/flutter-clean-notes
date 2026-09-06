@@ -1,4 +1,6 @@
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_home_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_page.dart';
@@ -8,8 +10,18 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../helpers/in_memory_note_repository.dart';
 import '../../../helpers/note_fixtures.dart';
+import '../../../support/localization_test_wrapper.dart';
 
 void main() {
+  // easy_localization's RootBundleAssetLoader reads translation JSON via
+  // rootBundle.loadString, which flutter's CachingAssetBundle caches by key.
+  // A stale cache entry from an earlier test's (now-disposed) EasyLocalization
+  // instance causes every subsequent wrapWithTestLocalization(...) build in
+  // this file to hang forever awaiting that load (see
+  // aissat/easy_localization#268/#362). Clearing the cache after each test
+  // keeps every load a fresh read.
+  tearDown(() => rootBundle.clear());
+
   testWidgets('delegates the compatibility entry point to the modern home', (
     tester,
   ) async {
@@ -62,9 +74,18 @@ Future<void> _pumpNotesPage(
   required InMemoryNoteRepository repository,
 }) async {
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
-      child: const MaterialApp(home: NotesPage()),
+    wrapWithTestLocalization(
+      ProviderScope(
+        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        child: Builder(
+          builder: (localizationContext) => MaterialApp(
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            home: const NotesPage(),
+          ),
+        ),
+      ),
     ),
   );
   await tester.pumpAndSettle();

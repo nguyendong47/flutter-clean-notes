@@ -136,10 +136,8 @@ class _GlassNoteCardState extends State<GlassNoteCard> {
                       ? Semantics(
                           container: true,
                           liveRegion: true,
-                          label: _tr(
-                            'common.updatingNoteSemantics',
+                          label: 'common.updatingNoteSemantics'.tr(
                             namedArgs: {'title': title},
-                            fallback: 'Updating note $title',
                           ),
                           excludeSemantics: true,
                           child: const SizedBox.square(
@@ -153,10 +151,8 @@ class _GlassNoteCardState extends State<GlassNoteCard> {
                       : SizedBox.square(
                           dimension: 48,
                           child: PopupMenuButton<_NoteAction>(
-                            tooltip: _tr(
-                              'common.moreActionsForSemantics',
+                            tooltip: 'common.moreActionsForSemantics'.tr(
                               namedArgs: {'title': title},
-                              fallback: 'More actions for $title',
                             ),
                             useRootNavigator: true,
                             padding: EdgeInsets.zero,
@@ -300,7 +296,7 @@ class _CardContent extends StatelessWidget {
             if (note.isPinned)
               _Metadata(
                 icon: Icons.push_pin,
-                label: _tr('common.pinned', fallback: 'Pinned'),
+                label: 'common.pinned'.tr(),
                 color: colorScheme.primary,
               ),
             _Metadata(
@@ -395,57 +391,30 @@ String _noteSemanticValue(
 ) {
   final visibleTags = note.tags.take(2).toList(growable: false);
   final hiddenTagCount = note.tags.length - visibleTags.length;
-  final tagsExtra = hiddenTagCount > 0 ? ', $hiddenTagCount more' : '';
   return [
     if (preview.isNotEmpty) preview,
     if (visibleTags.isNotEmpty)
-      _tr(
-        'common.tagsSemantics',
-        namedArgs: {'tags': visibleTags.join(', '), 'extra': tagsExtra},
-        fallback: 'Tags ${visibleTags.join(', ')}$tagsExtra',
+      'common.tagsSemantics'.tr(
+        namedArgs: {
+          'tags': visibleTags.join(', '),
+          'extra': hiddenTagCount > 0 ? ', $hiddenTagCount more' : '',
+        },
       ),
-    if (note.isPinned) _tr('common.pinned', fallback: 'Pinned'),
-    _tr(
-      'common.createdSemantics',
+    if (note.isPinned) 'common.pinned'.tr(),
+    'common.createdSemantics'.tr(
       namedArgs: {'date': dateFormat.format(note.createdAt)},
-      fallback: 'Created ${dateFormat.format(note.createdAt)}',
     ),
     if (note.reminder case final reminder?)
       if (supportsReminderScheduling)
-        _tr(
-          'common.reminderSemantics',
+        'common.reminderSemantics'.tr(
           namedArgs: {'date': reminderFormat.format(reminder)},
-          fallback: 'Reminder ${reminderFormat.format(reminder)}',
         )
       else
-        '${_tr('common.storedReminderSemantics', namedArgs: {'date': reminderFormat.format(reminder)}, fallback: 'Stored reminder date ${reminderFormat.format(reminder)}. ')}Notifications unavailable on this device',
+        '${'common.storedReminderSemantics'.tr(namedArgs: {'date': reminderFormat.format(reminder)})}Notifications unavailable on this device',
   ].join('. ');
 }
 
 String _displayTitle(Note note) {
   final title = note.title.trim();
-  return title.isEmpty
-      ? _tr('common.untitledNote', fallback: 'Untitled note')
-      : title;
-}
-
-/// Resolves [key] through easy_localization's `Localization.instance`
-/// singleton, falling back to [fallback] when the key isn't loaded there.
-///
-/// `.tr()` never throws for a missing ancestor — it reads the global
-/// `Localization.instance` singleton directly (see easy_localization's
-/// `public.dart`) — but several page-level widget trees that embed this
-/// card (router/home/library/search) pump a bare `MaterialApp` in their
-/// tests without ever building an `EasyLocalization` widget, so that
-/// singleton never loads real translations there and `.tr()` would
-/// silently return the raw key instead. Checking `trExists()` first keeps
-/// those already-established test expectations intact while still
-/// resolving real translations everywhere `EasyLocalization` is actually
-/// wired up (the production app, and this widget's own test file).
-String _tr(
-  String key, {
-  Map<String, String>? namedArgs,
-  required String fallback,
-}) {
-  return key.trExists() ? key.tr(namedArgs: namedArgs) : fallback;
+  return title.isEmpty ? 'common.untitledNote'.tr() : title;
 }
