@@ -1,0 +1,10 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "done": "Done",
+    "retry": "Retry",
+    "tryAgain": "Try again",
+    "undo": "Undo",
+    "close": "Close"
+  }
+}
