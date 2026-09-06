@@ -17,7 +17,11 @@
     "reminderSemantics": "Reminder {date}",
     "storedReminderSemantics": "Stored reminder date {date}. ",
     "tagsSemantics": "Tags {tags}{extra}",
-    "untitledNote": "Untitled note"
+    "untitledNote": "Untitled note",
+    "openingNote": "Opening note",
+    "couldNotOpenNote": "Could not open note",
+    "noteNotFound": "Note not found",
+    "notesTitle": "Notes"
   },
   "more": {
     "title": "More",
