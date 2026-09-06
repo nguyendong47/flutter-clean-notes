@@ -79,5 +79,15 @@
     "bulletedList": "Bulleted list",
     "checklist": "Checklist",
     "formattingTools": "Formatting tools"
+  },
+  "metadata": {
+    "cancelTooltip": "Cancel",
+    "newTagLabel": "New tag",
+    "newTagHint": "For example, work",
+    "addTagTooltip": "Add tag",
+    "cancel": "Cancel",
+    "apply": "Apply",
+    "removeTagTooltip": "Remove {tag} tag",
+    "clearReminder": "Clear reminder"
   }
 }

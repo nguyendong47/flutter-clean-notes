@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -116,7 +117,7 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
                       ),
                       IconButton(
                         key: const Key('metadata-close'),
-                        tooltip: 'Cancel',
+                        tooltip: 'metadata.cancelTooltip'.tr(),
                         onPressed: _cancel,
                         constraints: const BoxConstraints(
                           minWidth: 48,
@@ -154,12 +155,12 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
                     enabled: true,
                     onSubmitted: _addTag,
                     decoration: InputDecoration(
-                      labelText: 'New tag',
-                      hintText: 'For example, work',
+                      labelText: 'metadata.newTagLabel'.tr(),
+                      hintText: 'metadata.newTagHint'.tr(),
                       errorText: _tagError,
                       suffixIcon: IconButton(
                         key: const Key('metadata-add-tag'),
-                        tooltip: 'Add tag',
+                        tooltip: 'metadata.addTagTooltip'.tr(),
                         onPressed: () => _addTag(_tagController.text),
                         constraints: const BoxConstraints(
                           minWidth: 48,
@@ -268,7 +269,7 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
                         child: TextButton(
                           key: const Key('metadata-cancel'),
                           onPressed: _cancel,
-                          child: const Text('Cancel'),
+                          child: Text('metadata.cancel'.tr()),
                         ),
                       ),
                       ConstrainedBox(
@@ -276,7 +277,7 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
                         child: FilledButton(
                           key: const Key('metadata-apply'),
                           onPressed: _apply,
-                          child: const Text('Apply'),
+                          child: Text('metadata.apply'.tr()),
                         ),
                       ),
                     ],
@@ -356,7 +357,7 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
             ),
             IconButton(
               key: ValueKey('metadata-remove-tag-$tag'),
-              tooltip: 'Remove $tag tag',
+              tooltip: 'metadata.removeTagTooltip'.tr(namedArgs: {'tag': tag}),
               onPressed: () => setState(() => _tags.remove(tag)),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               icon: const Icon(Icons.close_rounded, size: 18),
@@ -440,7 +441,7 @@ class _NoteMetadataSheetState extends State<NoteMetadataSheet> {
       key: const Key('metadata-clear-reminder'),
       onPressed: _clearReminder,
       icon: const Icon(Icons.alarm_off_rounded),
-      label: const Text('Clear reminder'),
+      label: Text('metadata.clearReminder'.tr()),
     ),
   );
 
