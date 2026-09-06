@@ -89,5 +89,13 @@
     "apply": "Apply",
     "removeTagTooltip": "Remove {tag} tag",
     "clearReminder": "Clear reminder"
+  },
+  "filter": {
+    "closeTooltip": "Close filters",
+    "all": "All",
+    "clearFilters": "Clear filters",
+    "done": "Done",
+    "filterByTagSemantics": "Filter by tag {tag}",
+    "sortBySemantics": "Sort by {label}"
   }
 }
