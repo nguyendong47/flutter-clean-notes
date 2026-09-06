@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:characters/characters.dart' as chars;
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -34,8 +35,20 @@ class GlassNoteCard extends StatefulWidget {
 }
 
 class _GlassNoteCardState extends State<GlassNoteCard> {
-  static final _dateFormat = DateFormat('MMM d, yyyy');
-  static final _reminderFormat = DateFormat('MMM d, h:mm a');
+  // `EasyLocalization.of(context)` is null in the several page-level widget
+  // trees (router/home/library/search) that embed this card without an
+  // `EasyLocalization` ancestor in their test harnesses. `context.locale`
+  // force-unwraps that lookup and crashes in exactly those trees, so read it
+  // defensively and let `DateFormat` fall back to the platform default
+  // locale when no `EasyLocalization` ancestor is present.
+  DateFormat get _dateFormat => DateFormat(
+    'MMM d, yyyy',
+    EasyLocalization.of(context)?.locale.toString(),
+  );
+  DateFormat get _reminderFormat => DateFormat(
+    'MMM d, h:mm a',
+    EasyLocalization.of(context)?.locale.toString(),
+  );
   static const _radius = BorderRadius.all(Radius.circular(20));
 
   bool _busy = false;
@@ -123,7 +136,11 @@ class _GlassNoteCardState extends State<GlassNoteCard> {
                       ? Semantics(
                           container: true,
                           liveRegion: true,
-                          label: 'Updating note $title',
+                          label: _tr(
+                            'common.updatingNoteSemantics',
+                            namedArgs: {'title': title},
+                            fallback: 'Updating note $title',
+                          ),
                           excludeSemantics: true,
                           child: const SizedBox.square(
                             dimension: 48,
@@ -136,7 +153,11 @@ class _GlassNoteCardState extends State<GlassNoteCard> {
                       : SizedBox.square(
                           dimension: 48,
                           child: PopupMenuButton<_NoteAction>(
-                            tooltip: 'More actions for $title',
+                            tooltip: _tr(
+                              'common.moreActionsForSemantics',
+                              namedArgs: {'title': title},
+                              fallback: 'More actions for $title',
+                            ),
                             useRootNavigator: true,
                             padding: EdgeInsets.zero,
                             icon: const Icon(Icons.more_horiz),
@@ -279,7 +300,7 @@ class _CardContent extends StatelessWidget {
             if (note.isPinned)
               _Metadata(
                 icon: Icons.push_pin,
-                label: 'Pinned',
+                label: _tr('common.pinned', fallback: 'Pinned'),
                 color: colorScheme.primary,
               ),
             _Metadata(
@@ -374,23 +395,57 @@ String _noteSemanticValue(
 ) {
   final visibleTags = note.tags.take(2).toList(growable: false);
   final hiddenTagCount = note.tags.length - visibleTags.length;
+  final tagsExtra = hiddenTagCount > 0 ? ', $hiddenTagCount more' : '';
   return [
     if (preview.isNotEmpty) preview,
     if (visibleTags.isNotEmpty)
-      'Tags ${visibleTags.join(', ')}'
-          '${hiddenTagCount > 0 ? ', $hiddenTagCount more' : ''}',
-    if (note.isPinned) 'Pinned',
-    'Created ${dateFormat.format(note.createdAt)}',
+      _tr(
+        'common.tagsSemantics',
+        namedArgs: {'tags': visibleTags.join(', '), 'extra': tagsExtra},
+        fallback: 'Tags ${visibleTags.join(', ')}$tagsExtra',
+      ),
+    if (note.isPinned) _tr('common.pinned', fallback: 'Pinned'),
+    _tr(
+      'common.createdSemantics',
+      namedArgs: {'date': dateFormat.format(note.createdAt)},
+      fallback: 'Created ${dateFormat.format(note.createdAt)}',
+    ),
     if (note.reminder case final reminder?)
       if (supportsReminderScheduling)
-        'Reminder ${reminderFormat.format(reminder)}'
+        _tr(
+          'common.reminderSemantics',
+          namedArgs: {'date': reminderFormat.format(reminder)},
+          fallback: 'Reminder ${reminderFormat.format(reminder)}',
+        )
       else
-        'Stored reminder date ${reminderFormat.format(reminder)}. '
-            'Notifications unavailable on this device',
+        '${_tr('common.storedReminderSemantics', namedArgs: {'date': reminderFormat.format(reminder)}, fallback: 'Stored reminder date ${reminderFormat.format(reminder)}. ')}Notifications unavailable on this device',
   ].join('. ');
 }
 
 String _displayTitle(Note note) {
   final title = note.title.trim();
-  return title.isEmpty ? 'Untitled note' : title;
+  return title.isEmpty
+      ? _tr('common.untitledNote', fallback: 'Untitled note')
+      : title;
+}
+
+/// Resolves [key] through easy_localization's `Localization.instance`
+/// singleton, falling back to [fallback] when the key isn't loaded there.
+///
+/// `.tr()` never throws for a missing ancestor — it reads the global
+/// `Localization.instance` singleton directly (see easy_localization's
+/// `public.dart`) — but several page-level widget trees that embed this
+/// card (router/home/library/search) pump a bare `MaterialApp` in their
+/// tests without ever building an `EasyLocalization` widget, so that
+/// singleton never loads real translations there and `.tr()` would
+/// silently return the raw key instead. Checking `trExists()` first keeps
+/// those already-established test expectations intact while still
+/// resolving real translations everywhere `EasyLocalization` is actually
+/// wired up (the production app, and this widget's own test file).
+String _tr(
+  String key, {
+  Map<String, String>? namedArgs,
+  required String fallback,
+}) {
+  return key.trExists() ? key.tr(namedArgs: namedArgs) : fallback;
 }

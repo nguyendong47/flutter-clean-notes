@@ -1,12 +1,25 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/glass_note_card.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/localization_test_wrapper.dart';
+
 void main() {
+  // easy_localization's RootBundleAssetLoader reads translation JSON via
+  // rootBundle.loadString, which flutter's CachingAssetBundle caches by key.
+  // A stale cache entry from an earlier test's (now-disposed) EasyLocalization
+  // instance causes every subsequent wrapWithTestLocalization(...) build in
+  // this file to hang forever awaiting that load (see
+  // aissat/easy_localization#268/#362). Clearing the cache after each test
+  // keeps every load a fresh read.
+  tearDown(() => rootBundle.clear());
+
   testWidgets('exposes exact open semantics and useful action tooltips', (
     tester,
   ) async {
@@ -220,26 +233,33 @@ Future<void> _pumpCard(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   await tester.pumpWidget(
-    MaterialApp(
-      theme: theme ?? AuroraTheme.light(),
-      home: MediaQuery(
-        data: MediaQueryData(
-          size: const Size(360, 900),
-          textScaler: textScaler,
-        ),
-        child: Scaffold(
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: GlassNoteCard(
-              key: const Key('tested-glass-note-card'),
-              note: note,
-              supportsReminderScheduling: supportsReminderScheduling,
-              onOpen: onOpen ?? () {},
-              onTogglePin: onTogglePin ?? _complete,
-              onArchive: onArchive ?? _complete,
-              onTrash: onTrash ?? _complete,
-              onRestore: onRestore ?? _complete,
-              onDelete: onDelete ?? _complete,
+    wrapWithTestLocalization(
+      Builder(
+        builder: (localizationContext) => MaterialApp(
+          theme: theme ?? AuroraTheme.light(),
+          localizationsDelegates: localizationContext.localizationDelegates,
+          supportedLocales: localizationContext.supportedLocales,
+          locale: localizationContext.locale,
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: const Size(360, 900),
+              textScaler: textScaler,
+            ),
+            child: Scaffold(
+              body: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: GlassNoteCard(
+                  key: const Key('tested-glass-note-card'),
+                  note: note,
+                  supportsReminderScheduling: supportsReminderScheduling,
+                  onOpen: onOpen ?? () {},
+                  onTogglePin: onTogglePin ?? _complete,
+                  onArchive: onArchive ?? _complete,
+                  onTrash: onTrash ?? _complete,
+                  onRestore: onRestore ?? _complete,
+                  onDelete: onDelete ?? _complete,
+                ),
+              ),
             ),
           ),
         ),
@@ -258,31 +278,38 @@ Future<void> _pumpCards(WidgetTester tester, List<Note> notes) async {
   addTearDown(tester.view.resetDevicePixelRatio);
 
   await tester.pumpWidget(
-    MaterialApp(
-      theme: AuroraTheme.light(),
-      home: MediaQuery(
-        data: const MediaQueryData(size: Size(360, 900)),
-        child: Scaffold(
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                for (final note in notes)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: GlassNoteCard(
-                      key: ValueKey('semantic-note-${note.id}'),
-                      note: note,
-                      supportsReminderScheduling: true,
-                      onOpen: () {},
-                      onTogglePin: _complete,
-                      onArchive: _complete,
-                      onTrash: _complete,
-                      onRestore: _complete,
-                      onDelete: _complete,
-                    ),
-                  ),
-              ],
+    wrapWithTestLocalization(
+      Builder(
+        builder: (localizationContext) => MaterialApp(
+          theme: AuroraTheme.light(),
+          localizationsDelegates: localizationContext.localizationDelegates,
+          supportedLocales: localizationContext.supportedLocales,
+          locale: localizationContext.locale,
+          home: MediaQuery(
+            data: const MediaQueryData(size: Size(360, 900)),
+            child: Scaffold(
+              body: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    for (final note in notes)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: GlassNoteCard(
+                          key: ValueKey('semantic-note-${note.id}'),
+                          note: note,
+                          supportsReminderScheduling: true,
+                          onOpen: () {},
+                          onTogglePin: _complete,
+                          onArchive: _complete,
+                          onTrash: _complete,
+                          onRestore: _complete,
+                          onDelete: _complete,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

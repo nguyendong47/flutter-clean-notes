@@ -9,7 +9,15 @@
     "loadingNotes": "Loading notes",
     "createNote": "Create note",
     "moreActions": "More actions",
-    "createNewNote": "Create new note"
+    "createNewNote": "Create new note",
+    "pinned": "Pinned",
+    "updatingNoteSemantics": "Updating note {title}",
+    "moreActionsForSemantics": "More actions for {title}",
+    "createdSemantics": "Created {date}",
+    "reminderSemantics": "Reminder {date}",
+    "storedReminderSemantics": "Stored reminder date {date}. ",
+    "tagsSemantics": "Tags {tags}{extra}",
+    "untitledNote": "Untitled note"
   },
   "more": {
     "title": "More",
