@@ -10,7 +10,14 @@ void main() {
   ) async {
     await pumpLocalized(
       tester,
-      Builder(builder: (context) => Text('common.cancel'.tr())),
+      Builder(
+        builder: (context) => MaterialApp(
+          localizationsDelegates: context.localizationDelegates,
+          supportedLocales: context.supportedLocales,
+          locale: context.locale,
+          home: Builder(builder: (context) => Text('common.cancel'.tr())),
+        ),
+      ),
     );
 
     expect(find.text('Cancel'), findsOneWidget);
@@ -19,7 +26,16 @@ void main() {
   testWidgets('pumpLocalized honors the requested locale', (tester) async {
     await pumpLocalized(
       tester,
-      Builder(builder: (context) => Text(context.locale.languageCode)),
+      Builder(
+        builder: (context) => MaterialApp(
+          localizationsDelegates: context.localizationDelegates,
+          supportedLocales: context.supportedLocales,
+          locale: context.locale,
+          home: Builder(
+            builder: (context) => Text(context.locale.languageCode),
+          ),
+        ),
+      ),
       locale: const Locale('vi'),
     );
 
