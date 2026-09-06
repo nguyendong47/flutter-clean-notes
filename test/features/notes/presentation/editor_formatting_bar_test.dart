@@ -1,10 +1,21 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/editor_formatting_bar.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/localization_test_wrapper.dart';
 
 void main() {
+  // easy_localization's RootBundleAssetLoader reads translation JSON via
+  // rootBundle.loadString, which flutter's CachingAssetBundle caches by key.
+  // A stale cache entry from an earlier test's (now-disposed) EasyLocalization
+  // instance causes every subsequent wrapWithTestLocalization(...) build in
+  // this file to hang forever awaiting that load (see
+  // aissat/easy_localization#268/#362). Clearing the cache after each test
+  // keeps every load a fresh read.
+  tearDown(() => rootBundle.clear());
+
   const wrapperCases =
       <({String key, String tooltip, String before, String after})>[
         (key: 'bold', tooltip: 'Bold', before: '**', after: '**'),
@@ -240,24 +251,30 @@ Future<void> _pumpBar(
   TextEditingController controller, {
   double width = 375,
   TextScaler textScaler = TextScaler.noScaling,
-}) {
-  return tester.pumpWidget(
+}) async {
+  await tester.pumpWidget(
     wrapWithTestLocalization(
-      MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(textScaler: textScaler),
-          child: child!,
-        ),
-        home: Scaffold(
-          body: Align(
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: width,
-              child: EditorFormattingBar(controller: controller),
+      Builder(
+        builder: (localizationContext) => MaterialApp(
+          localizationsDelegates: localizationContext.localizationDelegates,
+          supportedLocales: localizationContext.supportedLocales,
+          locale: localizationContext.locale,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: width,
+                child: EditorFormattingBar(controller: controller),
+              ),
             ),
           ),
         ),
       ),
     ),
   );
+  await tester.pumpAndSettle();
 }
