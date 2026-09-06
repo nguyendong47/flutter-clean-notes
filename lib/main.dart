@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:flutter_clean_notes/app/app_providers.dart';
@@ -25,6 +27,9 @@ Future<void> bootstrapApplication({
   void Function(Widget app)? runApplication,
 }) async {
   WidgetsFlutterBinding.ensureInitialized();
+  await EasyLocalization.ensureInitialized();
+  await initializeDateFormatting('vi');
+  await initializeDateFormatting('en');
   final databaseInitializer = initializeDatabase;
   if (databaseInitializer == null) {
     _initializeDatabase();
@@ -68,7 +73,16 @@ Future<void> bootstrapApplication({
     await notifications.init();
     await container.read(appThemeProvider.future);
     (runApplication ?? runApp)(
-      UncontrolledProviderScope(container: container, child: const MyApp()),
+      EasyLocalization(
+        supportedLocales: const [Locale('en'), Locale('vi')],
+        path: 'assets/translations',
+        fallbackLocale: const Locale('en'),
+        useOnlyLangCode: true,
+        child: UncontrolledProviderScope(
+          container: container,
+          child: const MyApp(),
+        ),
+      ),
     );
     handedOff = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -156,6 +170,9 @@ class MyApp extends ConsumerWidget {
       theme: AuroraTheme.light(),
       darkTheme: AuroraTheme.dark(),
       themeMode: themeMode,
+      localizationsDelegates: context.localizationDelegates,
+      supportedLocales: context.supportedLocales,
+      locale: context.locale,
     );
   }
 }
