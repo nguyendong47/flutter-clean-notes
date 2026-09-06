@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/editor_formatting_bar.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/localization_test_wrapper.dart';
+
 void main() {
   const wrapperCases =
       <({String key, String tooltip, String before, String after})>[
@@ -240,17 +242,19 @@ Future<void> _pumpBar(
   TextScaler textScaler = TextScaler.noScaling,
 }) {
   return tester.pumpWidget(
-    MaterialApp(
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(textScaler: textScaler),
-        child: child!,
-      ),
-      home: Scaffold(
-        body: Align(
-          alignment: Alignment.topLeft,
-          child: SizedBox(
-            width: width,
-            child: EditorFormattingBar(controller: controller),
+    wrapWithTestLocalization(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: width,
+              child: EditorFormattingBar(controller: controller),
+            ),
           ),
         ),
       ),

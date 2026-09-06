@@ -67,5 +67,17 @@
     "chipLocalFirst": "Local-first",
     "chipNoAccount": "No account",
     "chipYouChooseTransfers": "You choose transfers"
+  },
+  "editor": {
+    "bold": "Bold",
+    "italic": "Italic",
+    "strikethrough": "Strikethrough",
+    "inlineCode": "Inline code",
+    "quote": "Quote",
+    "heading1": "Heading 1",
+    "heading2": "Heading 2",
+    "bulletedList": "Bulleted list",
+    "checklist": "Checklist",
+    "formattingTools": "Formatting tools"
   }
 }

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 class EditorFormattingBar extends StatelessWidget {
@@ -15,57 +16,57 @@ class EditorFormattingBar extends StatelessWidget {
     final controls = <Widget>[
       _iconControl(
         keyName: 'bold',
-        label: 'Bold',
+        label: 'editor.bold'.tr(),
         icon: Icons.format_bold_rounded,
         onPressed: () => _applyFormat('**', '**'),
       ),
       _iconControl(
         keyName: 'italic',
-        label: 'Italic',
+        label: 'editor.italic'.tr(),
         icon: Icons.format_italic_rounded,
         onPressed: () => _applyFormat('*', '*'),
       ),
       _iconControl(
         keyName: 'strike',
-        label: 'Strikethrough',
+        label: 'editor.strikethrough'.tr(),
         icon: Icons.format_strikethrough_rounded,
         onPressed: () => _applyFormat('~~', '~~'),
       ),
       _iconControl(
         keyName: 'code',
-        label: 'Inline code',
+        label: 'editor.inlineCode'.tr(),
         icon: Icons.code_rounded,
         onPressed: () => _applyFormat('`', '`'),
       ),
       _iconControl(
         keyName: 'quote',
-        label: 'Quote',
+        label: 'editor.quote'.tr(),
         icon: Icons.format_quote_rounded,
         onPressed: () => _toggleLinePrefix('> '),
       ),
       _textControl(
         keyName: 'h1',
-        label: 'Heading 1',
+        label: 'editor.heading1'.tr(),
         text: 'H1',
         highScaleIcon: Icons.looks_one_rounded,
         onPressed: () => _toggleLinePrefix('# '),
       ),
       _textControl(
         keyName: 'h2',
-        label: 'Heading 2',
+        label: 'editor.heading2'.tr(),
         text: 'H2',
         highScaleIcon: Icons.looks_two_rounded,
         onPressed: () => _toggleLinePrefix('## '),
       ),
       _iconControl(
         keyName: 'bullet',
-        label: 'Bulleted list',
+        label: 'editor.bulletedList'.tr(),
         icon: Icons.format_list_bulleted_rounded,
         onPressed: () => _toggleLinePrefix('- '),
       ),
       _iconControl(
         keyName: 'checklist',
-        label: 'Checklist',
+        label: 'editor.checklist'.tr(),
         icon: Icons.check_box_outlined,
         onPressed: () => _toggleLinePrefix('- [ ] '),
       ),
@@ -73,7 +74,7 @@ class EditorFormattingBar extends StatelessWidget {
 
     return Semantics(
       container: true,
-      label: 'Formatting tools',
+      label: 'editor.formattingTools'.tr(),
       child: SingleChildScrollView(
         key: const Key('editor-formatting-scroll'),
         scrollDirection: Axis.horizontal,
