@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' show Tristate;
 
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -529,11 +530,18 @@ Future<_AppHarness> _pumpApp(
   });
   if (initialLocation != '/') router.go(initialLocation);
   await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp.router(
-        routerConfig: router,
-        debugShowCheckedModeBanner: false,
+    wrapWithTestLocalization(
+      UncontrolledProviderScope(
+        container: container,
+        child: Builder(
+          builder: (localizationContext) => MaterialApp.router(
+            routerConfig: router,
+            debugShowCheckedModeBanner: false,
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+          ),
+        ),
       ),
     ),
   );
