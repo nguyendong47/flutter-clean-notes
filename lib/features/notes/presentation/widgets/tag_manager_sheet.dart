@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -113,7 +114,7 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet>
                               minWidth: 48,
                               minHeight: 48,
                             ),
-                            tooltip: 'Close Manage tags',
+                            tooltip: 'tags.closeTooltip'.tr(),
                             onPressed: busy
                                 ? null
                                 : () => Navigator.of(context).maybePop(),
@@ -238,17 +239,17 @@ class _TagLoading extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       liveRegion: true,
-      child: const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            SizedBox.square(
+            const SizedBox.square(
               dimension: 20,
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
-            SizedBox(width: 12),
-            Expanded(child: Text('Loading tags…')),
+            const SizedBox(width: 12),
+            Expanded(child: Text('tags.loading'.tr())),
           ],
         ),
       ),
@@ -333,7 +334,7 @@ class _TagErrorPanel extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.refresh),
-                  label: const Text('Retry'),
+                  label: Text('tags.retry'.tr()),
                 ),
               ),
             ),
@@ -401,7 +402,9 @@ class _TagRow extends StatelessWidget {
                 Semantics(
                   button: true,
                   enabled: enabled,
-                  label: 'Remove ${usage.tag} tag',
+                  label: 'tags.removeTagSemantics'.tr(
+                    namedArgs: {'tag': usage.tag},
+                  ),
                   onTap: enabled ? onRemove : null,
                   excludeSemantics: true,
                   child: IconButton(
@@ -409,7 +412,9 @@ class _TagRow extends StatelessWidget {
                       minWidth: 48,
                       minHeight: 48,
                     ),
-                    tooltip: 'Remove ${usage.tag} tag',
+                    tooltip: 'tags.removeTagTooltip'.tr(
+                      namedArgs: {'tag': usage.tag},
+                    ),
                     onPressed: enabled ? onRemove : null,
                     color: colorScheme.error,
                     icon: const Icon(Icons.delete_outline),
@@ -514,18 +519,18 @@ class _RemoveTagDialogState extends State<_RemoveTagDialog>
         foregroundColor: colorScheme.onError,
       ),
       child: _busy
-          ? const Row(
+          ? Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox.square(
+                const SizedBox.square(
                   dimension: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-                SizedBox(width: 8),
-                Text('Removing…'),
+                const SizedBox(width: 8),
+                Text('tags.removing'.tr()),
               ],
             )
-          : const Text('Remove'),
+          : Text('tags.remove'.tr()),
     );
     return PopScope(
       canPop: !_busy,
@@ -556,7 +561,7 @@ class _RemoveTagDialogState extends State<_RemoveTagDialog>
         actions: [
           TextButton(
             onPressed: _busy ? null : () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text('tags.cancel'.tr()),
           ),
           ConstrainedBox(
             constraints: const BoxConstraints(minWidth: 120, minHeight: 48),
@@ -568,7 +573,7 @@ class _RemoveTagDialogState extends State<_RemoveTagDialog>
                     liveRegion: true,
                     button: true,
                     enabled: false,
-                    label: 'Removing tag',
+                    label: 'tags.removingTagSemantics'.tr(),
                     child: removeButton,
                   )
                 : removeButton,

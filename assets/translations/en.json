@@ -106,5 +106,16 @@
     "sections": "Library sections",
     "archived": "Archived",
     "trash": "Trash"
+  },
+  "tags": {
+    "closeTooltip": "Close Manage tags",
+    "loading": "Loading tags…",
+    "retry": "Retry",
+    "removeTagSemantics": "Remove {tag} tag",
+    "removeTagTooltip": "Remove {tag} tag",
+    "removing": "Removing…",
+    "remove": "Remove",
+    "cancel": "Cancel",
+    "removingTagSemantics": "Removing tag"
   }
 }
