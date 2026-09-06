@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -221,9 +222,9 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
         ScaffoldMessenger.of(context)
           ..removeCurrentSnackBar()
           ..showSnackBar(
-            const SnackBar(
+            SnackBar(
               behavior: SnackBarBehavior.floating,
-              content: Text('Could not update library. Try again.'),
+              content: Text('library.updateError'.tr()),
             ),
           );
       }
@@ -241,7 +242,7 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
           behavior: SnackBarBehavior.floating,
           content: Text(message),
           action: SnackBarAction(
-            label: 'Undo',
+            label: 'library.undo'.tr(),
             onPressed: () => unawaited(_runMutation(inverse)),
           ),
         ),
@@ -309,7 +310,7 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
             ),
           ),
           action: SnackBarAction(
-            label: 'Retry',
+            label: 'library.retry'.tr(),
             onPressed: () => unawaited(_retryReminderCancellation(noteId)),
           ),
         ),
@@ -329,7 +330,7 @@ class _NotesLibraryPageState extends ConsumerState<NotesLibraryPage> {
             behavior: SnackBarBehavior.floating,
             content: Semantics(
               liveRegion: true,
-              child: const Text('Reminder cancelled.'),
+              child: Text('library.reminderCancelled'.tr()),
             ),
           ),
         );
@@ -434,12 +435,14 @@ class _DeleteForeverDialogState extends State<_DeleteForeverDialog>
       canPop: !_busy,
       child: AlertDialog(
         scrollable: true,
-        title: Text('Delete “$title” forever?'),
+        title: Text(
+          'library.deleteForeverTitle'.tr(namedArgs: {'title': title}),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('This action cannot be undone.'),
+            Text('library.deleteForeverBody'.tr()),
             if (_failed) ...[
               const SizedBox(height: 12),
               Semantics(
@@ -455,7 +458,7 @@ class _DeleteForeverDialogState extends State<_DeleteForeverDialog>
         actions: [
           TextButton(
             onPressed: _busy ? null : () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text('library.cancel'.tr()),
           ),
           ConstrainedBox(
             constraints: const BoxConstraints(minWidth: 148, minHeight: 48),
@@ -468,20 +471,22 @@ class _DeleteForeverDialogState extends State<_DeleteForeverDialog>
               child: _busy
                   ? Semantics(
                       liveRegion: true,
-                      label: 'Deleting $title',
-                      child: const Row(
+                      label: 'library.deletingSemantics'.tr(
+                        namedArgs: {'title': title},
+                      ),
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          SizedBox.square(
+                          const SizedBox.square(
                             dimension: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           ),
-                          SizedBox(width: 10),
-                          Text('Deleting…'),
+                          const SizedBox(width: 10),
+                          Text('library.deleting'.tr()),
                         ],
                       ),
                     )
-                  : const Text('Delete forever'),
+                  : Text('library.deleteForever'.tr()),
             ),
           ),
         ],
@@ -502,13 +507,13 @@ class _LibraryEmptyState extends StatelessWidget {
     final content = switch (section) {
       LibrarySection.archived => (
         icon: Icons.archive_outlined,
-        title: 'No archived notes',
+        title: 'library.noArchivedNotes'.tr(),
         body: 'Notes you archive will appear here.',
         action: 'Browse notes',
       ),
       LibrarySection.trash => (
         icon: Icons.delete_outline,
-        title: 'Trash is empty',
+        title: 'library.trashEmpty'.tr(),
         body:
             'Deleted notes stay here until you restore or delete them forever.',
         action: 'Back to notes',
@@ -620,7 +625,7 @@ class _CachedErrorNotice extends StatelessWidget {
                   foregroundColor: colorScheme.onErrorContainer,
                 ),
                 icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
+                label: Text('library.retry'.tr()),
               ),
             ),
           ],

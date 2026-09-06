@@ -117,7 +117,19 @@
   "library": {
     "sections": "Library sections",
     "archived": "Archived",
-    "trash": "Trash"
+    "trash": "Trash",
+    "updateError": "Could not update library. Try again.",
+    "undo": "Undo",
+    "retry": "Retry",
+    "reminderCancelled": "Reminder cancelled.",
+    "deleteForeverTitle": "Delete “{title}” forever?",
+    "deleteForeverBody": "This action cannot be undone.",
+    "cancel": "Cancel",
+    "deletingSemantics": "Deleting {title}",
+    "deleting": "Deleting…",
+    "deleteForever": "Delete forever",
+    "noArchivedNotes": "No archived notes",
+    "trashEmpty": "Trash is empty"
   },
   "tags": {
     "closeTooltip": "Close Manage tags",
