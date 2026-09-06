@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -130,20 +131,20 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _SheetHeader(
-                        title: 'More',
+                        title: 'more.title'.tr(),
                         closeEnabled: !busy,
                         privacyEnabled: !busy,
                         onPrivacy: () => unawaited(_openPrivacy()),
                         onClose: () => Navigator.of(context).maybePop(),
                       ),
                       const SizedBox(height: 16),
-                      const _SectionLabel('Appearance'),
+                      _SectionLabel('more.sectionAppearance'.tr()),
                       const SizedBox(height: 8),
                       _ActionRow(
                         key: const Key('more-row-theme'),
                         icon: Icons.palette_outlined,
-                        label: 'Theme',
-                        description: _themeLabel(selectedTheme),
+                        label: 'more.themeRowLabel'.tr(),
+                        description: _themeLabel(context, selectedTheme),
                         expanded: _themeChoicesVisible,
                         enabled: !busy,
                         trailing: Icon(
@@ -162,8 +163,8 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                         _ThemeChoiceRow(
                           key: const Key('theme-mode-system'),
                           mode: ThemeMode.system,
-                          label: 'System',
-                          description: 'Match this device',
+                          label: 'more.themeSystem'.tr(),
+                          description: 'more.themeSystemDescription'.tr(),
                           selected: selectedTheme == ThemeMode.system,
                           loading:
                               _themeBusy && _pendingTheme == ThemeMode.system,
@@ -174,8 +175,8 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                         _ThemeChoiceRow(
                           key: const Key('theme-mode-light'),
                           mode: ThemeMode.light,
-                          label: 'Light',
-                          description: 'Always use light appearance',
+                          label: 'more.themeLight'.tr(),
+                          description: 'more.themeLightDescription'.tr(),
                           selected: selectedTheme == ThemeMode.light,
                           loading:
                               _themeBusy && _pendingTheme == ThemeMode.light,
@@ -186,8 +187,8 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                         _ThemeChoiceRow(
                           key: const Key('theme-mode-dark'),
                           mode: ThemeMode.dark,
-                          label: 'Dark',
-                          description: 'Always use dark appearance',
+                          label: 'more.themeDark'.tr(),
+                          description: 'more.themeDarkDescription'.tr(),
                           selected: selectedTheme == ThemeMode.dark,
                           loading:
                               _themeBusy && _pendingTheme == ThemeMode.dark,
@@ -208,26 +209,26 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                         ),
                       ],
                       const SizedBox(height: 24),
-                      const _SectionLabel('Organization'),
+                      _SectionLabel('more.sectionOrganization'.tr()),
                       const SizedBox(height: 8),
                       _ActionRow(
                         key: const Key('more-row-manage-tags'),
                         focusNode: _manageTagsFocusNode,
                         icon: Icons.sell_outlined,
-                        label: 'Manage tags',
-                        description: 'Review usage and remove tags everywhere',
+                        label: 'more.manageTags'.tr(),
+                        description: 'more.manageTagsDescription'.tr(),
                         enabled: !busy,
                         onPressed: (_) => _showTags(),
                       ),
                       const SizedBox(height: 24),
-                      const _SectionLabel('Transfer'),
+                      _SectionLabel('more.sectionTransfer'.tr()),
                       const SizedBox(height: 8),
                       _TransferRow(
                         key: const Key('more-row-export-text'),
                         operation: NotesTransferOperation.exportText,
                         icon: Icons.ios_share_outlined,
-                        label: 'Export text',
-                        description: 'Export Active and Archive, not Trash',
+                        label: 'more.exportText'.tr(),
+                        description: 'more.exportTextDescription'.tr(),
                         state: transferState,
                         activeOperation: transferNotifier.operation,
                         enabled: !busy,
@@ -240,8 +241,8 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                         key: const Key('more-row-backup-json'),
                         operation: NotesTransferOperation.backupJson,
                         icon: Icons.data_object_outlined,
-                        label: 'Backup JSON',
-                        description: 'Includes Active, Archive, and Trash',
+                        label: 'more.backupJson'.tr(),
+                        description: 'more.backupJsonDescription'.tr(),
                         state: transferState,
                         activeOperation: transferNotifier.operation,
                         enabled: !busy,
@@ -254,8 +255,8 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                         key: const Key('more-row-export-markdown'),
                         operation: NotesTransferOperation.exportMarkdown,
                         icon: Icons.text_snippet_outlined,
-                        label: 'Export Markdown',
-                        description: 'Export Active and Archive, not Trash',
+                        label: 'more.exportMarkdown'.tr(),
+                        description: 'more.exportMarkdownDescription'.tr(),
                         state: transferState,
                         activeOperation: transferNotifier.operation,
                         enabled: !busy,
@@ -269,9 +270,8 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                         focusNode: _importFocusNode,
                         operation: NotesTransferOperation.importBackup,
                         icon: Icons.file_open_outlined,
-                        label: 'Import backup',
-                        description:
-                            'Append copies as Active; reminders are cleared',
+                        label: 'more.importBackup'.tr(),
+                        description: 'more.importBackupDescription'.tr(),
                         state: transferState,
                         activeOperation: transferNotifier.operation,
                         enabled: !busy,
@@ -302,7 +302,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
     } catch (_) {
       if (mounted) {
         setState(() {
-          _themeError = 'Could not save theme preference. Try again.';
+          _themeError = 'more.themeSaveError'.tr();
         });
       }
     } finally {
@@ -388,8 +388,8 @@ class _SheetHeader extends StatelessWidget {
           key: const Key('more-privacy-button'),
           button: true,
           enabled: privacyEnabled,
-          label: 'Privacy',
-          hint: 'How Clean Notes handles data',
+          label: 'more.privacy'.tr(),
+          hint: 'more.privacyHint'.tr(),
           onTap: privacyEnabled ? onPrivacy : null,
           excludeSemantics: true,
           child: TextButton.icon(
@@ -399,13 +399,13 @@ class _SheetHeader extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10),
             ),
             icon: const Icon(Icons.privacy_tip_outlined, size: 20),
-            label: const Text('Privacy'),
+            label: Text('more.privacy'.tr()),
           ),
         ),
         const SizedBox(width: 4),
         IconButton(
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-          tooltip: 'Close $title',
+          tooltip: 'more.closeTooltip'.tr(namedArgs: {'title': title}),
           onPressed: closeEnabled ? onClose : null,
           icon: const Icon(Icons.close),
         ),
@@ -457,7 +457,7 @@ class _ThemeChoiceRow extends StatelessWidget {
       icon: selected ? Icons.radio_button_checked : Icons.radio_button_off,
       label: label,
       description: description,
-      status: loading ? 'Saving theme preference…' : null,
+      status: loading ? 'more.themeSaving'.tr() : null,
       selected: selected,
       enabled: enabled,
       loading: loading,
@@ -497,13 +497,15 @@ class _TransferRow extends StatelessWidget {
     final active = activeOperation == operation;
     final loading = active && state.isLoading;
     final error = active && state.hasError
-        ? _transferError(operation, state.error)
+        ? _transferError(context, operation, state.error)
         : null;
     final outcome = state.value;
     final success = outcome?.operation == operation
-        ? _transferSuccess(outcome!)
+        ? _transferSuccess(context, outcome!)
         : null;
-    final status = loading ? _transferProgress(operation) : error ?? success;
+    final status = loading
+        ? _transferProgress(context, operation)
+        : error ?? success;
     return _ActionRow(
       focusNode: focusNode,
       icon: icon,
@@ -706,61 +708,69 @@ class _ActionRowStatus extends StatelessWidget {
   }
 }
 
-String _themeLabel(ThemeMode mode) {
+String _themeLabel(BuildContext context, ThemeMode mode) {
   return switch (mode) {
-    ThemeMode.system => 'Follow device setting',
-    ThemeMode.light => 'Light appearance selected',
-    ThemeMode.dark => 'Dark appearance selected',
+    ThemeMode.system => 'more.themeFollowDevice'.tr(),
+    ThemeMode.light => 'more.themeLightSelected'.tr(),
+    ThemeMode.dark => 'more.themeDarkSelected'.tr(),
   };
 }
 
-String _transferError(NotesTransferOperation operation, Object? error) {
+String _transferError(
+  BuildContext context,
+  NotesTransferOperation operation,
+  Object? error,
+) {
   if (operation == NotesTransferOperation.importBackup &&
       error is FormatException) {
     return error.message;
   }
   return switch (operation) {
-    NotesTransferOperation.exportText => 'Could not export text. Try again.',
-    NotesTransferOperation.backupJson => 'Could not share backup. Try again.',
+    NotesTransferOperation.exportText => 'more.transferExportTextError'.tr(),
+    NotesTransferOperation.backupJson => 'more.transferBackupError'.tr(),
     NotesTransferOperation.exportMarkdown =>
-      'Could not export Markdown. Try again.',
-    NotesTransferOperation.importBackup =>
-      'Could not import backup. Try again.',
+      'more.transferExportMarkdownError'.tr(),
+    NotesTransferOperation.importBackup => 'more.transferImportError'.tr(),
   };
 }
 
-String _transferProgress(NotesTransferOperation operation) {
+String _transferProgress(
+  BuildContext context,
+  NotesTransferOperation operation,
+) {
   return switch (operation) {
-    NotesTransferOperation.exportText => 'Exporting text…',
-    NotesTransferOperation.backupJson => 'Sharing backup…',
-    NotesTransferOperation.exportMarkdown => 'Exporting Markdown…',
-    NotesTransferOperation.importBackup => 'Importing backup…',
+    NotesTransferOperation.exportText =>
+      'more.transferExportTextProgress'.tr(),
+    NotesTransferOperation.backupJson => 'more.transferBackupProgress'.tr(),
+    NotesTransferOperation.exportMarkdown =>
+      'more.transferExportMarkdownProgress'.tr(),
+    NotesTransferOperation.importBackup => 'more.transferImportProgress'.tr(),
   };
 }
 
-String _transferSuccess(NotesTransferOutcome outcome) {
+String _transferSuccess(BuildContext context, NotesTransferOutcome outcome) {
   if (outcome.status == NotesTransferOutcomeStatus.webShareOrDownloadStarted) {
     return switch (outcome.operation) {
       NotesTransferOperation.exportText =>
-        'Text export handed off. Check your share target or Downloads.',
-      NotesTransferOperation.backupJson =>
-        'Backup handed off. Check your share target or Downloads.',
+        'more.transferExportTextHandedOff'.tr(),
+      NotesTransferOperation.backupJson => 'more.transferBackupHandedOff'.tr(),
       NotesTransferOperation.exportMarkdown =>
-        'Markdown export handed off. Check your share target or Downloads.',
+        'more.transferExportMarkdownHandedOff'.tr(),
       NotesTransferOperation.importBackup =>
-        'Transfer handed off. Check your share target or Downloads.',
+        'more.transferImportHandedOff'.tr(),
     };
   }
   if (outcome.status == NotesTransferOutcomeStatus.shareSheetOpened) {
-    return 'Share sheet opened.';
+    return 'more.transferShareSheetOpened'.tr();
   }
   return switch (outcome.operation) {
-    NotesTransferOperation.exportText => 'Text export complete.',
-    NotesTransferOperation.backupJson => 'Backup sharing complete.',
-    NotesTransferOperation.exportMarkdown => 'Markdown export complete.',
+    NotesTransferOperation.exportText => 'more.transferExportTextComplete'.tr(),
+    NotesTransferOperation.backupJson => 'more.transferBackupComplete'.tr(),
+    NotesTransferOperation.exportMarkdown =>
+      'more.transferExportMarkdownComplete'.tr(),
     NotesTransferOperation.importBackup => switch (outcome.importedCount ?? 0) {
-      1 => 'Imported 1 note.',
-      final count => 'Imported $count notes.',
+      1 => 'more.transferImportedOne'.tr(),
+      final count => 'more.transferImportedMany'.tr(namedArgs: {'count': '$count'}),
     },
   };
 }

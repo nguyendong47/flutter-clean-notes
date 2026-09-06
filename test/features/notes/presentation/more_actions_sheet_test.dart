@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/app/app_providers.dart';
@@ -17,8 +18,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../helpers/in_memory_note_repository.dart';
+import '../../../support/localization_test_wrapper.dart';
 
 void main() {
+  // easy_localization's RootBundleAssetLoader reads translation JSON via
+  // rootBundle.loadString, which flutter's CachingAssetBundle caches by key.
+  // A stale cache entry from an earlier test's (now-disposed) EasyLocalization
+  // instance causes every subsequent wrapWithTestLocalization(...) build in
+  // this file to hang forever awaiting that load (see
+  // aissat/easy_localization#268/#362). Clearing the cache after each test
+  // keeps every load a fresh read.
+  tearDown(() => rootBundle.clear());
+
   testWidgets('shows grouped labeled actions with semantic 56 pixel rows', (
     tester,
   ) async {
@@ -1067,29 +1078,36 @@ _pumpMore(
       repository ?? InMemoryNoteRepository.seeded(notes ?? _tagNotes);
 
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        notesTransferGatewayProvider.overrideWithValue(resolvedGateway),
-        themeModeStoreProvider.overrideWithValue(resolvedStore),
-        noteRepositoryProvider.overrideWithValue(resolvedRepository),
-      ],
-      child: MaterialApp(
-        theme: AuroraTheme.light(),
-        darkTheme: AuroraTheme.dark(),
-        themeMode: themeMode,
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: textScaler,
-            viewInsets: EdgeInsets.only(bottom: viewInsetsBottom),
-          ),
-          child: child!,
-        ),
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => Center(
-              child: FilledButton(
-                onPressed: () => unawaited(MoreActionsSheet.show(context)),
-                child: const Text('Open more'),
+    wrapWithTestLocalization(
+      ProviderScope(
+        overrides: [
+          notesTransferGatewayProvider.overrideWithValue(resolvedGateway),
+          themeModeStoreProvider.overrideWithValue(resolvedStore),
+          noteRepositoryProvider.overrideWithValue(resolvedRepository),
+        ],
+        child: Builder(
+          builder: (localizationContext) => MaterialApp(
+            theme: AuroraTheme.light(),
+            darkTheme: AuroraTheme.dark(),
+            themeMode: themeMode,
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: textScaler,
+                viewInsets: EdgeInsets.only(bottom: viewInsetsBottom),
+              ),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => Center(
+                  child: FilledButton(
+                    onPressed: () => unawaited(MoreActionsSheet.show(context)),
+                    child: const Text('Open more'),
+                  ),
+                ),
               ),
             ),
           ),
