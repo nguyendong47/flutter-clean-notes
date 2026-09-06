@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
@@ -12,7 +13,7 @@ class NotesSkeleton extends StatelessWidget {
     return SliverSemantics(
       container: true,
       liveRegion: true,
-      label: 'Loading notes',
+      label: 'common.loadingNotes'.tr(),
       excludeSemantics: true,
       sliver: SliverLayoutBuilder(
         builder: (context, constraints) {
@@ -122,7 +123,7 @@ class NotesEmptyState extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: onCreate,
                 icon: const Icon(Icons.add),
-                label: const Text('Create note'),
+                label: Text('common.createNote'.tr()),
               ),
             ),
           ],
@@ -179,7 +180,7 @@ class NotesErrorState extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Try again'),
+                label: Text('common.tryAgain'.tr()),
               ),
             ),
           ],

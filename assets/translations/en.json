@@ -5,7 +5,11 @@
     "retry": "Retry",
     "tryAgain": "Try again",
     "undo": "Undo",
-    "close": "Close"
+    "close": "Close",
+    "loadingNotes": "Loading notes",
+    "createNote": "Create note",
+    "moreActions": "More actions",
+    "createNewNote": "Create new note"
   },
   "more": {
     "title": "More",
@@ -97,5 +101,10 @@
     "done": "Done",
     "filterByTagSemantics": "Filter by tag {tag}",
     "sortBySemantics": "Sort by {label}"
+  },
+  "library": {
+    "sections": "Library sections",
+    "archived": "Archived",
+    "trash": "Trash"
   }
 }

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
@@ -23,20 +24,20 @@ class LibrarySegmentedControl extends StatelessWidget {
       opacity: 0.74,
       child: Semantics(
         container: true,
-        label: 'Library sections',
+        label: 'library.sections'.tr(),
         child: SizedBox(
           width: double.infinity,
           child: SegmentedButton<LibrarySection>(
-            segments: const [
+            segments: [
               ButtonSegment(
                 value: LibrarySection.archived,
-                icon: Icon(Icons.archive_outlined),
-                label: Text('Archived', textAlign: TextAlign.center),
+                icon: const Icon(Icons.archive_outlined),
+                label: Text('library.archived'.tr(), textAlign: TextAlign.center),
               ),
               ButtonSegment(
                 value: LibrarySection.trash,
-                icon: Icon(Icons.delete_outline),
-                label: Text('Trash', textAlign: TextAlign.center),
+                icon: const Icon(Icons.delete_outline),
+                label: Text('library.trash'.tr(), textAlign: TextAlign.center),
               ),
             ],
             selected: {selected},
