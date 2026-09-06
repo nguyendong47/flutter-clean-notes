@@ -55,5 +55,17 @@
     "transferExportMarkdownComplete": "Markdown export complete.",
     "transferImportedOne": "Imported 1 note.",
     "transferImportedMany": "Imported {count} notes."
+  },
+  "privacy": {
+    "title": "Privacy",
+    "sectionWhereNotesLive": "Where your notes live",
+    "sectionReminders": "Reminders use platform services",
+    "sectionTransfer": "Import, export, and backup",
+    "sectionAppInitiated": "You control app-initiated transfers",
+    "sectionNetwork": "Network behavior",
+    "sectionRetention": "Retention and deletion",
+    "chipLocalFirst": "Local-first",
+    "chipNoAccount": "No account",
+    "chipYouChooseTransfers": "You choose transfers"
   }
 }
