@@ -141,5 +141,23 @@
     "remove": "Remove",
     "cancel": "Cancel",
     "removingTagSemantics": "Removing tag"
+  },
+  "search": {
+    "fieldSemantics": "Search notes and tags",
+    "hint": "Search titles, content, and tags",
+    "clearTooltip": "Clear search",
+    "filterTooltip": "Filter search results",
+    "noMatchSemantics": "No notes match your search",
+    "undo": "Undo",
+    "loadingSemantics": "Loading search results",
+    "couldNotLoad": "Could not load notes",
+    "tryAgain": "Try again",
+    "retry": "Retry",
+    "noNotesYet": "No notes yet",
+    "createNote": "Create note",
+    "searchTagTooltip": "Search tag {tag}",
+    "noMatchForQuery": "No notes match “{query}”",
+    "clearSearch": "Clear search",
+    "resetFilters": "Reset filters"
   }
 }

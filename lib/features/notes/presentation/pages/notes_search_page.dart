@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -189,13 +190,13 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
       blur: 18,
       opacity: 0.74,
       child: Semantics(
-        label: 'Search notes and tags',
+        label: 'search.fieldSemantics'.tr(),
         textField: true,
         child: SearchBar(
           key: const Key('notes-search-field'),
           controller: _controller,
           focusNode: _focusNode,
-          hintText: 'Search titles, content, and tags',
+          hintText: 'search.hint'.tr(),
           constraints: const BoxConstraints(minHeight: 52),
           elevation: const WidgetStatePropertyAll(0),
           backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
@@ -216,7 +217,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
                 dimension: 48,
                 child: IconButton(
                   key: const Key('notes-search-clear-icon'),
-                  tooltip: 'Clear search',
+                  tooltip: 'search.clearTooltip'.tr(),
                   onPressed: _clearSearch,
                   icon: const Icon(Icons.close),
                 ),
@@ -231,7 +232,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
                 key: const Key('notes-search-filter'),
                 dimension: 48,
                 child: IconButton(
-                  tooltip: 'Filter search results',
+                  tooltip: 'search.filterTooltip'.tr(),
                   onPressed: _openFilters,
                   icon: Stack(
                     clipBehavior: Clip.none,
@@ -315,8 +316,8 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
             '${results.length} ${results.length == 1 ? 'result' : 'results'}',
         visible: true,
       ),
-      _SearchViewState.noMatches => const _SearchStatus(
-        label: 'No notes match your search',
+      _SearchViewState.noMatches => _SearchStatus(
+        label: 'search.noMatchSemantics'.tr(),
         visible: false,
       ),
       _ => null,
@@ -513,7 +514,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
                 : message,
           ),
           action: SnackBarAction(
-            label: 'Undo',
+            label: 'search.undo'.tr(),
             onPressed: () => unawaited(_restore(note)),
           ),
         ),
@@ -538,7 +539,7 @@ class _LoadingState extends StatelessWidget {
     return Semantics(
       container: true,
       liveRegion: true,
-      label: 'Loading search results',
+      label: 'search.loadingSemantics'.tr(),
       excludeSemantics: true,
       child: const SizedBox(
         key: Key('notes-search-loading'),
@@ -558,12 +559,15 @@ class _InitialErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     return _CenteredState(
       icon: Icons.cloud_off_outlined,
-      title: 'Could not load notes',
+      title: 'search.couldNotLoad'.tr(),
       body: 'Please try again in a moment.',
       announceTitle: true,
       action: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 48),
-        child: FilledButton(onPressed: onRetry, child: const Text('Try again')),
+        child: FilledButton(
+          onPressed: onRetry,
+          child: Text('search.tryAgain'.tr()),
+        ),
       ),
     );
   }
@@ -618,7 +622,7 @@ class _CachedErrorNotice extends StatelessWidget {
                 child: TextButton(
                   key: const Key('notes-search-cached-error-retry'),
                   onPressed: onRetry,
-                  child: const Text('Retry'),
+                  child: Text('search.retry'.tr()),
                 ),
               ),
             ),
@@ -636,14 +640,14 @@ class _NoNotesState extends StatelessWidget {
   Widget build(BuildContext context) {
     return _CenteredState(
       icon: Icons.note_add_outlined,
-      title: 'No notes yet',
+      title: 'search.noNotesYet'.tr(),
       body: 'Create a note, then come back here to find it quickly.',
       action: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 48),
         child: FilledButton.icon(
           onPressed: () => context.push('/note/new'),
           icon: const Icon(Icons.add),
-          label: const Text('Create note'),
+          label: Text('search.createNote'.tr()),
         ),
       ),
     );
@@ -698,7 +702,7 @@ class _SearchInvitation extends StatelessWidget {
                   child: ActionChip(
                     key: ValueKey('suggested-tag-$tag'),
                     label: Text(tag),
-                    tooltip: 'Search tag $tag',
+                    tooltip: 'search.searchTagTooltip'.tr(namedArgs: {'tag': tag}),
                     onPressed: () => onTagSelected(tag),
                     materialTapTargetSize: MaterialTapTargetSize.padded,
                   ),
@@ -729,7 +733,7 @@ class _NoMatchesState extends StatelessWidget {
   Widget build(BuildContext context) {
     return _CenteredState(
       icon: Icons.search_off,
-      title: 'No notes match “$query”',
+      title: 'search.noMatchForQuery'.tr(namedArgs: {'query': query}),
       body: 'Try another phrase or adjust your filters.',
       action: Wrap(
         alignment: WrapAlignment.center,
@@ -740,7 +744,7 @@ class _NoMatchesState extends StatelessWidget {
             constraints: const BoxConstraints(minHeight: 48),
             child: FilledButton(
               onPressed: onClear,
-              child: const Text('Clear search'),
+              child: Text('search.clearSearch'.tr()),
             ),
           ),
           if (hasFilters)
@@ -748,7 +752,7 @@ class _NoMatchesState extends StatelessWidget {
               constraints: const BoxConstraints(minHeight: 48),
               child: TextButton(
                 onPressed: onResetFilters,
-                child: const Text('Reset filters'),
+                child: Text('search.resetFilters'.tr()),
               ),
             ),
         ],

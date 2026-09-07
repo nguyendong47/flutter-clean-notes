@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:ui' show SemanticsAction, Tristate;
 
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_search_page.dart';
@@ -15,8 +17,18 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../helpers/fake_note_reminder_gateway.dart';
 import '../../../helpers/in_memory_note_repository.dart';
 import '../../../helpers/note_fixtures.dart';
+import '../../../support/localization_test_wrapper.dart';
 
 void main() {
+  // easy_localization's RootBundleAssetLoader reads translation JSON via
+  // rootBundle.loadString, which flutter's CachingAssetBundle caches by key.
+  // A stale cache entry from an earlier test's (now-disposed) EasyLocalization
+  // instance causes every subsequent wrapWithTestLocalization(...) build in
+  // this file to hang forever awaiting that load (see
+  // aissat/easy_localization#268/#362). Clearing the cache after each test
+  // keeps every load a fresh read.
+  tearDown(() => rootBundle.clear());
+
   testWidgets('empty query shows a focused search invitation and suggestions', (
     tester,
   ) async {
@@ -1154,29 +1166,44 @@ Future<ProviderContainer> _pumpSearch(
 
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        noteRepositoryProvider.overrideWithValue(repository),
-        if (reminderGateway != null)
-          noteReminderGatewayProvider.overrideWithValue(reminderGateway),
-      ],
-      child: MaterialApp(
-        theme: AuroraTheme.light(),
-        darkTheme: AuroraTheme.dark(),
-        themeMode: themeMode,
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: textScaler,
-            disableAnimations: disableAnimations,
-            viewInsets: viewInsets,
+    wrapWithTestLocalization(
+      ProviderScope(
+        overrides: [
+          noteRepositoryProvider.overrideWithValue(repository),
+          if (reminderGateway != null)
+            noteReminderGatewayProvider.overrideWithValue(reminderGateway),
+        ],
+        child: Builder(
+          builder: (localizationContext) => MaterialApp(
+            theme: AuroraTheme.light(),
+            darkTheme: AuroraTheme.dark(),
+            themeMode: themeMode,
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: textScaler,
+                disableAnimations: disableAnimations,
+                viewInsets: viewInsets,
+              ),
+              child: child!,
+            ),
+            home: NotesSearchPage(onOpenNote: onOpenNote),
           ),
-          child: child!,
         ),
-        home: NotesSearchPage(onOpenNote: onOpenNote),
       ),
     ),
   );
-  if (settle) await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    // Let the async EasyLocalization delegate load resolve (MaterialApp
+    // withholds building its `home` until all localizationsDelegates finish
+    // loading) without settling pending provider futures the caller wants to
+    // observe mid-flight (e.g. a loading skeleton).
+    await tester.pump();
+  }
 
   return ProviderScope.containerOf(
     tester.element(find.byType(NotesSearchPage)),
@@ -1201,11 +1228,18 @@ Future<void> _pumpShell(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [noteRepositoryProvider.overrideWithValue(repository)],
-      child: MaterialApp(
-        theme: AuroraTheme.light(),
-        home: const _IndexedSearchHarness(),
+    wrapWithTestLocalization(
+      ProviderScope(
+        overrides: [noteRepositoryProvider.overrideWithValue(repository)],
+        child: Builder(
+          builder: (localizationContext) => MaterialApp(
+            theme: AuroraTheme.light(),
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            home: const _IndexedSearchHarness(),
+          ),
+        ),
       ),
     ),
   );
