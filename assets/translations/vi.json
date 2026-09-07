@@ -94,7 +94,21 @@
     "heading2": "Heading 2",
     "bulletedList": "Bulleted list",
     "checklist": "Checklist",
-    "formattingTools": "Formatting tools"
+    "formattingTools": "Formatting tools",
+    "detailsTooltip": "Note details",
+    "savingSemantics": "Saving note",
+    "doneSemantics": "Done",
+    "done": "Done",
+    "retry": "Retry",
+    "titleSemantics": "Title",
+    "titleHint": "Untitled note",
+    "contentSemantics": "Note content",
+    "contentHint": "Start writing…",
+    "linkedNoteNotFound": "Linked note not found. Create it first.",
+    "discardTitle": "Discard changes?",
+    "discardBody": "Your unsaved changes will be lost.",
+    "discardConfirm": "Discard changes",
+    "keepEditing": "Keep editing"
   },
   "metadata": {
     "cancelTooltip": "Cancel",

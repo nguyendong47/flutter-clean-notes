@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -261,7 +262,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
             ),
             IconButton(
               key: const Key('editor-metadata-button'),
-              tooltip: 'Note details',
+              tooltip: 'editor.detailsTooltip'.tr(),
               onPressed: _saving ? null : _openMetadata,
               focusNode: _metadataFocusNode,
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -280,7 +281,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
               child: _saving
                   ? Semantics(
                       liveRegion: true,
-                      label: 'Saving note',
+                      label: 'editor.savingSemantics'.tr(),
                       child: const SizedBox(
                         key: Key('editor-save-progress'),
                         width: 18,
@@ -290,12 +291,12 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
                     )
                   : compactDoneAction
                   ? Semantics(
-                      label: 'Done',
+                      label: 'editor.doneSemantics'.tr(),
                       child: const ExcludeSemantics(
                         child: Icon(Icons.check_rounded),
                       ),
                     )
-                  : const Text('Done'),
+                  : Text('editor.done'.tr()),
             ),
           ],
         ),
@@ -405,7 +406,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
   Widget _buildTitleField({required int maxLines}) {
     final theme = Theme.of(context);
     return Semantics(
-      label: 'Title',
+      label: 'editor.titleSemantics'.tr(),
       child: TextField(
         key: const Key('editor-title-field'),
         controller: _titleController,
@@ -420,8 +421,8 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
           height: 32 / 28,
           fontWeight: FontWeight.w700,
         ),
-        decoration: const InputDecoration(
-          hintText: 'Untitled note',
+        decoration: InputDecoration(
+          hintText: 'editor.titleHint'.tr(),
           border: InputBorder.none,
           isDense: true,
           contentPadding: EdgeInsets.symmetric(vertical: 4),
@@ -433,7 +434,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
   Widget _buildBodyField() {
     final theme = Theme.of(context);
     return Semantics(
-      label: 'Note content',
+      label: 'editor.contentSemantics'.tr(),
       child: TextField(
         key: const Key('editor-body-field'),
         controller: _contentController,
@@ -445,10 +446,10 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
         textAlignVertical: TextAlignVertical.top,
         keyboardType: TextInputType.multiline,
         style: theme.textTheme.bodyLarge?.copyWith(fontSize: 16, height: 1.5),
-        decoration: const InputDecoration(
-          hintText: 'Start writing…',
+        decoration: InputDecoration(
+          hintText: 'editor.contentHint'.tr(),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(vertical: 4),
+          contentPadding: const EdgeInsets.symmetric(vertical: 4),
         ),
       ),
     );
@@ -596,7 +597,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
                   key: const Key('editor-retry-button'),
                   onPressed: _saving ? null : _saveNote,
                   icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Retry'),
+                  label: Text('editor.retry'.tr()),
                   style: TextButton.styleFrom(
                     foregroundColor: colorScheme.onErrorContainer,
                   ),
@@ -842,11 +843,9 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     );
     if (match.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Linked note not found. Create it first.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('editor.linkedNoteNotFound'.tr())));
       return;
     }
     if (!mounted) return;
@@ -898,19 +897,19 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
         return AlertDialog(
           key: const Key('discard-changes-dialog'),
           semanticLabel: 'Unsaved changes',
-          title: const Text('Discard changes?'),
-          content: const Text('Your unsaved changes will be lost.'),
+          title: Text('editor.discardTitle'.tr()),
+          content: Text('editor.discardBody'.tr()),
           actions: [
             TextButton(
               key: const Key('discard-changes-button'),
               onPressed: () => resolve(true),
-              child: const Text('Discard changes'),
+              child: Text('editor.discardConfirm'.tr()),
             ),
             FilledButton(
               key: const Key('keep-editing-button'),
               autofocus: true,
               onPressed: () => resolve(false),
-              child: const Text('Keep editing'),
+              child: Text('editor.keepEditing'.tr()),
             ),
           ],
         );

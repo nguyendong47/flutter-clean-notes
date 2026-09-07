@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/domain/services/reminder_coordinator.dart';
@@ -18,9 +20,11 @@ import '../../../helpers/fake_note_reminder_gateway.dart';
 import '../../../helpers/in_memory_note_repository.dart';
 import '../../../helpers/note_fixtures.dart';
 import '../../../helpers/repository_snooze_coordinator.dart';
+import '../../../support/localization_test_wrapper.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  tearDown(() => rootBundle.clear());
 
   testWidgets('background snooze survives an unrelated editor save', (
     tester,
@@ -1325,11 +1329,19 @@ void main() {
       );
       addTearDown(router.dispose);
       await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: MaterialApp.router(
-            theme: AuroraTheme.light(),
-            routerConfig: router,
+        wrapWithTestLocalization(
+          UncontrolledProviderScope(
+            container: container,
+            child: Builder(
+              builder: (localizationContext) => MaterialApp.router(
+                theme: AuroraTheme.light(),
+                localizationsDelegates:
+                    localizationContext.localizationDelegates,
+                supportedLocales: localizationContext.supportedLocales,
+                locale: localizationContext.locale,
+                routerConfig: router,
+              ),
+            ),
           ),
         ),
       );
@@ -1747,6 +1759,13 @@ Future<_EditorHarness> _pumpEditor(
     ],
   );
   await container.read(notesProvider.future);
+  // Keeps the autoDispose notesProvider alive across the frame gap while
+  // EasyLocalization loads its translation asset before AddEditNotePage
+  // itself mounts and starts watching it; otherwise it disposes and
+  // silently re-executes build() once mounted, throwing off repository
+  // call-count assertions in tests that configure a failure at a specific
+  // call index.
+  container.listen(notesProvider, (_, _) {});
   final closeCount = ValueNotifier<int>(0);
   final mutableTextScaler = ValueNotifier<TextScaler>(textScaler);
   final mutableViewInsets = ValueNotifier<EdgeInsets>(viewInsets);
@@ -1754,45 +1773,52 @@ Future<_EditorHarness> _pumpEditor(
   addTearDown(mutableTextScaler.dispose);
   addTearDown(mutableViewInsets.dispose);
   await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        theme: theme ?? AuroraTheme.light(),
-        home: Builder(
-          builder: (context) {
-            return ValueListenableBuilder<TextScaler>(
-              valueListenable: mutableTextScaler,
-              builder: (context, currentTextScaler, child) =>
-                  ValueListenableBuilder<EdgeInsets>(
-                    valueListenable: mutableViewInsets,
-                    builder: (context, currentInsets, child) {
-                      final bottomPadding =
-                          (viewPadding.bottom - currentInsets.bottom)
-                              .clamp(0.0, double.infinity)
-                              .toDouble();
-                      return MediaQuery(
-                        data: MediaQuery.of(context).copyWith(
-                          textScaler: currentTextScaler,
-                          padding: EdgeInsets.only(
-                            top: viewPadding.top,
-                            bottom: bottomPadding,
-                          ),
-                          viewPadding: viewPadding,
-                          viewInsets: currentInsets,
-                          disableAnimations: disableAnimations,
-                        ),
-                        child: child!,
-                      );
-                    },
-                    child: child,
+    wrapWithTestLocalization(
+      UncontrolledProviderScope(
+        container: container,
+        child: Builder(
+          builder: (localizationContext) => MaterialApp(
+            theme: theme ?? AuroraTheme.light(),
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            home: Builder(
+              builder: (context) {
+                return ValueListenableBuilder<TextScaler>(
+                  valueListenable: mutableTextScaler,
+                  builder: (context, currentTextScaler, child) =>
+                      ValueListenableBuilder<EdgeInsets>(
+                        valueListenable: mutableViewInsets,
+                        builder: (context, currentInsets, child) {
+                          final bottomPadding =
+                              (viewPadding.bottom - currentInsets.bottom)
+                                  .clamp(0.0, double.infinity)
+                                  .toDouble();
+                          return MediaQuery(
+                            data: MediaQuery.of(context).copyWith(
+                              textScaler: currentTextScaler,
+                              padding: EdgeInsets.only(
+                                top: viewPadding.top,
+                                bottom: bottomPadding,
+                              ),
+                              viewPadding: viewPadding,
+                              viewInsets: currentInsets,
+                              disableAnimations: disableAnimations,
+                            ),
+                            child: child!,
+                          );
+                        },
+                        child: child,
+                      ),
+                  child: _editorPage(
+                    note: note,
+                    onClose: () => closeCount.value += 1,
+                    now: now,
                   ),
-              child: _editorPage(
-                note: note,
-                onClose: () => closeCount.value += 1,
-                now: now,
-              ),
-            );
-          },
+                );
+              },
+            ),
+          ),
         ),
       ),
     ),
