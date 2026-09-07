@@ -204,5 +204,19 @@
     "invitationBody": "Look through note titles, content, and tags.",
     "suggestedTags": "Suggested tags",
     "noMatchesBody": "Try another phrase or adjust your filters."
+  },
+  "home": {
+    "greetingMorning": "Good morning",
+    "greetingAfternoon": "Good afternoon",
+    "greetingEvening": "Good evening",
+    "useLightTheme": "Use light theme",
+    "useDarkTheme": "Use dark theme",
+    "savingThemeSemantics": "Saving theme preference…",
+    "undo": "Undo",
+    "retry": "Retry",
+    "themeSaveError": "Theme stays unchanged. Try again.",
+    "searchSemantics": "Search notes",
+    "allTagsFilter": "All",
+    "updateError": "Could not update this note. Check the note list before trying again."
   }
 }

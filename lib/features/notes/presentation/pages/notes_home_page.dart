@@ -1,9 +1,9 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/widgets/aurora_background.dart';
@@ -28,7 +28,8 @@ class NotesHomePage extends ConsumerStatefulWidget {
 }
 
 class _NotesHomePageState extends ConsumerState<NotesHomePage> {
-  static final _dateFormat = DateFormat('EEEE, MMMM d');
+  DateFormat get _dateFormat =>
+      DateFormat('EEEE, MMMM d', context.locale.toString());
 
   Future<void>? _refreshInFlight;
   Object? _lastAnnouncedError;
@@ -258,7 +259,7 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
                 : message,
           ),
           action: SnackBarAction(
-            label: 'Undo',
+            label: 'home.undo'.tr(),
             onPressed: () => unawaited(_restore(note)),
           ),
         ),
@@ -283,7 +284,7 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
           ),
           action: hasCachedNotes
               ? SnackBarAction(
-                  label: 'Retry',
+                  label: 'home.retry'.tr(),
                   onPressed: () => unawaited(_refresh()),
                 )
               : null,
@@ -297,12 +298,9 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
     messenger
       ..removeCurrentSnackBar()
       ..showSnackBar(
-        const SnackBar(
+        SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text(
-            'Could not update this note. Check the note list before trying '
-            'again.',
-          ),
+          content: Text('home.updateError'.tr()),
         ),
       );
   }
@@ -324,13 +322,15 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
-    final toggleLabel = dark ? 'Use light theme' : 'Use dark theme';
+    final toggleLabel = dark
+        ? 'home.useLightTheme'.tr()
+        : 'home.useDarkTheme'.tr();
     final hour = DateTime.now().hour;
     final greeting = hour < 12
-        ? 'Good morning'
+        ? 'home.greetingMorning'.tr()
         : hour < 18
-        ? 'Good afternoon'
-        : 'Good evening';
+        ? 'home.greetingAfternoon'.tr()
+        : 'home.greetingEvening'.tr();
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -363,7 +363,7 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
           button: true,
           enabled: !_themeBusy,
           label: toggleLabel,
-          value: _themeBusy ? 'Saving theme preference…' : null,
+          value: _themeBusy ? 'home.savingThemeSemantics'.tr() : null,
           liveRegion: _themeBusy,
           onTap: _themeBusy ? null : () => unawaited(_toggleTheme()),
           excludeSemantics: true,
@@ -404,9 +404,9 @@ class _HomeHeaderState extends ConsumerState<_HomeHeader> {
         messenger
           ..hideCurrentSnackBar()
           ..showSnackBar(
-            const SnackBar(
+            SnackBar(
               behavior: SnackBarBehavior.floating,
-              content: Text('Theme stays unchanged. Try again.'),
+              content: Text('home.themeSaveError'.tr()),
             ),
           );
       }
@@ -435,7 +435,7 @@ class _SearchSurface extends StatelessWidget {
         child: Semantics(
           container: true,
           button: true,
-          label: 'Search notes',
+          label: 'home.searchSemantics'.tr(),
           onTap: onTap,
           child: ExcludeSemantics(
             child: InkWell(
@@ -454,7 +454,7 @@ class _SearchSurface extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Search notes',
+                          'home.searchSemantics'.tr(),
                           style: theme.textTheme.bodyLarge?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -490,7 +490,7 @@ class _TagStrip extends StatelessWidget {
       child: Row(
         children: [
           FilterChip(
-            label: const Text('All'),
+            label: Text('home.allTagsFilter'.tr()),
             selected: selectedTag == null,
             onSelected: (_) => onSelected(null),
             materialTapTargetSize: MaterialTapTargetSize.padded,

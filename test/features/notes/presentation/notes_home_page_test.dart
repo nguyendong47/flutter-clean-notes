@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' show SemanticsAction, SemanticsActionEvent, Tristate;
 
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/app/app_providers.dart';
@@ -17,8 +18,12 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../helpers/in_memory_note_repository.dart';
 import '../../../helpers/fake_note_reminder_gateway.dart';
 import '../../../helpers/note_fixtures.dart';
+import '../../../support/localization_test_wrapper.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  tearDown(() => rootBundle.clear());
+
   testWidgets('separates pinned notes, selects tags, and opens search', (
     tester,
   ) async {
@@ -909,27 +914,44 @@ Future<ProviderContainer> _pumpHome(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
+  final container = ProviderContainer(
+    overrides: [
+      noteRepositoryProvider.overrideWithValue(repository),
+      if (reminderGateway != null)
+        noteReminderGatewayProvider.overrideWithValue(reminderGateway),
+      if (themeStore != null)
+        themeModeStoreProvider.overrideWithValue(themeStore),
+    ],
+  );
+  await container.read(notesProvider.future);
+  // Keeps the autoDispose notesProvider alive across the frame gap while
+  // EasyLocalization loads its translation asset before NotesHomePage
+  // itself mounts and starts watching it; otherwise it disposes and
+  // silently re-executes build() once mounted, throwing off test expectations.
+  container.listen(notesProvider, (_, _) {});
+
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        noteRepositoryProvider.overrideWithValue(repository),
-        if (reminderGateway != null)
-          noteReminderGatewayProvider.overrideWithValue(reminderGateway),
-        if (themeStore != null)
-          themeModeStoreProvider.overrideWithValue(themeStore),
-      ],
-      child: MaterialApp(
-        theme: AuroraTheme.light(),
-        darkTheme: AuroraTheme.dark(),
-        themeMode: themeMode,
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(textScaler: textScaler),
-          child: child!,
-        ),
-        home: NotesHomePage(
-          onOpenSearch: onOpenSearch,
-          onCreateNote: onCreateNote,
+    wrapWithTestLocalization(
+      UncontrolledProviderScope(
+        container: container,
+        child: Builder(
+          builder: (localizationContext) => MaterialApp(
+            theme: AuroraTheme.light(),
+            darkTheme: AuroraTheme.dark(),
+            themeMode: themeMode,
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+              child: child!,
+            ),
+            home: NotesHomePage(
+              onOpenSearch: onOpenSearch,
+              onCreateNote: onCreateNote,
+            ),
+          ),
         ),
       ),
     ),
@@ -938,7 +960,11 @@ Future<ProviderContainer> _pumpHome(
     await tester.pumpAndSettle();
   }
 
-  return ProviderScope.containerOf(tester.element(find.byType(NotesHomePage)));
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    container.dispose();
+  });
+  return container;
 }
 
 Future<void> _revealInHome(WidgetTester tester, Finder target) async {
