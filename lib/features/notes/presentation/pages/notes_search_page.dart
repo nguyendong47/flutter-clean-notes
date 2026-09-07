@@ -121,7 +121,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
                     header: true,
                     namesRoute: true,
                     child: Text(
-                      'Search',
+                      'search.headerTitle'.tr(),
                       style: Theme.of(context).textTheme.headlineMedium
                           ?.copyWith(fontWeight: FontWeight.w800),
                     ),
@@ -183,7 +183,9 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
 
   Widget _buildSearchBar(String query, int activeFilterCount) {
     final colorScheme = Theme.of(context).colorScheme;
-    final filterLabel = 'Search filters, $activeFilterCount active';
+    final filterLabel = 'search.filterSemantics'.tr(
+      namedArgs: {'count': '$activeFilterCount'},
+    );
     return GlassSurface(
       borderRadius: const BorderRadius.all(Radius.circular(16)),
       padding: EdgeInsets.zero,
@@ -312,8 +314,11 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
     };
     final searchStatus = switch (viewState) {
       _SearchViewState.results => _SearchStatus(
-        label:
-            '${results.length} ${results.length == 1 ? 'result' : 'results'}',
+        label: results.length == 1
+            ? 'search.resultCountOne'.tr()
+            : 'search.resultCountMany'.tr(
+                namedArgs: {'count': '${results.length}'},
+              ),
         visible: true,
       ),
       _SearchViewState.noMatches => _SearchStatus(
@@ -417,7 +422,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
       _mutationOwnedRefreshError = null;
     } catch (_) {
       if (!retryingCachedNotes) {
-        _showError('Could not refresh notes. Try again.');
+        _showError('search.refreshError'.tr());
       }
     }
   }
@@ -444,7 +449,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
     if (result != _MutationResult.failed) {
       _showUndo(
         note,
-        'Note archived',
+        'search.noteArchived'.tr(),
         refreshFailed: result == _MutationResult.persistedRefreshFailure,
       );
     }
@@ -458,7 +463,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
     if (result != _MutationResult.failed) {
       _showUndo(
         note,
-        'Note moved to trash',
+        'search.noteTrashed'.tr(),
         refreshFailed: result == _MutationResult.persistedRefreshFailure,
       );
     }
@@ -495,7 +500,7 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
       }
       return _MutationResult.persistedRefreshFailure;
     } catch (_) {
-      _showError('Could not update this note. Try again.');
+      _showError('search.updateError'.tr());
       return _MutationResult.failed;
     }
   }
@@ -510,7 +515,9 @@ class _NotesSearchPageState extends ConsumerState<NotesSearchPage> {
           behavior: SnackBarBehavior.floating,
           content: Text(
             refreshFailed
-                ? '$message. Could not refresh notes; showing saved notes.'
+                ? 'search.undoRefreshFailedSuffix'.tr(
+                    namedArgs: {'message': message},
+                  )
                 : message,
           ),
           action: SnackBarAction(
@@ -560,7 +567,7 @@ class _InitialErrorState extends StatelessWidget {
     return _CenteredState(
       icon: Icons.cloud_off_outlined,
       title: 'search.couldNotLoad'.tr(),
-      body: 'Please try again in a moment.',
+      body: 'search.initialErrorBody'.tr(),
       announceTitle: true,
       action: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 48),
@@ -605,7 +612,7 @@ class _CachedErrorNotice extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Could not refresh notes. Showing saved notes.',
+                    'search.cachedErrorBody'.tr(),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w600,
@@ -641,7 +648,7 @@ class _NoNotesState extends StatelessWidget {
     return _CenteredState(
       icon: Icons.note_add_outlined,
       title: 'search.noNotesYet'.tr(),
-      body: 'Create a note, then come back here to find it quickly.',
+      body: 'search.noNotesBody'.tr(),
       action: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 48),
         child: FilledButton.icon(
@@ -671,14 +678,14 @@ class _SearchInvitation extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Search your thoughts',
+          'search.invitationTitle'.tr(),
           style: theme.textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.w700,
           ),
         ),
         const SizedBox(height: 8),
         Text(
-          'Look through note titles, content, and tags.',
+          'search.invitationBody'.tr(),
           style: theme.textTheme.bodyLarge?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -686,7 +693,7 @@ class _SearchInvitation extends StatelessWidget {
         if (tags.isNotEmpty) ...[
           const SizedBox(height: 24),
           Text(
-            'Suggested tags',
+            'search.suggestedTags'.tr(),
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700,
             ),
@@ -734,7 +741,7 @@ class _NoMatchesState extends StatelessWidget {
     return _CenteredState(
       icon: Icons.search_off,
       title: 'search.noMatchForQuery'.tr(namedArgs: {'query': query}),
-      body: 'Try another phrase or adjust your filters.',
+      body: 'search.noMatchesBody'.tr(),
       action: Wrap(
         alignment: WrapAlignment.center,
         spacing: 8,

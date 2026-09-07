@@ -158,6 +158,22 @@
     "searchTagTooltip": "Search tag {tag}",
     "noMatchForQuery": "No notes match “{query}”",
     "clearSearch": "Clear search",
-    "resetFilters": "Reset filters"
+    "resetFilters": "Reset filters",
+    "headerTitle": "Search",
+    "filterSemantics": "Search filters, {count} active",
+    "resultCountOne": "1 result",
+    "resultCountMany": "{count} results",
+    "refreshError": "Could not refresh notes. Try again.",
+    "noteArchived": "Note archived",
+    "noteTrashed": "Note moved to trash",
+    "updateError": "Could not update this note. Try again.",
+    "undoRefreshFailedSuffix": "{message}. Could not refresh notes; showing saved notes.",
+    "initialErrorBody": "Please try again in a moment.",
+    "cachedErrorBody": "Could not refresh notes. Showing saved notes.",
+    "noNotesBody": "Create a note, then come back here to find it quickly.",
+    "invitationTitle": "Search your thoughts",
+    "invitationBody": "Look through note titles, content, and tags.",
+    "suggestedTags": "Suggested tags",
+    "noMatchesBody": "Try another phrase or adjust your filters."
   }
 }
