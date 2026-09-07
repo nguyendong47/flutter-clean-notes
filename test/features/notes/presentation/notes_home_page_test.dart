@@ -923,7 +923,11 @@ Future<ProviderContainer> _pumpHome(
         themeModeStoreProvider.overrideWithValue(themeStore),
     ],
   );
-  await container.read(notesProvider.future);
+  try {
+    if (settle) {
+      await container.read(notesProvider.future);
+    }
+  } catch (_) {}
   // Keeps the autoDispose notesProvider alive across the frame gap while
   // EasyLocalization loads its translation asset before NotesHomePage
   // itself mounts and starts watching it; otherwise it disposes and

@@ -217,6 +217,15 @@
     "themeSaveError": "Theme stays unchanged. Try again.",
     "searchSemantics": "Search notes",
     "allTagsFilter": "All",
-    "updateError": "Could not update this note. Check the note list before trying again."
+    "updateError": "Could not update this note. Check the note list before trying again.",
+    "createFirstNote": "Create your first note",
+    "noActiveNotes": "No active notes",
+    "noteArchived": "{title} archived",
+    "noteTrashed": "{title} moved to trash",
+    "undoRefreshFailedSuffix": "{message}. Could not refresh notes; showing saved notes.",
+    "refreshErrorCached": "Could not refresh notes. Showing saved notes. Try again.",
+    "loadError": "Could not load notes. Try again.",
+    "pinned": "Pinned",
+    "untitledNote": "Untitled note"
   }
 }

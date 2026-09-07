@@ -114,8 +114,8 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
                   onCreate: _createNote,
                   supportsReminderScheduling: supportsReminderScheduling,
                   title: notesState.requireValue.isEmpty
-                      ? 'Create your first note'
-                      : 'No active notes',
+                      ? 'home.createFirstNote'.tr()
+                      : 'home.noActiveNotes'.tr(),
                 )
               else
                 NotesCollection(
@@ -202,7 +202,7 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
     if (result != _MutationResult.failed) {
       _showUndo(
         note,
-        '${_displayTitle(note)} archived',
+        'home.noteArchived'.tr(namedArgs: {'title': _displayTitle(note)}),
         refreshFailed: result == _MutationResult.persistedRefreshFailure,
       );
     }
@@ -215,7 +215,7 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
     if (result != _MutationResult.failed) {
       _showUndo(
         note,
-        '${_displayTitle(note)} moved to trash',
+        'home.noteTrashed'.tr(namedArgs: {'title': _displayTitle(note)}),
         refreshFailed: result == _MutationResult.persistedRefreshFailure,
       );
     }
@@ -255,7 +255,9 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
           behavior: SnackBarBehavior.floating,
           content: Text(
             refreshFailed
-                ? '$message. Could not refresh notes; showing saved notes.'
+                ? 'home.undoRefreshFailedSuffix'.tr(
+                    namedArgs: {'message': message},
+                  )
                 : message,
           ),
           action: SnackBarAction(
@@ -279,8 +281,8 @@ class _NotesHomePageState extends ConsumerState<NotesHomePage> {
           behavior: SnackBarBehavior.floating,
           content: Text(
             hasCachedNotes
-                ? 'Could not refresh notes. Showing saved notes. Try again.'
-                : 'Could not load notes. Try again.',
+                ? 'home.refreshErrorCached'.tr()
+                : 'home.loadError'.tr(),
           ),
           action: hasCachedNotes
               ? SnackBarAction(
@@ -545,7 +547,7 @@ class _PinnedSection extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              'Pinned',
+              'home.pinned'.tr(),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: colorScheme.primary,
                 fontWeight: FontWeight.w700,
@@ -595,7 +597,7 @@ class _ContentSliver extends StatelessWidget {
 
 String _displayTitle(Note note) {
   final title = note.title.trim();
-  return title.isEmpty ? 'Untitled note' : title;
+  return title.isEmpty ? 'home.untitledNote'.tr() : title;
 }
 
 enum _MutationResult { succeeded, persistedRefreshFailure, failed }
