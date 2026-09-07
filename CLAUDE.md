@@ -1,5 +1,9 @@
 ## Agent skills
 
+### Token efficiency — delegate mechanical work
+
+For tasks that are mechanical/repetitive and don't need full session context (bulk string extraction across similar files, repetitive find-and-replace, translation-key sweeps, boilerplate test wiring), dispatch a subagent (`Agent` tool, `subagent_type: general-purpose`, `model: haiku`) instead of doing it in the main thread. Brief it with: exact file paths, the established convention/pattern (point it at an already-committed reference file), the commands to run (test, `dart format`, `flutter analyze`, GitNexus check), and the commit message format. Review its diff before trusting it done — Haiku needs more explicit instructions than Sonnet and can miss edge cases (e.g., autoDispose Riverpod providers being sensitive to widget-mount timing in tests).
+
 ### Issue tracker
 
 GitHub Issues (`nguyendong47/flutter-clean-notes`), via `gh` CLI. See `docs/agents/issue-tracker.md`.
