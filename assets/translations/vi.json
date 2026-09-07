@@ -108,7 +108,22 @@
     "discardTitle": "Discard changes?",
     "discardBody": "Your unsaved changes will be lost.",
     "discardConfirm": "Discard changes",
-    "keepEditing": "Keep editing"
+    "keepEditing": "Keep editing",
+    "editTooltip": "Edit",
+    "previewTooltip": "Preview",
+    "fieldLabelTitle": "Title",
+    "fieldLabelContent": "Note content",
+    "validationMessage": "Add a title or some content",
+    "reminderValidation": "Open Note details to choose a future reminder.",
+    "unsavedChanges": "Unsaved changes",
+    "imageUnavailable": "Image unavailable",
+    "imageUnavailableAlt": "Image unavailable: {alt}",
+    "nothingToPreview": "_Nothing to preview._",
+    "couldntFinishSavingHeading": "Couldn’t finish saving note",
+    "couldntFinishSavingReminderDetail": "Your note is saved, but its reminder is not confirmed. Retry or update the reminder.",
+    "couldntFinishSavingRefreshDetail": "Your note is saved, but the note list could not be refreshed. Retry to finish.",
+    "couldntSaveHeading": "Couldn’t save note",
+    "couldntSaveDetail": "Your changes are still here. Try again."
   },
   "metadata": {
     "cancelTooltip": "Cancel",
