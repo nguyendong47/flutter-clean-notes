@@ -1,3 +1,10 @@
+import 'dart:ui';
+
+import 'package:easy_localization/easy_localization.dart';
+// ignore: implementation_imports
+import 'package:easy_localization/src/easy_localization_controller.dart';
+// ignore: implementation_imports
+import 'package:easy_localization/src/localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
@@ -139,6 +146,29 @@ Future<List<FlutterErrorDetails>> _captureFlutterErrors(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones();
+
+  setUpAll(() async {
+    // EasyLocalization.ensureInitialized() only reads preferences and platform locale;
+    // force-load translation data without a widget tree so .tr() resolves in unit tests.
+    final controller = EasyLocalizationController(
+      saveLocale: false,
+      fallbackLocale: const Locale('en'),
+      supportedLocales: const [Locale('en'), Locale('vi')],
+      startLocale: const Locale('en'),
+      forceLocale: const Locale('en'),
+      assetLoader: const RootBundleAssetLoader(),
+      useOnlyLangCode: true,
+      useFallbackTranslations: false,
+      path: 'assets/translations',
+      onLoadError: (FlutterError e) => throw e,
+    );
+    await controller.loadTranslations();
+    Localization.load(
+      const Locale('en'),
+      translations: controller.translations,
+      fallbackTranslations: controller.fallbackTranslations,
+    );
+  });
 
   group('NotificationService Tests', () {
     late FakeFlutterLocalNotificationsPlugin fakePlugin;

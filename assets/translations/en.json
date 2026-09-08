@@ -227,5 +227,15 @@
     "loadError": "Could not load notes. Try again.",
     "pinned": "Pinned",
     "untitledNote": "Untitled note"
+  },
+  "notification": {
+    "webUnsupported": "Scheduling reminders is not supported on the web.",
+    "unavailable": "Notifications are unavailable. Restart Clean Notes and try again.",
+    "actionFailed": "A notification action could not be completed. Open Clean Notes to retry.",
+    "defaultActionName": "Open notification",
+    "channelName": "Note Reminders",
+    "title": "Clean Notes",
+    "body": "Open Clean Notes to view your reminder.",
+    "snoozeAction": "Snooze {minutes} min"
   }
 }

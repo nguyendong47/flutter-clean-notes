@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -37,7 +38,7 @@ UnsupportedError _unsupportedReminderSchedulingError({
 }) {
   return UnsupportedError(
     isWeb
-        ? 'Scheduling reminders is not supported on the web.'
+        ? 'notification.webUnsupported'.tr()
         : 'Scheduling reminders is not supported on ${platform.name}.',
   );
 }
@@ -54,16 +55,14 @@ class NotificationUnavailableException implements Exception {
   const NotificationUnavailableException();
 
   @override
-  String toString() =>
-      'Notifications are unavailable. Restart Clean Notes and try again.';
+  String toString() => 'notification.unavailable'.tr();
 }
 
 class NotificationActionFailedException implements Exception {
   const NotificationActionFailedException();
 
   @override
-  String toString() =>
-      'A notification action could not be completed. Open Clean Notes to retry.';
+  String toString() => 'notification.actionFailed'.tr();
 }
 
 class NotificationService
@@ -198,10 +197,10 @@ class NotificationService
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
-    const linux = LinuxInitializationSettings(
-      defaultActionName: 'Open notification',
+    final linux = LinuxInitializationSettings(
+      defaultActionName: 'notification.defaultActionName'.tr(),
     );
-    const settings = InitializationSettings(
+    final settings = InitializationSettings(
       android: android,
       iOS: darwin,
       macOS: darwin,
@@ -452,7 +451,7 @@ class NotificationService
       snoozeActions.add(
         AndroidNotificationAction(
           'snooze_$minutes',
-          'Snooze $minutes min',
+          'notification.snoozeAction'.tr(namedArgs: {'minutes': '$minutes'}),
           showsUserInterface: true,
         ),
       );
@@ -460,7 +459,7 @@ class NotificationService
 
     final androidDetails = AndroidNotificationDetails(
       'note_reminders',
-      'Note Reminders',
+      'notification.channelName'.tr(),
       importance: Importance.max,
       priority: Priority.high,
       visibility: NotificationVisibility.private,
@@ -479,8 +478,8 @@ class NotificationService
 
     await _plugin.zonedSchedule(
       noteId,
-      'Clean Notes',
-      'Open Clean Notes to view your reminder.',
+      'notification.title'.tr(),
+      'notification.body'.tr(),
       tz.TZDateTime.from(reminder, tz.local),
       NotificationDetails(
         android: androidDetails,
