@@ -2,20 +2,21 @@
 
 ### Delegation policy — Antigravity does the work, Claude coordinates
 
-**Default: dispatch real work (code changes, content authorship, test writing, bulk edits) to Google Antigravity via its headless CLI, not the main Claude Code thread.** Claude's role on this project is coordinator, not implementer:
-1. Write a self-contained task brief (exact files, exact strings/patterns, reference commits to copy style from, verification commands, commit message format incl. `Co-Authored-By: Google Antigravity <antigravity@google.com>` — never sign Antigravity's commits as Claude/Anthropic).
-2. Save the brief to a file, then dispatch it in the background:
-   ```
-   agy --add-dir "<worktree path>" --dangerously-skip-permissions --output-format json --print-timeout 20m -p "$(cat <brief-file>)"
-   ```
-   (`agy.exe` lives at `C:\Users\nguye\AppData\Local\agy\bin\agy.exe`; use `run_in_background: true`.)
-3. **Never trust its self-report or the wrapper's exit code.** Verify independently: `git log`/`git status` for real commits, then re-run `flutter analyze`, the relevant `flutter test` targets, and GitNexus `detect-changes` yourself before calling a task done.
+**Default: dispatch real work (code changes, content authorship, test writing, bulk edits) to Google Antigravity via the `agy-delegate` skill (`.claude/skills/agy-delegate/`), not the main Claude Code thread.** Claude's role on this project is coordinator, not implementer. Use the skill's own loop (`SKILL.md` + `references/`), not a hand-rolled `agy -p` shell wrapper — its `scripts/relay.mjs` spawns `agy` directly via argv (no shell-quoting bugs), writes a structured `result.json` instead of relying on stdout, and has a watchdog that converts a hang into a clean timeout instead of needing a manual kill:
+1. Write a self-contained brief per [`references/writing-the-brief.md`](.claude/skills/agy-delegate/references/writing-the-brief.md) (exact files/patterns, reference commits, the project's real gate commands, a report contract, and that Antigravity does **not** commit).
+2. Dispatch: `node .claude/skills/agy-delegate/scripts/relay.mjs --brief <file> --cd <worktree path>` with `run_in_background: true`. Add `--effort high` for harder tasks; add `--read-only` for a verification-only dispatch.
+3. **Never trust the self-report.** Read `result.json`, then independently re-run `flutter analyze`, the relevant `flutter test` targets, and GitNexus `detect-changes` yourself before calling a task done — see [`references/review-and-land.md`](.claude/skills/agy-delegate/references/review-and-land.md).
+4. **Claude lands the commit**, not the relay and not Antigravity (`references/review-and-land.md`: "you commit — the orchestrator, never the implementer"). This project's established convention (see prior commits on this branch, e.g. `4ec7fbe`, `4d882f5`) is to still credit Antigravity's actual authorship with `Co-Authored-By: Google Antigravity <antigravity@google.com>` in the message Claude writes — keep doing that, never substitute a Claude/Anthropic attribution for Antigravity's own work.
 
-Known `agy` headless quirks (full detail in `docs/agents/antigravity-collab.md`): stdout can silently drop over a non-TTY pipe — the wrapper reports a false `failed`/`timeout` even though `agy.exe` finished and committed correctly, so judge completion by `git log`, not the command's exit code. It can also genuinely hang; if a background run shows no file/commit activity for a long stretch AND memory/CPU look idle, it's safe to kill and redispatch on a clean tree — but if it's still actively working (mem/CPU moving), let it run to completion rather than interrupting.
+Prior sessions on this branch hand-rolled `agy --print-timeout ... -p "$(cat brief)"` directly in bash before this skill was installed (2026-09-08/09) — that approach is superseded; its known quirks (stdout silently dropping over a non-TTY pipe on Windows, occasional genuine hangs) are exactly what `relay.mjs`'s watchdog and `result.json` contract exist to fix. Full incident history: `docs/agents/antigravity-collab.md`.
 
-Exception: a trivial read-only check that produces no file diff (a `grep` to confirm dead code, a quick status check) is cheaper to just do directly — an `agy` run costs real minutes and its own quota even for a 5-second grep. Use judgment there; the default is to delegate anything that actually changes a file.
+Exception: a trivial read-only check that produces no file diff (a `grep` to confirm dead code, a quick status check) is cheaper to just do directly — a delegation run costs real minutes and its own quota even for a 5-second grep. Use judgment there; the default is to delegate anything that actually changes a file.
 
 Fall back to a Haiku subagent (`Agent` tool, `subagent_type: general-purpose`, `model: haiku`) only if `agy` is unavailable — same briefing discipline applies (point it at an already-committed reference file, give exact verification commands), and it needs even more explicit instructions than Antigravity and can miss edge cases (e.g., autoDispose Riverpod providers being sensitive to widget-mount timing in tests).
+
+### Cross-session project memory (`engrim`)
+
+This machine also has `engrim` wired into Claude Code and Antigravity (global, `~/.claude` + `~/.gemini`, installed 2026-09-09) — a local SQLite memory store that survives `/clear` and session restarts, and is shared across both tools. A `SessionStart` hook auto-loads this project's memory pack; write to it at real decisions/corrections, not routine progress: `engrim add -t <decision|fact|feedback|state> -s "<one line>"`. Recall on demand with `engrim recall -q "<topic>"` or `engrim context`. This is a different layer than the `.agent-shared/collab.db` mailbox below — that one is this-project-only and manually queried; `engrim` is cross-project and auto-injected.
 
 ### Issue tracker
 
@@ -28,7 +29,7 @@ Single-context — `CONTEXT.md` + `docs/adr/` at repo root (created lazily when 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **flutter-clean-notes** (8869 symbols, 19545 relationships, 240 execution flows).
+This project is indexed by GitNexus as **flutter-clean-notes** (8174 symbols, 18451 relationships, 244 execution flows).
 
 > Index stale? Run `node .gitnexus/run.cjs analyze --index-only` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? Bootstrap with `npx`, `bunx`, or `pnpm dlx` — e.g. `bunx gitnexus@latest analyze` (npm 11 npx crash; #1939).
 
