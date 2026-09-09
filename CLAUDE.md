@@ -1,8 +1,21 @@
 ## Agent skills
 
-### Token efficiency — delegate mechanical work
+### Delegation policy — Antigravity does the work, Claude coordinates
 
-For tasks that are mechanical/repetitive and don't need full session context (bulk string extraction across similar files, repetitive find-and-replace, translation-key sweeps, boilerplate test wiring), dispatch a subagent (`Agent` tool, `subagent_type: general-purpose`, `model: haiku`) instead of doing it in the main thread. Brief it with: exact file paths, the established convention/pattern (point it at an already-committed reference file), the commands to run (test, `dart format`, `flutter analyze`, GitNexus check), and the commit message format. Review its diff before trusting it done — Haiku needs more explicit instructions than Sonnet and can miss edge cases (e.g., autoDispose Riverpod providers being sensitive to widget-mount timing in tests).
+**Default: dispatch real work (code changes, content authorship, test writing, bulk edits) to Google Antigravity via its headless CLI, not the main Claude Code thread.** Claude's role on this project is coordinator, not implementer:
+1. Write a self-contained task brief (exact files, exact strings/patterns, reference commits to copy style from, verification commands, commit message format incl. `Co-Authored-By: Google Antigravity <antigravity@google.com>` — never sign Antigravity's commits as Claude/Anthropic).
+2. Save the brief to a file, then dispatch it in the background:
+   ```
+   agy --add-dir "<worktree path>" --dangerously-skip-permissions --output-format json --print-timeout 20m -p "$(cat <brief-file>)"
+   ```
+   (`agy.exe` lives at `C:\Users\nguye\AppData\Local\agy\bin\agy.exe`; use `run_in_background: true`.)
+3. **Never trust its self-report or the wrapper's exit code.** Verify independently: `git log`/`git status` for real commits, then re-run `flutter analyze`, the relevant `flutter test` targets, and GitNexus `detect-changes` yourself before calling a task done.
+
+Known `agy` headless quirks (full detail in `docs/agents/antigravity-collab.md`): stdout can silently drop over a non-TTY pipe — the wrapper reports a false `failed`/`timeout` even though `agy.exe` finished and committed correctly, so judge completion by `git log`, not the command's exit code. It can also genuinely hang; if a background run shows no file/commit activity for a long stretch AND memory/CPU look idle, it's safe to kill and redispatch on a clean tree — but if it's still actively working (mem/CPU moving), let it run to completion rather than interrupting.
+
+Exception: a trivial read-only check that produces no file diff (a `grep` to confirm dead code, a quick status check) is cheaper to just do directly — an `agy` run costs real minutes and its own quota even for a 5-second grep. Use judgment there; the default is to delegate anything that actually changes a file.
+
+Fall back to a Haiku subagent (`Agent` tool, `subagent_type: general-purpose`, `model: haiku`) only if `agy` is unavailable — same briefing discipline applies (point it at an already-committed reference file, give exact verification commands), and it needs even more explicit instructions than Antigravity and can miss edge cases (e.g., autoDispose Riverpod providers being sensitive to widget-mount timing in tests).
 
 ### Issue tracker
 
