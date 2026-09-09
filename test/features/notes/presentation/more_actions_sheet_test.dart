@@ -16,11 +16,19 @@ import 'package:flutter_clean_notes/features/notes/presentation/widgets/more_act
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/tag_manager_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../helpers/in_memory_note_repository.dart';
 import '../../../support/localization_test_wrapper.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
+    await EasyLocalization.ensureInitialized();
+  });
+
   // easy_localization's RootBundleAssetLoader reads translation JSON via
   // rootBundle.loadString, which flutter's CachingAssetBundle caches by key.
   // A stale cache entry from an earlier test's (now-disposed) EasyLocalization
@@ -1006,6 +1014,41 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
     }
+  });
+
+  testWidgets('Language row switches locale and persists the selection', (
+    tester,
+  ) async {
+    await _pumpMore(tester);
+
+    final languageRow = find.byKey(const Key('more-row-language'));
+    await tester.ensureVisible(languageRow);
+    await tester.tap(languageRow);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tiếng Việt'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('language-mode-en')),
+        matching: find.text('English'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Hệ thống / System'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('language-mode-vi')));
+    await tester.pumpAndSettle();
+
+    final context = tester.element(find.byType(MoreActionsSheet));
+    expect(context.locale, const Locale('vi'));
+
+    await tester.tap(find.byKey(const Key('language-mode-en')));
+    await tester.pumpAndSettle();
+    expect(context.locale, const Locale('en'));
+
+    await tester.tap(find.byKey(const Key('language-mode-system')));
+    await tester.pumpAndSettle();
+    expect(context.locale.languageCode, context.deviceLocale.languageCode);
   });
 }
 

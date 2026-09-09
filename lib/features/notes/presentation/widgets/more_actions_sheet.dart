@@ -49,6 +49,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
   late final ValueNotifier<bool> canPopNotifier;
 
   bool _themeChoicesVisible = false;
+  bool _languageChoicesVisible = false;
   bool _themeBusy = false;
   bool _transferBusy = false;
   ThemeMode? _pendingTheme;
@@ -122,7 +123,10 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                 borderRadius: const BorderRadius.all(Radius.circular(28)),
                 blur: 18,
                 opacity: 0.82,
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 child: SingleChildScrollView(
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
@@ -137,9 +141,9 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                         onPrivacy: () => unawaited(_openPrivacy()),
                         onClose: () => Navigator.of(context).maybePop(),
                       ),
-                      const SizedBox(height: 16),
-                      _SectionLabel('more.sectionAppearance'.tr()),
                       const SizedBox(height: 8),
+                      _SectionLabel('more.sectionAppearance'.tr()),
+                      const SizedBox(height: 6),
                       _ActionRow(
                         key: const Key('more-row-theme'),
                         icon: Icons.palette_outlined,
@@ -208,9 +212,62 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                           ),
                         ),
                       ],
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 10),
+                      _SectionLabel('more.sectionLanguage'.tr()),
+                      const SizedBox(height: 6),
+                      _ActionRow(
+                        key: const Key('more-row-language'),
+                        icon: Icons.translate_outlined,
+                        label: 'more.languageRowLabel'.tr(),
+                        description: _languageLabel(context),
+                        expanded: _languageChoicesVisible,
+                        enabled: !busy,
+                        trailing: Icon(
+                          _languageChoicesVisible
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                        ),
+                        onPressed: (_) {
+                          setState(
+                            () => _languageChoicesVisible =
+                                !_languageChoicesVisible,
+                          );
+                        },
+                      ),
+                      if (_languageChoicesVisible) ...[
+                        const SizedBox(height: 8),
+                        _LanguageChoiceRow(
+                          key: const Key('language-mode-system'),
+                          locale: null,
+                          label: 'more.languageSystem'.tr(),
+                          selected:
+                              context.locale.languageCode ==
+                              context.deviceLocale.languageCode,
+                          enabled: !busy,
+                          onSelected: _setLanguage,
+                        ),
+                        const SizedBox(height: 8),
+                        _LanguageChoiceRow(
+                          key: const Key('language-mode-vi'),
+                          locale: const Locale('vi'),
+                          label: 'more.languageVietnamese'.tr(),
+                          selected: context.locale == const Locale('vi'),
+                          enabled: !busy,
+                          onSelected: _setLanguage,
+                        ),
+                        const SizedBox(height: 8),
+                        _LanguageChoiceRow(
+                          key: const Key('language-mode-en'),
+                          locale: const Locale('en'),
+                          label: 'more.languageEnglish'.tr(),
+                          selected: context.locale == const Locale('en'),
+                          enabled: !busy,
+                          onSelected: _setLanguage,
+                        ),
+                      ],
+                      const SizedBox(height: 10),
                       _SectionLabel('more.sectionOrganization'.tr()),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       _ActionRow(
                         key: const Key('more-row-manage-tags'),
                         focusNode: _manageTagsFocusNode,
@@ -220,9 +277,9 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                         enabled: !busy,
                         onPressed: (_) => _showTags(),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 10),
                       _SectionLabel('more.sectionTransfer'.tr()),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       _TransferRow(
                         key: const Key('more-row-export-text'),
                         operation: NotesTransferOperation.exportText,
@@ -236,7 +293,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                           sharePositionOrigin: origin,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       _TransferRow(
                         key: const Key('more-row-backup-json'),
                         operation: NotesTransferOperation.backupJson,
@@ -250,7 +307,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                           sharePositionOrigin: origin,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       _TransferRow(
                         key: const Key('more-row-export-markdown'),
                         operation: NotesTransferOperation.exportMarkdown,
@@ -264,7 +321,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
                           sharePositionOrigin: origin,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       _TransferRow(
                         key: const Key('more-row-import-backup'),
                         focusNode: _importFocusNode,
@@ -315,6 +372,24 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
         _syncCanPop();
       }
     }
+  }
+
+  Future<void> _setLanguage(Locale? locale) async {
+    if (locale == null) {
+      await context.resetLocale();
+    } else {
+      await context.setLocale(locale);
+    }
+  }
+
+  String _languageLabel(BuildContext context) {
+    if (context.locale == const Locale('vi')) {
+      return 'more.languageVietnamese'.tr();
+    }
+    if (context.locale == const Locale('en')) {
+      return 'more.languageEnglish'.tr();
+    }
+    return 'more.languageSystem'.tr();
   }
 
   @override
@@ -468,6 +543,36 @@ class _ThemeChoiceRow extends StatelessWidget {
   }
 }
 
+class _LanguageChoiceRow extends StatelessWidget {
+  const _LanguageChoiceRow({
+    required this.locale,
+    required this.label,
+    required this.selected,
+    required this.enabled,
+    required this.onSelected,
+    super.key,
+  });
+
+  final Locale? locale;
+  final String label;
+  final bool selected;
+  final bool enabled;
+  final ValueChanged<Locale?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return _ActionRow(
+      icon: selected ? Icons.radio_button_checked : Icons.radio_button_off,
+      label: label,
+      description: '',
+      selected: selected,
+      enabled: enabled,
+      trailing: selected ? const Icon(Icons.check) : const SizedBox.shrink(),
+      onPressed: (_) => onSelected(locale),
+    );
+  }
+}
+
 class _TransferRow extends StatelessWidget {
   const _TransferRow({
     required this.operation,
@@ -603,7 +708,7 @@ class _ActionRow extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
-                      vertical: 8,
+                      vertical: 4,
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -739,8 +844,7 @@ String _transferProgress(
   NotesTransferOperation operation,
 ) {
   return switch (operation) {
-    NotesTransferOperation.exportText =>
-      'more.transferExportTextProgress'.tr(),
+    NotesTransferOperation.exportText => 'more.transferExportTextProgress'.tr(),
     NotesTransferOperation.backupJson => 'more.transferBackupProgress'.tr(),
     NotesTransferOperation.exportMarkdown =>
       'more.transferExportMarkdownProgress'.tr(),
@@ -770,7 +874,9 @@ String _transferSuccess(BuildContext context, NotesTransferOutcome outcome) {
       'more.transferExportMarkdownComplete'.tr(),
     NotesTransferOperation.importBackup => switch (outcome.importedCount ?? 0) {
       1 => 'more.transferImportedOne'.tr(),
-      final count => 'more.transferImportedMany'.tr(namedArgs: {'count': '$count'}),
+      final count => 'more.transferImportedMany'.tr(
+        namedArgs: {'count': '$count'},
+      ),
     },
   };
 }
