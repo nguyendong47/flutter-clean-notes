@@ -1,0 +1,29 @@
+# Session handoff — Vietnamese localization, 2026-09-10
+
+## Where things are
+- Branch/worktree: `worktree-vietnamese-localization` at `H:\source\flutter-clean-notes\.claude\worktrees\vietnamese-localization`. Always `cd` there for this work, never the main checkout.
+- Plan doc: `docs/superpowers/plans/2026-09-06-vietnamese-localization.md` (23 tasks total).
+- **Tasks 1-20 done and committed.** Task 21 (Vietnamese smoke test) is next. Tasks 22-23 unread past that point — check the plan doc.
+
+## Delegation workflow (established this session, now project policy in CLAUDE.md)
+- Claude coordinates; Google Antigravity (`agy`) does the actual code/content work, via the **`agy-delegate` skill** at `.claude/skills/agy-delegate/` (installed from `amElnagdy/delegate-skills`).
+- Dispatch: `node .claude/skills/agy-delegate/scripts/relay.mjs --brief <file> --cd <worktree path> --dangerously-skip-permissions --effort high`, `run_in_background: true`.
+- **Never trust the self-report.** Read `result.json`, then independently re-run `flutter analyze`, the relevant `flutter test` targets, and `node .gitnexus/run.cjs detect-changes --scope all --repo .` yourself before committing.
+- **Claude lands every commit**, never the relay/Antigravity. Convention: still credit Antigravity with `Co-Authored-By: Google Antigravity <antigravity@google.com>` in the message Claude writes (see commits `4ec7fbe`, `4d882f5`, `a81170b` for examples).
+- A trivial read-only check (grep, status check) that changes no file is cheaper to just do directly — don't delegate those.
+- Full incident history / known `agy` bugs: `docs/agents/antigravity-collab.md`.
+
+## Real bugs hit and fixed this session (don't re-diagnose from scratch if they recur)
+1. **autoDispose Riverpod provider timing** — wrapping a test with `wrapWithTestLocalization` delays first mount by a frame; an autoDispose provider read via `container.read(x.future)` before `pumpWidget` can get disposed and silently rebuild, throwing off exact-call-count test assertions. Fix: `container.listen(theProvider, (_, _) {})` right after the read, before `pumpWidget`. Example: `test/features/notes/presentation/add_edit_note_page_test.dart`'s `_pumpEditor`.
+2. **`context.deviceLocale` `LateInitializationError`** in tests — that getter needs `EasyLocalizationController.initEasyLocation()` to have run, which happens inside `EasyLocalization.ensureInitialized()`. Any test file using `context.deviceLocale` (or the private-API translation-loading workaround below) needs `SharedPreferences.setMockInitialValues({})` + `await EasyLocalization.ensureInitialized();` in `setUpAll`. Fixed in `test/features/notes/presentation/more_actions_sheet_test.dart`.
+3. **`.tr()` not resolving in pure `test()` files with no widget tree** (e.g. `notification_service_test.dart`) — `EasyLocalization.ensureInitialized()` alone isn't always enough; may need to reach into `package:easy_localization/src/easy_localization_controller.dart` + `src/localization.dart` (private API, `// ignore: implementation_imports`) to force-load translations. See that file's `setUpAll` for the working pattern.
+4. **`agy` headless quirks on Windows Git Bash**: stdout can silently drop over a non-TTY pipe, so a hand-rolled `agy -p ... 2>&1` wrapper can report a false `failed`/`timeout` even though the real process finished and committed correctly — always verify via `git log`, not exit code. The `agy-delegate` skill's `relay.mjs` fixes this properly (spawns via argv, writes structured `result.json`, has a watchdog) — use it instead of a hand-rolled wrapper now.
+5. When an `agy` dispatch **genuinely** doesn't finish (hits its own print-timeout while actually still working, not hung) — inspect the working tree before discarding anything (`git status`, `git diff`, read untracked `??` files directly). It's often much closer to done than it looks; the last few Task 20 sessions each recovered highly complete work this way.
+
+## Housekeeping done this session, don't redo
+- `.gitignore` now excludes: `.agent-shared/` (shared-sqlite DB), `.mcp.json` (machine-local absolute paths), `.superpowers/brainstorm/` (ephemeral runtime state), `.agents/` and `.codex/` (auto-generated cross-tool skill/agent mirrors) — all on `main`; only `.agent-shared/` was mirrored onto this worktree branch's `.gitignore` (line ~40-42) — the newer entries from `main`'s commit `621f9e4` are NOT yet on this branch's `.gitignore`; consider whether that still matters before this branch merges.
+- `main` branch got a separate housekeeping commit (`621f9e4`) adding `GEMINI.md`, `docs/agents/antigravity-collab.md`, a `CLAUDE.md` collaboration section (fixed control-character corruption in it — stray tab/BEL bytes from an earlier Antigravity edit), and tracking the previously-untracked `.claude/skills/gitnexus-*` files. That commit is on `main`, not this worktree branch.
+- `engrim` (cross-session/cross-tool memory, pip-installed) is wired globally into both Claude Code (`~/.claude/settings.json` hooks) and Antigravity (`~/.gemini/config/`) — separate from the project-local `.agent-shared/collab.db` mailbox. Recall with `engrim recall -q "<topic>"`.
+
+## Known open item, unresolved
+- User was auditing which MCP servers/plugins are actually used vs dead weight (session cost concern) — see the table given in chat right before this handoff was written. Candidates flagged unused this session: MCP — Google Drive/Gmail/Calendar, `exa`, `supabase-pat`, and (used only via CLI, never via MCP tool calls) `dart-mcp-server`, `github-pat`, `gitnexus`. Plugins — `code-review`, `code-simplifier`, `pr-review-toolkit`, `claude-md-management`, `feature-dev`, `frontend-design`, `security-guidance`, `commit-commands` were all enabled but never invoked this session. No decision was made — that's the user's call for the new session.
