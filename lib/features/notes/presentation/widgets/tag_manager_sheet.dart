@@ -72,6 +72,9 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet>
     final notesState = ref.watch(notesProvider);
     final usage = ref.watch(tagUsageProvider);
     final busy = _confirmationOpen || _retrying;
+    final topPadding = media.padding.top > 0
+        ? media.padding.top
+        : media.viewPadding.top;
 
     return PopScope(
       canPop: !busy,
@@ -79,14 +82,16 @@ class _TagManagerSheetState extends ConsumerState<TagManagerSheet>
         key: const Key('tag-sheet-insets'),
         padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
         child: SafeArea(
-          top: false,
+          top: true,
           minimum: const EdgeInsets.fromLTRB(12, 0, 12, 8),
           child: Align(
             alignment: Alignment.bottomCenter,
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 maxWidth: 600,
-                maxHeight: media.size.height * 0.9,
+                maxHeight: topPadding > 0
+                    ? media.size.height - topPadding - 24
+                    : media.size.height * 0.9,
               ),
               child: GlassSurface(
                 borderRadius: const BorderRadius.all(Radius.circular(28)),

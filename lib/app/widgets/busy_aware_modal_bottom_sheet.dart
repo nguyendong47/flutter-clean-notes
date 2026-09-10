@@ -36,6 +36,7 @@ Future<T?> showBusyAwareModalBottomSheet<T>({
   bool enableDrag = false,
   Color? backgroundColor,
   Color? barrierColor,
+  bool useSafeArea = true,
 }) {
   final navigator = Navigator.of(context);
   final localizations = MaterialLocalizations.of(context);
@@ -57,6 +58,7 @@ Future<T?> showBusyAwareModalBottomSheet<T>({
       modalBarrierColor:
           barrierColor ?? Theme.of(context).bottomSheetTheme.modalBarrierColor,
       enableDrag: enableDrag,
+      useSafeArea: useSafeArea,
     ),
   );
 }
@@ -72,6 +74,7 @@ class _BusyAwareModalBottomSheetRoute<T> extends ModalBottomSheetRoute<T> {
     super.backgroundColor,
     super.modalBarrierColor,
     super.enableDrag,
+    super.useSafeArea = true,
   }) : super(isDismissible: true);
 
   final BusyAwareModalController busyController;

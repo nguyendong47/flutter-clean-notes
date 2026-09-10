@@ -103,7 +103,9 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
     final transferBusy = transferState.isLoading;
     final busy = transferBusy || _themeBusy;
     final selectedTheme = ref.watch(appThemeProvider).value ?? ThemeMode.system;
-    final topPadding = media.padding.top;
+    final topPadding = media.padding.top > 0
+        ? media.padding.top
+        : media.viewPadding.top;
 
     return PopScope(
       canPop: !busy,
@@ -119,7 +121,7 @@ class _MoreActionsSheetState extends ConsumerState<MoreActionsSheet>
               constraints: BoxConstraints(
                 maxWidth: 600,
                 maxHeight: topPadding > 0
-                    ? media.size.height - topPadding - 16
+                    ? media.size.height - topPadding - 24
                     : media.size.height * 0.92,
               ),
               child: GlassSurface(
