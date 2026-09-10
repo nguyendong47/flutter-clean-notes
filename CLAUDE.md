@@ -8,6 +8,12 @@ GitHub Issues (`nguyendong47/flutter-clean-notes`), via `gh` CLI. See `docs/agen
 
 Single-context — `CONTEXT.md` + `docs/adr/` at repo root (created lazily when needed). See `docs/agents/domain.md`.
 
+### Multi-Agent Collaboration (Antigravity & Claude Code)
+
+Shared SQLite MCP (shared-sqlite) on .agent-shared/collab.db. Full protocol: docs/agents/antigravity-collab.md.
+- **Tasks & State**: Query and update the `tasks` table before and after work (`SELECT * FROM tasks WHERE status = 'todo'`).
+- **Messages & Handoff**: Read and post to the `agent_messages` table to exchange status with Antigravity.
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 

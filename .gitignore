@@ -36,3 +36,21 @@ key.properties
 
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Multi-agent shared sqlite coordination DB — local-machine coordination only,
+# not project source; this repo is public, don't leak agent chatter into it.
+.agent-shared/
+
+# Machine-local MCP config (absolute paths to this machine's tool installs —
+# would break for anyone else cloning this public repo).
+.mcp.json
+
+# Ephemeral runtime state (local server port/token) from an interactive
+# brainstorming session, not project source.
+.superpowers/brainstorm/
+
+# Auto-generated cross-tool mirrors of .claude/skills/ and Claude Code agent
+# configs (agy/Antigravity, Codex) — regenerated locally by the delegate
+# tooling, not hand-authored project content.
+.agents/
+.codex/
