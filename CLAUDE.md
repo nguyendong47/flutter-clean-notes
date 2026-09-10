@@ -14,6 +14,15 @@ Shared SQLite MCP (shared-sqlite) on .agent-shared/collab.db. Full protocol: doc
 - **Tasks & State**: Query and update the `tasks` table before and after work (`SELECT * FROM tasks WHERE status = 'todo'`).
 - **Messages & Handoff**: Read and post to the `agent_messages` table to exchange status with Antigravity.
 
+### Session handoff — always leave a resumable trail
+
+**Rule: at the end of every session — and any time you're about to lose the thread (long pause, context compaction, handing off to another agent/session/machine) — write or update a handoff doc and commit it.** This project is worked on across multiple sessions, tools, and machines; nothing persists unless it's in a committed file. Assume the next reader (a fresh session with zero conversation context, or a different agent entirely) has only `git log` and this file.
+
+- Location: `docs/agents/session-handoff-<YYYY-MM-DD>.md`. If one from today already exists, **update it in place** rather than creating a second file for the same day.
+- Contents, at minimum: current branch/worktree and how to get back into it; which plan/task is done (with commit SHAs) vs. next; any real bug, gotcha, or non-obvious fix discovered this session (with repro and fix, not just "watch out for X"); housekeeping already done that shouldn't be redone; open questions that are the user's to decide, not yours.
+- Commit the handoff doc — own commit or folded into the last task commit, either is fine, just don't leave it uncommitted.
+- Applies whether the session ends cleanly or gets interrupted — an interrupted session especially needs one, since there's no natural stopping point otherwise.
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
