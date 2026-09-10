@@ -160,4 +160,5 @@ as release evidence.
 - [Privacy and data flow](docs/privacy.md) — technical disclosure and owner decisions.
 - [Release readiness](docs/release.md) — store submission, signing, policy, and rollback gates; it is separate from branch merge readiness.
 - [QA matrix](docs/qa.md) — repeatable automated, device, accessibility, and upgrade checks.
+- [Product & Feature Roadmap](docs/roadmap.md) — competitive benchmark, long-term vision, and feature roadmap.
 - [Project Sync / Handoff](docs/superpowers/handoff.md) — current project status and evidence.
