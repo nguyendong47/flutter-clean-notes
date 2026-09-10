@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
@@ -264,7 +265,7 @@ class _NotesBottomBarState extends State<NotesBottomBar> {
     bool jumbo = false,
   }) {
     return _DestinationButton(
-      label: 'More actions',
+      label: 'common.moreActions'.tr(),
       visibleLabel: 'More',
       icon: Icons.more_horiz_rounded,
       selected: null,
@@ -290,7 +291,7 @@ class _NotesBottomBarState extends State<NotesBottomBar> {
       child: Semantics(
         container: true,
         button: true,
-        label: 'Create new note',
+        label: 'common.createNewNote'.tr(),
         onTap: () => _activate(focusNode, widget.onCreate),
         child: ExcludeSemantics(
           child: Theme(
@@ -327,7 +328,7 @@ class _NotesBottomBarState extends State<NotesBottomBar> {
               child: FloatingActionButton(
                 key: const Key('notes-bottom-bar-create-control'),
                 heroTag: 'notes-shell-create',
-                tooltip: 'Create new note',
+                tooltip: 'common.createNewNote'.tr(),
                 focusNode: focusNode,
                 backgroundColor: colorScheme.primary,
                 foregroundColor: colorScheme.onPrimary,

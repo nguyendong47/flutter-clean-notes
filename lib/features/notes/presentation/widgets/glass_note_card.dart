@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:characters/characters.dart' as chars;
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
@@ -34,8 +34,20 @@ class GlassNoteCard extends StatefulWidget {
 }
 
 class _GlassNoteCardState extends State<GlassNoteCard> {
-  static final _dateFormat = DateFormat('MMM d, yyyy');
-  static final _reminderFormat = DateFormat('MMM d, h:mm a');
+  // `EasyLocalization.of(context)` is null in the several page-level widget
+  // trees (router/home/library/search) that embed this card without an
+  // `EasyLocalization` ancestor in their test harnesses. `context.locale`
+  // force-unwraps that lookup and crashes in exactly those trees, so read it
+  // defensively and let `DateFormat` fall back to the platform default
+  // locale when no `EasyLocalization` ancestor is present.
+  DateFormat get _dateFormat => DateFormat(
+    'MMM d, yyyy',
+    EasyLocalization.of(context)?.locale.toString(),
+  );
+  DateFormat get _reminderFormat => DateFormat(
+    'MMM d, h:mm a',
+    EasyLocalization.of(context)?.locale.toString(),
+  );
   static const _radius = BorderRadius.all(Radius.circular(20));
 
   bool _busy = false;
@@ -123,7 +135,9 @@ class _GlassNoteCardState extends State<GlassNoteCard> {
                       ? Semantics(
                           container: true,
                           liveRegion: true,
-                          label: 'Updating note $title',
+                          label: 'common.updatingNoteSemantics'.tr(
+                            namedArgs: {'title': title},
+                          ),
                           excludeSemantics: true,
                           child: const SizedBox.square(
                             dimension: 48,
@@ -136,7 +150,9 @@ class _GlassNoteCardState extends State<GlassNoteCard> {
                       : SizedBox.square(
                           dimension: 48,
                           child: PopupMenuButton<_NoteAction>(
-                            tooltip: 'More actions for $title',
+                            tooltip: 'common.moreActionsForSemantics'.tr(
+                              namedArgs: {'title': title},
+                            ),
                             useRootNavigator: true,
                             padding: EdgeInsets.zero,
                             icon: const Icon(Icons.more_horiz),
@@ -279,7 +295,7 @@ class _CardContent extends StatelessWidget {
             if (note.isPinned)
               _Metadata(
                 icon: Icons.push_pin,
-                label: 'Pinned',
+                label: 'common.pinned'.tr(),
                 color: colorScheme.primary,
               ),
             _Metadata(
@@ -377,20 +393,27 @@ String _noteSemanticValue(
   return [
     if (preview.isNotEmpty) preview,
     if (visibleTags.isNotEmpty)
-      'Tags ${visibleTags.join(', ')}'
-          '${hiddenTagCount > 0 ? ', $hiddenTagCount more' : ''}',
-    if (note.isPinned) 'Pinned',
-    'Created ${dateFormat.format(note.createdAt)}',
+      'common.tagsSemantics'.tr(
+        namedArgs: {
+          'tags': visibleTags.join(', '),
+          'extra': hiddenTagCount > 0 ? ', $hiddenTagCount more' : '',
+        },
+      ),
+    if (note.isPinned) 'common.pinned'.tr(),
+    'common.createdSemantics'.tr(
+      namedArgs: {'date': dateFormat.format(note.createdAt)},
+    ),
     if (note.reminder case final reminder?)
       if (supportsReminderScheduling)
-        'Reminder ${reminderFormat.format(reminder)}'
+        'common.reminderSemantics'.tr(
+          namedArgs: {'date': reminderFormat.format(reminder)},
+        )
       else
-        'Stored reminder date ${reminderFormat.format(reminder)}. '
-            'Notifications unavailable on this device',
+        '${'common.storedReminderSemantics'.tr(namedArgs: {'date': reminderFormat.format(reminder)})}Notifications unavailable on this device',
   ].join('. ');
 }
 
 String _displayTitle(Note note) {
   final title = note.title.trim();
-  return title.isEmpty ? 'Untitled note' : title;
+  return title.isEmpty ? 'common.untitledNote'.tr() : title;
 }

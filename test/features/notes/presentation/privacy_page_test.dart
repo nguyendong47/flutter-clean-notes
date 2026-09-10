@@ -1,10 +1,23 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/privacy_page.dart';
 
+import '../../../support/localization_test_wrapper.dart';
+
 void main() {
+  // easy_localization's RootBundleAssetLoader reads translation JSON via
+  // rootBundle.loadString, which flutter's CachingAssetBundle caches by key.
+  // A stale cache entry from an earlier test's (now-disposed) EasyLocalization
+  // instance causes every subsequent wrapWithTestLocalization(...) build in
+  // this file to hang forever awaiting that load (see
+  // aissat/easy_localization#268/#362). Clearing the cache after each test
+  // keeps every load a fresh read.
+  tearDown(() => rootBundle.clear());
+
   testWidgets('explains storage reminders transfers and network behavior', (
     tester,
   ) async {
@@ -125,11 +138,18 @@ Future<void> _pumpPrivacyPage(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   await tester.pumpWidget(
-    MaterialApp(
-      theme: theme ?? AuroraTheme.light(),
-      home: MediaQuery(
-        data: MediaQueryData(size: size, textScaler: textScaler),
-        child: PrivacyPage(onClose: () {}),
+    wrapWithTestLocalization(
+      Builder(
+        builder: (localizationContext) => MaterialApp(
+          theme: theme ?? AuroraTheme.light(),
+          localizationsDelegates: localizationContext.localizationDelegates,
+          supportedLocales: localizationContext.supportedLocales,
+          locale: localizationContext.locale,
+          home: MediaQuery(
+            data: MediaQueryData(size: size, textScaler: textScaler),
+            child: PrivacyPage(onClose: () {}),
+          ),
+        ),
       ),
     ),
   );

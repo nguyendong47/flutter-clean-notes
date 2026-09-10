@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -27,8 +28,7 @@ class AddEditNotePage extends ConsumerStatefulWidget {
 
 class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     implements PopEntry<Object?> {
-  static const _reminderValidationMessage =
-      'Open Note details to choose a future reminder.';
+  String get _reminderValidationMessage => 'editor.reminderValidation'.tr();
 
   late final TextEditingController _titleController;
   late final TextEditingController _contentController;
@@ -252,7 +252,9 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
             ),
             IconButton(
               key: const Key('editor-preview-toggle'),
-              tooltip: _previewMode ? 'Edit' : 'Preview',
+              tooltip: _previewMode
+                  ? 'editor.editTooltip'.tr()
+                  : 'editor.previewTooltip'.tr(),
               onPressed: _saving ? null : _togglePreview,
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               icon: Icon(
@@ -261,7 +263,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
             ),
             IconButton(
               key: const Key('editor-metadata-button'),
-              tooltip: 'Note details',
+              tooltip: 'editor.detailsTooltip'.tr(),
               onPressed: _saving ? null : _openMetadata,
               focusNode: _metadataFocusNode,
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -280,7 +282,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
               child: _saving
                   ? Semantics(
                       liveRegion: true,
-                      label: 'Saving note',
+                      label: 'editor.savingSemantics'.tr(),
                       child: const SizedBox(
                         key: Key('editor-save-progress'),
                         width: 18,
@@ -290,12 +292,12 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
                     )
                   : compactDoneAction
                   ? Semantics(
-                      label: 'Done',
+                      label: 'editor.doneSemantics'.tr(),
                       child: const ExcludeSemantics(
                         child: Icon(Icons.check_rounded),
                       ),
                     )
-                  : const Text('Done'),
+                  : Text('editor.done'.tr()),
             ),
           ],
         ),
@@ -343,12 +345,12 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildFieldLabel('Title'),
+        _buildFieldLabel('editor.fieldLabelTitle'),
         const SizedBox(height: 4),
         _buildTitleField(maxLines: 2),
         ..._buildEditorFeedback(),
         const SizedBox(height: 16),
-        _buildFieldLabel('Note content'),
+        _buildFieldLabel('editor.fieldLabelContent'),
         const SizedBox(height: 4),
         Expanded(child: _buildBodyField()),
       ],
@@ -365,7 +367,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildFieldLabel('Title'),
+                _buildFieldLabel('editor.fieldLabelTitle'),
                 const SizedBox(height: 4),
                 _buildTitleField(maxLines: 1),
                 ..._buildEditorFeedback(),
@@ -379,7 +381,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildFieldLabel('Note content'),
+              _buildFieldLabel('editor.fieldLabelContent'),
               const SizedBox(height: 4),
               Expanded(child: _buildBodyField()),
             ],
@@ -389,11 +391,11 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     );
   }
 
-  Widget _buildFieldLabel(String label) {
+  Widget _buildFieldLabel(String translationKey) {
     final theme = Theme.of(context);
     return ExcludeSemantics(
       child: Text(
-        label,
+        translationKey.tr(),
         style: theme.textTheme.labelLarge?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
           fontWeight: FontWeight.w700,
@@ -405,7 +407,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
   Widget _buildTitleField({required int maxLines}) {
     final theme = Theme.of(context);
     return Semantics(
-      label: 'Title',
+      label: 'editor.titleSemantics'.tr(),
       child: TextField(
         key: const Key('editor-title-field'),
         controller: _titleController,
@@ -420,8 +422,8 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
           height: 32 / 28,
           fontWeight: FontWeight.w700,
         ),
-        decoration: const InputDecoration(
-          hintText: 'Untitled note',
+        decoration: InputDecoration(
+          hintText: 'editor.titleHint'.tr(),
           border: InputBorder.none,
           isDense: true,
           contentPadding: EdgeInsets.symmetric(vertical: 4),
@@ -433,7 +435,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
   Widget _buildBodyField() {
     final theme = Theme.of(context);
     return Semantics(
-      label: 'Note content',
+      label: 'editor.contentSemantics'.tr(),
       child: TextField(
         key: const Key('editor-body-field'),
         controller: _contentController,
@@ -445,10 +447,10 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
         textAlignVertical: TextAlignVertical.top,
         keyboardType: TextInputType.multiline,
         style: theme.textTheme.bodyLarge?.copyWith(fontSize: 16, height: 1.5),
-        decoration: const InputDecoration(
-          hintText: 'Start writing…',
+        decoration: InputDecoration(
+          hintText: 'editor.contentHint'.tr(),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(vertical: 4),
+          contentPadding: const EdgeInsets.symmetric(vertical: 4),
         ),
       ),
     );
@@ -486,16 +488,10 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Title',
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          _buildFieldLabel('editor.fieldLabelTitle'),
           const SizedBox(height: 8),
           Text(
-            title.isEmpty ? 'Untitled note' : title,
+            title.isEmpty ? 'editor.titleHint'.tr() : title,
             key: const Key('editor-preview-title'),
             style: theme.textTheme.headlineMedium?.copyWith(
               fontSize: 28,
@@ -508,21 +504,15 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
             _buildSaveError(error),
           ],
           const SizedBox(height: 24),
-          Text(
-            'Note content',
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          _buildFieldLabel('editor.fieldLabelContent'),
           const SizedBox(height: 12),
           MarkdownBody(
-            data: content.isEmpty ? '_Nothing to preview._' : content,
+            data: content.isEmpty ? 'editor.nothingToPreview'.tr() : content,
             imageBuilder: (_, _, altText) {
               final alt = altText?.trim();
               final label = alt == null || alt.isEmpty
-                  ? 'Image unavailable'
-                  : 'Image unavailable: $alt';
+                  ? 'editor.imageUnavailable'.tr()
+                  : 'editor.imageUnavailableAlt'.tr(namedArgs: {'alt': alt});
               return Semantics(
                 key: const Key('editor-markdown-image-placeholder'),
                 container: true,
@@ -576,7 +566,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                error.heading,
+                error.headingKey.tr(),
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   color: colorScheme.onErrorContainer,
                   fontWeight: FontWeight.w800,
@@ -584,7 +574,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
               ),
               const SizedBox(height: 4),
               Text(
-                error.detail,
+                error.detailKey.tr(),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onErrorContainer,
                 ),
@@ -596,7 +586,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
                   key: const Key('editor-retry-button'),
                   onPressed: _saving ? null : _saveNote,
                   icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Retry'),
+                  label: Text('editor.retry'.tr()),
                   style: TextButton.styleFrom(
                     foregroundColor: colorScheme.onErrorContainer,
                   ),
@@ -720,7 +710,7 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     if (title.isEmpty && content.isEmpty) {
       setState(() {
         _previewMode = false;
-        _validationMessage = 'Add a title or some content';
+        _validationMessage = 'editor.validationMessage'.tr();
         _saveError = null;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -798,12 +788,10 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
       setState(() {
         _saving = false;
         _saveError = _EditorSaveError(
-          heading: 'Couldn’t finish saving note',
-          detail: reminderWasInvolved
-              ? 'Your note is saved, but its reminder is not confirmed. '
-                    'Retry or update the reminder.'
-              : 'Your note is saved, but the note list could not be '
-                    'refreshed. Retry to finish.',
+          headingKey: 'editor.couldntFinishSavingHeading',
+          detailKey: reminderWasInvolved
+              ? 'editor.couldntFinishSavingReminderDetail'
+              : 'editor.couldntFinishSavingRefreshDetail',
         );
       });
       _syncCanPop();
@@ -812,8 +800,8 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
       setState(() {
         _saving = false;
         _saveError = const _EditorSaveError(
-          heading: 'Couldn’t save note',
-          detail: 'Your changes are still here. Try again.',
+          headingKey: 'editor.couldntSaveHeading',
+          detailKey: 'editor.couldntSaveDetail',
         );
       });
       _syncCanPop();
@@ -842,11 +830,9 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     );
     if (match.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Linked note not found. Create it first.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('editor.linkedNoteNotFound'.tr())));
       return;
     }
     if (!mounted) return;
@@ -897,20 +883,20 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
 
         return AlertDialog(
           key: const Key('discard-changes-dialog'),
-          semanticLabel: 'Unsaved changes',
-          title: const Text('Discard changes?'),
-          content: const Text('Your unsaved changes will be lost.'),
+          semanticLabel: 'editor.unsavedChanges'.tr(),
+          title: Text('editor.discardTitle'.tr()),
+          content: Text('editor.discardBody'.tr()),
           actions: [
             TextButton(
               key: const Key('discard-changes-button'),
               onPressed: () => resolve(true),
-              child: const Text('Discard changes'),
+              child: Text('editor.discardConfirm'.tr()),
             ),
             FilledButton(
               key: const Key('keep-editing-button'),
               autofocus: true,
               onPressed: () => resolve(false),
-              child: const Text('Keep editing'),
+              child: Text('editor.keepEditing'.tr()),
             ),
           ],
         );
@@ -1015,10 +1001,10 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
 enum _EditorFocusIntent { none, title, content }
 
 class _EditorSaveError {
-  const _EditorSaveError({required this.heading, required this.detail});
+  const _EditorSaveError({required this.headingKey, required this.detailKey});
 
-  final String heading;
-  final String detail;
+  final String headingKey;
+  final String detailKey;
 }
 
 class _EditorSnapshot {

@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,10 +23,19 @@ import 'package:flutter_clean_notes/features/notes/presentation/services/persist
 import '../helpers/fake_note_reminder_gateway.dart';
 import '../helpers/in_memory_note_repository.dart';
 import '../helpers/note_fixtures.dart';
+import '../support/localization_test_wrapper.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  // easy_localization's RootBundleAssetLoader reads translation JSON via
+  // rootBundle.loadString, which flutter's CachingAssetBundle caches by key.
+  // A stale cache entry from an earlier test's (now-disposed) EasyLocalization
+  // instance causes every subsequent wrapWithTestLocalization(...) build in
+  // this file to hang forever awaiting that load (see
+  // aissat/easy_localization#268/#362). Clearing the cache after each test
+  // keeps every load a fresh read.
+  tearDown(() => rootBundle.clear());
 
   for (final platform in [
     TargetPlatform.android,
@@ -453,13 +464,20 @@ Future<_Harness> _pumpRouter(
   if (initialLocation != '/') router.go(initialLocation);
 
   await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp.router(
-        debugShowCheckedModeBanner: false,
-        theme: AuroraTheme.light(),
-        darkTheme: AuroraTheme.dark(),
-        routerConfig: router,
+    wrapWithTestLocalization(
+      UncontrolledProviderScope(
+        container: container,
+        child: Builder(
+          builder: (localizationContext) => MaterialApp.router(
+            debugShowCheckedModeBanner: false,
+            theme: AuroraTheme.light(),
+            darkTheme: AuroraTheme.dark(),
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            routerConfig: router,
+          ),
+        ),
       ),
     ),
   );

@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
@@ -7,7 +8,18 @@ import 'package:flutter_clean_notes/app/widgets/glass_surface.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/note_metadata_sheet.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/localization_test_wrapper.dart';
+
 void main() {
+  // easy_localization's RootBundleAssetLoader reads translation JSON via
+  // rootBundle.loadString, which flutter's CachingAssetBundle caches by key.
+  // A stale cache entry from an earlier test's (now-disposed) EasyLocalization
+  // instance causes every subsequent wrapWithTestLocalization(...) build in
+  // this file to hang forever awaiting that load (see
+  // aissat/easy_localization#268/#362). Clearing the cache after each test
+  // keeps every load a fresh read.
+  tearDown(() => rootBundle.clear());
+
   test('metadata value defensively owns an unmodifiable tag snapshot', () {
     final source = <String>['work'];
     final value = NoteMetadataValue(
@@ -822,49 +834,57 @@ Future<void> _openSheet(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
-    MaterialApp(
-      theme: theme ?? AuroraTheme.light(),
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          textScaler: textScaler,
-          padding: EdgeInsets.only(
-            top: viewPadding.top,
-            bottom: (viewPadding.bottom - viewInsets.bottom)
-                .clamp(0.0, double.infinity)
-                .toDouble(),
+    wrapWithTestLocalization(
+      Builder(
+        builder: (localizationContext) => MaterialApp(
+          theme: theme ?? AuroraTheme.light(),
+          localizationsDelegates: localizationContext.localizationDelegates,
+          supportedLocales: localizationContext.supportedLocales,
+          locale: localizationContext.locale,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: textScaler,
+              padding: EdgeInsets.only(
+                top: viewPadding.top,
+                bottom: (viewPadding.bottom - viewInsets.bottom)
+                    .clamp(0.0, double.infinity)
+                    .toDouble(),
+              ),
+              viewPadding: viewPadding,
+              viewInsets: viewInsets,
+              disableAnimations: disableAnimations,
+            ),
+            child: child!,
           ),
-          viewPadding: viewPadding,
-          viewInsets: viewInsets,
-          disableAnimations: disableAnimations,
-        ),
-        child: child!,
-      ),
-      home: Builder(
-        builder: (sheetContext) => Scaffold(
-          body: Center(
-            child: FilledButton(
-              key: const Key('open-metadata'),
-              onPressed: () async {
-                final value = await showModalBottomSheet<NoteMetadataValue>(
-                  context: sheetContext,
-                  isScrollControlled: true,
-                  useSafeArea: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (context) => NoteMetadataSheet(
-                    initialValue: initial,
-                    now: now,
-                    supportsReminderScheduling: supportsReminderScheduling,
-                  ),
-                );
-                if (value != null) result.value = value;
-              },
-              child: const Text('Open'),
+          home: Builder(
+            builder: (sheetContext) => Scaffold(
+              body: Center(
+                child: FilledButton(
+                  key: const Key('open-metadata'),
+                  onPressed: () async {
+                    final value = await showModalBottomSheet<NoteMetadataValue>(
+                      context: sheetContext,
+                      isScrollControlled: true,
+                      useSafeArea: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => NoteMetadataSheet(
+                        initialValue: initial,
+                        now: now,
+                        supportsReminderScheduling: supportsReminderScheduling,
+                      ),
+                    );
+                    if (value != null) result.value = value;
+                  },
+                  child: const Text('Open'),
+                ),
+              ),
             ),
           ),
         ),
       ),
     ),
   );
+  await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('open-metadata')));
   await tester.pumpAndSettle();
   expect(find.byKey(const Key('metadata-sheet')), findsOneWidget);

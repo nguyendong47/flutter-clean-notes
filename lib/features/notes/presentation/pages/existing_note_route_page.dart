@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -60,7 +61,7 @@ class _ExistingNoteRoutePageState extends ConsumerState<ExistingNoteRoutePage> {
             skipLoadingOnReload: false,
             loading: () => _RouteStateScaffold(
               key: const Key('existing-note-loading'),
-              title: 'Opening note',
+              title: 'common.openingNote'.tr(),
               message: 'Loading your note…',
               icon: Icons.hourglass_top_rounded,
               onClose: widget.onClose,
@@ -68,7 +69,7 @@ class _ExistingNoteRoutePageState extends ConsumerState<ExistingNoteRoutePage> {
             ),
             error: (error, stackTrace) => _RouteStateScaffold(
               key: const Key('existing-note-error'),
-              title: 'Could not open note',
+              title: 'common.couldNotOpenNote'.tr(),
               message: 'Please try again.',
               icon: Icons.error_outline_rounded,
               onClose: widget.onClose,
@@ -91,7 +92,7 @@ class _ExistingNoteRoutePageState extends ConsumerState<ExistingNoteRoutePage> {
   Widget _notFound() {
     return _RouteStateScaffold(
       key: const Key('existing-note-not-found'),
-      title: 'Note not found',
+      title: 'common.noteNotFound'.tr(),
       message: 'This note does not exist or is no longer available.',
       icon: Icons.search_off_rounded,
       onClose: widget.onClose,
@@ -133,7 +134,7 @@ class _RouteStateScaffold extends StatelessWidget {
       backgroundColor: Colors.transparent,
       appBar: AppBar(
         leading: BackButton(onPressed: onClose),
-        title: const Text('Notes'),
+        title: Text('common.notesTitle'.tr()),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
@@ -184,7 +185,7 @@ class _RouteStateScaffold extends StatelessWidget {
                               key: const Key('existing-note-retry'),
                               onPressed: retry,
                               icon: const Icon(Icons.refresh_rounded),
-                              label: const Text('Try again'),
+                              label: Text('common.tryAgain'.tr()),
                             ),
                           ),
                         ],

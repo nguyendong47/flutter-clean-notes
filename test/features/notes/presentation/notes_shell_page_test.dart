@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' show SemanticsAction, Tristate;
 
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -9,8 +10,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/notes_bottom_bar.dart';
 
+import '../../../support/localization_test_wrapper.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  // easy_localization's RootBundleAssetLoader reads translation JSON via
+  // rootBundle.loadString, which flutter's CachingAssetBundle caches by key.
+  // A stale cache entry from an earlier test's (now-disposed) EasyLocalization
+  // instance causes every subsequent wrapWithTestLocalization(...) build in
+  // this file to hang forever awaiting that load (see
+  // aissat/easy_localization#268/#362). Clearing the cache after each test
+  // keeps every load a fresh read.
+  tearDown(() => rootBundle.clear());
 
   for (final theme in <ThemeData>[AuroraTheme.light(), AuroraTheme.dark()]) {
     final brightness = theme.brightness.name;
@@ -27,19 +39,28 @@ void main() {
         var createCount = 0;
         var moreCount = 0;
         await tester.pumpWidget(
-          MaterialApp(
-            theme: theme,
-            home: Scaffold(
-              body: const ColoredBox(color: Colors.transparent),
-              bottomNavigationBar: NotesBottomBar(
-                currentIndex: 0,
-                onDestinationSelected: (index) => selectedIndex = index,
-                onCreate: () => createCount++,
-                onMore: () => moreCount++,
+          wrapWithTestLocalization(
+            Builder(
+              builder: (localizationContext) => MaterialApp(
+                theme: theme,
+                localizationsDelegates:
+                    localizationContext.localizationDelegates,
+                supportedLocales: localizationContext.supportedLocales,
+                locale: localizationContext.locale,
+                home: Scaffold(
+                  body: const ColoredBox(color: Colors.transparent),
+                  bottomNavigationBar: NotesBottomBar(
+                    currentIndex: 0,
+                    onDestinationSelected: (index) => selectedIndex = index,
+                    onCreate: () => createCount++,
+                    onMore: () => moreCount++,
+                  ),
+                ),
               ),
             ),
           ),
         );
+        await tester.pumpAndSettle();
 
         const labels = <String>[
           'Notes tab',
@@ -140,18 +161,26 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AuroraTheme.light(),
-        home: Scaffold(
-          bottomNavigationBar: NotesBottomBar(
-            currentIndex: 0,
-            onDestinationSelected: (_) {},
-            onCreate: () {},
-            onMore: () {},
+      wrapWithTestLocalization(
+        Builder(
+          builder: (localizationContext) => MaterialApp(
+            theme: AuroraTheme.light(),
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            home: Scaffold(
+              bottomNavigationBar: NotesBottomBar(
+                currentIndex: 0,
+                onDestinationSelected: (_) {},
+                onCreate: () {},
+                onMore: () {},
+              ),
+            ),
           ),
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     final surfaceRect = tester.getRect(
       find.byKey(const Key('notes-bottom-bar-surface')),
@@ -176,18 +205,27 @@ void main() {
         final semantics = tester.ensureSemantics();
 
         await tester.pumpWidget(
-          MaterialApp(
-            theme: theme,
-            home: Scaffold(
-              bottomNavigationBar: NotesBottomBar(
-                currentIndex: 0,
-                onDestinationSelected: (_) {},
-                onCreate: () {},
-                onMore: () {},
+          wrapWithTestLocalization(
+            Builder(
+              builder: (localizationContext) => MaterialApp(
+                theme: theme,
+                localizationsDelegates:
+                    localizationContext.localizationDelegates,
+                supportedLocales: localizationContext.supportedLocales,
+                locale: localizationContext.locale,
+                home: Scaffold(
+                  bottomNavigationBar: NotesBottomBar(
+                    currentIndex: 0,
+                    onDestinationSelected: (_) {},
+                    onCreate: () {},
+                    onMore: () {},
+                  ),
+                ),
               ),
             ),
           ),
         );
+        await tester.pumpAndSettle();
 
         final control = find.byKey(
           const Key('notes-bottom-bar-create-control'),
@@ -267,25 +305,36 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      Future<void> pumpBar(double scale) => tester.pumpWidget(
-        MaterialApp(
-          theme: AuroraTheme.light(),
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(scale)),
-            child: child!,
-          ),
-          home: Scaffold(
-            bottomNavigationBar: NotesBottomBar(
-              currentIndex: 0,
-              onDestinationSelected: (_) {},
-              onCreate: () {},
-              onMore: () {},
+      Future<void> pumpBar(double scale) async {
+        await tester.pumpWidget(
+          wrapWithTestLocalization(
+            Builder(
+              builder: (localizationContext) => MaterialApp(
+                theme: AuroraTheme.light(),
+                localizationsDelegates:
+                    localizationContext.localizationDelegates,
+                supportedLocales: localizationContext.supportedLocales,
+                locale: localizationContext.locale,
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: Scaffold(
+                  bottomNavigationBar: NotesBottomBar(
+                    currentIndex: 0,
+                    onDestinationSelected: (_) {},
+                    onCreate: () {},
+                    onMore: () {},
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-      );
+        );
+        await tester.pumpAndSettle();
+      }
 
       const labels = ['Notes', 'Search', 'Library', 'More'];
       await pumpBar(1);
@@ -367,24 +416,32 @@ void main() {
 
       var selectedIndex = -1;
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AuroraTheme.light(),
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: const TextScaler.linear(3)),
-            child: child!,
-          ),
-          home: Scaffold(
-            bottomNavigationBar: NotesBottomBar(
-              currentIndex: 1,
-              onDestinationSelected: (index) => selectedIndex = index,
-              onCreate: () {},
-              onMore: () {},
+        wrapWithTestLocalization(
+          Builder(
+            builder: (localizationContext) => MaterialApp(
+              theme: AuroraTheme.light(),
+              localizationsDelegates: localizationContext.localizationDelegates,
+              supportedLocales: localizationContext.supportedLocales,
+              locale: localizationContext.locale,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(3)),
+                child: child!,
+              ),
+              home: Scaffold(
+                bottomNavigationBar: NotesBottomBar(
+                  currentIndex: 1,
+                  onDestinationSelected: (index) => selectedIndex = index,
+                  onCreate: () {},
+                  onMore: () {},
+                ),
+              ),
             ),
           ),
         ),
       );
+      await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
       final regionRect = tester.getRect(
@@ -471,24 +528,33 @@ void main() {
         addTearDown(tester.view.resetDevicePixelRatio);
 
         await tester.pumpWidget(
-          MaterialApp(
-            theme: AuroraTheme.light(),
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: TextScaler.linear(textScale)),
-              child: child!,
-            ),
-            home: Scaffold(
-              bottomNavigationBar: NotesBottomBar(
-                currentIndex: 0,
-                onDestinationSelected: (_) {},
-                onCreate: () {},
-                onMore: () {},
+          wrapWithTestLocalization(
+            Builder(
+              builder: (localizationContext) => MaterialApp(
+                theme: AuroraTheme.light(),
+                localizationsDelegates:
+                    localizationContext.localizationDelegates,
+                supportedLocales: localizationContext.supportedLocales,
+                locale: localizationContext.locale,
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(textScale)),
+                  child: child!,
+                ),
+                home: Scaffold(
+                  bottomNavigationBar: NotesBottomBar(
+                    currentIndex: 0,
+                    onDestinationSelected: (_) {},
+                    onCreate: () {},
+                    onMore: () {},
+                  ),
+                ),
               ),
             ),
           ),
         );
+        await tester.pumpAndSettle();
 
         final regionRect = tester.getRect(
           find.byKey(const Key('notes-bottom-bar-region')),
@@ -511,22 +577,30 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AuroraTheme.light(),
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: child!,
-        ),
-        home: Scaffold(
-          bottomNavigationBar: NotesBottomBar(
-            currentIndex: 0,
-            onDestinationSelected: (_) {},
-            onCreate: () {},
-            onMore: () {},
+      wrapWithTestLocalization(
+        Builder(
+          builder: (localizationContext) => MaterialApp(
+            theme: AuroraTheme.light(),
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: child!,
+            ),
+            home: Scaffold(
+              bottomNavigationBar: NotesBottomBar(
+                currentIndex: 0,
+                onDestinationSelected: (_) {},
+                onCreate: () {},
+                onMore: () {},
+              ),
+            ),
           ),
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     final animations = tester.widgetList<AnimatedContainer>(
       find.descendant(
@@ -553,18 +627,26 @@ void main() {
     var selectedIndex = -1;
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AuroraTheme.light(),
-        home: Scaffold(
-          bottomNavigationBar: NotesBottomBar(
-            currentIndex: 0,
-            onDestinationSelected: (index) => selectedIndex = index,
-            onCreate: () {},
-            onMore: () {},
+      wrapWithTestLocalization(
+        Builder(
+          builder: (localizationContext) => MaterialApp(
+            theme: AuroraTheme.light(),
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            home: Scaffold(
+              bottomNavigationBar: NotesBottomBar(
+                currentIndex: 0,
+                onDestinationSelected: (index) => selectedIndex = index,
+                onCreate: () {},
+                onMore: () {},
+              ),
+            ),
           ),
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     const controlKeys = [
       Key('notes-bottom-bar-notes-control'),
@@ -645,19 +727,27 @@ void main() {
     addTearDown(fieldFocus.dispose);
     var selectedIndex = -1;
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AuroraTheme.light(),
-        home: Scaffold(
-          body: TextField(focusNode: fieldFocus),
-          bottomNavigationBar: NotesBottomBar(
-            currentIndex: 0,
-            onDestinationSelected: (index) => selectedIndex = index,
-            onCreate: () {},
-            onMore: () {},
+      wrapWithTestLocalization(
+        Builder(
+          builder: (localizationContext) => MaterialApp(
+            theme: AuroraTheme.light(),
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            home: Scaffold(
+              body: TextField(focusNode: fieldFocus),
+              bottomNavigationBar: NotesBottomBar(
+                currentIndex: 0,
+                onDestinationSelected: (index) => selectedIndex = index,
+                onCreate: () {},
+                onMore: () {},
+              ),
+            ),
           ),
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byType(TextField));
     await tester.pump();
@@ -680,23 +770,31 @@ void main() {
     final externalFocus = FocusNode();
     addTearDown(externalFocus.dispose);
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AuroraTheme.light(),
-        home: Scaffold(
-          body: TextButton(
-            focusNode: externalFocus,
-            onPressed: () {},
-            child: const Text('Outside action'),
-          ),
-          bottomNavigationBar: NotesBottomBar(
-            currentIndex: 0,
-            onDestinationSelected: (_) {},
-            onCreate: () {},
-            onMore: () {},
+      wrapWithTestLocalization(
+        Builder(
+          builder: (localizationContext) => MaterialApp(
+            theme: AuroraTheme.light(),
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            home: Scaffold(
+              body: TextButton(
+                focusNode: externalFocus,
+                onPressed: () {},
+                child: const Text('Outside action'),
+              ),
+              bottomNavigationBar: NotesBottomBar(
+                currentIndex: 0,
+                onDestinationSelected: (_) {},
+                onCreate: () {},
+                onMore: () {},
+              ),
+            ),
           ),
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     final notesNode = tester
         .widget<InkWell>(
@@ -720,24 +818,32 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AuroraTheme.dark(),
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: const TextScaler.linear(2)),
-          child: child!,
-        ),
-        home: Scaffold(
-          bottomNavigationBar: NotesBottomBar(
-            currentIndex: 1,
-            onDestinationSelected: (_) {},
-            onCreate: () {},
-            onMore: () {},
+      wrapWithTestLocalization(
+        Builder(
+          builder: (localizationContext) => MaterialApp(
+            theme: AuroraTheme.dark(),
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: Scaffold(
+              bottomNavigationBar: NotesBottomBar(
+                currentIndex: 1,
+                onDestinationSelected: (_) {},
+                onCreate: () {},
+                onMore: () {},
+              ),
+            ),
           ),
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
     final surfaceRect = tester.getRect(

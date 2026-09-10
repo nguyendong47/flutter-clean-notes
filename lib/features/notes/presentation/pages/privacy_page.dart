@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_clean_notes/app/widgets/aurora_background.dart';
@@ -25,7 +26,7 @@ class PrivacyPage extends StatelessWidget {
             key: const Key('privacy-back-button'),
             onPressed: onClose,
           ),
-          title: const Text('Privacy'),
+          title: Text('privacy.title'.tr()),
           backgroundColor: Colors.transparent,
           elevation: 0,
           scrolledUnderElevation: 0,
@@ -48,7 +49,7 @@ class PrivacyPage extends StatelessWidget {
                   child: ConstrainedBox(
                     key: const Key('privacy-content'),
                     constraints: const BoxConstraints(maxWidth: 760),
-                    child: const Column(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _PrivacyHero(),
@@ -56,7 +57,7 @@ class PrivacyPage extends StatelessWidget {
                         _PrivacyCard(
                           key: Key('privacy-storage-card'),
                           icon: Icons.storage_outlined,
-                          title: 'Where your notes live',
+                          title: 'privacy.sectionWhereNotesLive'.tr(),
                           body:
                               'On Android, iOS, macOS, Windows, and Linux, '
                               'notes use a local SQLite database. On Web, notes '
@@ -77,7 +78,7 @@ class PrivacyPage extends StatelessWidget {
                         _PrivacyCard(
                           key: Key('privacy-reminders-card'),
                           icon: Icons.notifications_none_rounded,
-                          title: 'Reminders use platform services',
+                          title: 'privacy.sectionReminders'.tr(),
                           body:
                               'Reminder time stays with the local note. On '
                               'Android, iOS, and macOS, Clean Notes gives the '
@@ -94,7 +95,7 @@ class PrivacyPage extends StatelessWidget {
                         _PrivacyCard(
                           key: Key('privacy-transfer-card'),
                           icon: Icons.swap_vert_circle_outlined,
-                          title: 'Import, export, and backup',
+                          title: 'privacy.sectionTransfer'.tr(),
                           body:
                               'Text and Markdown exports include title, '
                               'content, and tags from Active and Archive '
@@ -109,7 +110,7 @@ class PrivacyPage extends StatelessWidget {
                         _PrivacyCard(
                           key: Key('privacy-external-transfer-card'),
                           icon: Icons.ios_share_outlined,
-                          title: 'You control app-initiated transfers',
+                          title: 'privacy.sectionAppInitiated'.tr(),
                           body:
                               'Clean Notes starts an export only when you '
                               'choose Export or Backup. Content is handed to '
@@ -125,7 +126,7 @@ class PrivacyPage extends StatelessWidget {
                         _PrivacyCard(
                           key: Key('privacy-network-card'),
                           icon: Icons.language_outlined,
-                          title: 'Network behavior',
+                          title: 'privacy.sectionNetwork'.tr(),
                           body:
                               'Clean Notes has no app-owned remote API, '
                               'analytics, crash reporting, or telemetry in '
@@ -144,7 +145,7 @@ class PrivacyPage extends StatelessWidget {
                         _PrivacyCard(
                           key: Key('privacy-retention-card'),
                           icon: Icons.delete_outline_rounded,
-                          title: 'Retention and deletion',
+                          title: 'privacy.sectionRetention'.tr(),
                           body:
                               'Active, archived, and trashed notes remain until '
                               'you delete them. Trash is not automatically '
@@ -211,13 +212,13 @@ class _PrivacyHero extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          const Wrap(
+          Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              Chip(label: Text('Local-first')),
-              Chip(label: Text('No account')),
-              Chip(label: Text('You choose transfers')),
+              Chip(label: Text('privacy.chipLocalFirst'.tr())),
+              Chip(label: Text('privacy.chipNoAccount'.tr())),
+              Chip(label: Text('privacy.chipYouChooseTransfers'.tr())),
             ],
           ),
         ],

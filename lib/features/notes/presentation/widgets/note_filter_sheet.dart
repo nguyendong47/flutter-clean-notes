@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -53,7 +54,7 @@ class NoteFilterSheet extends ConsumerWidget {
                       SizedBox.square(
                         dimension: 48,
                         child: IconButton(
-                          tooltip: 'Close filters',
+                          tooltip: 'filter.closeTooltip'.tr(),
                           onPressed: () => Navigator.of(context).pop(),
                           icon: const Icon(Icons.close),
                         ),
@@ -75,7 +76,7 @@ class NoteFilterSheet extends ConsumerWidget {
                     children: [
                       _TagChoice(
                         key: const Key('filter-tag-all'),
-                        label: 'All',
+                        label: 'filter.all'.tr(),
                         selected: selectedTag == null,
                         onSelected: () =>
                             ref.read(selectedTagProvider.notifier).select(null),
@@ -142,14 +143,14 @@ class NoteFilterSheet extends ConsumerWidget {
                                 .read(sortOrderProvider.notifier)
                                 .set(NoteSort.newest);
                           },
-                          child: const Text('Clear filters'),
+                          child: Text('filter.clearFilters'.tr()),
                         ),
                       );
                       final doneButton = ConstrainedBox(
                         constraints: const BoxConstraints(minHeight: 48),
                         child: FilledButton(
                           onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Done'),
+                          child: Text('filter.done'.tr()),
                         ),
                       );
 
@@ -200,7 +201,7 @@ class _TagChoice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: 'Filter by tag $label',
+      label: 'filter.filterByTagSemantics'.tr(namedArgs: {'tag': label}),
       button: true,
       selected: selected,
       onTap: onSelected,
@@ -234,7 +235,7 @@ class _SortChoice extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Semantics(
-      label: 'Sort by $label',
+      label: 'filter.sortBySemantics'.tr(namedArgs: {'label': label}),
       button: true,
       selected: selected,
       onTap: onSelected,

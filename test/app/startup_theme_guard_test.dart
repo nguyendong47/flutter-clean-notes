@@ -39,6 +39,17 @@ void main() {
             _ => null,
           };
         });
+    // bootstrapApplication now calls EasyLocalization.ensureInitialized(),
+    // which reads SharedPreferences unconditionally (independent of any
+    // themeModeStoreProvider override). Without a default mock handler on
+    // this channel, that real (unmocked) read hangs forever under
+    // flutter_tester. Individual tests below (e.g. "cold start emits no app
+    // frame...") replace this handler with their own to control timing.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          _preferencesChannel,
+          (_) async => <String, Object>{},
+        );
   });
 
   tearDown(() {
