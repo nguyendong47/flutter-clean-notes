@@ -46,6 +46,11 @@ Shared SQLite MCP (shared-sqlite) on .agent-shared/collab.db. Full protocol: doc
 - Commit the handoff doc itself (`docs/...` change, own commit or folded into the last task commit — either is fine, just don't leave it uncommitted).
 - This applies regardless of whether the session ends "cleanly" (task complete) or gets interrupted — an interrupted session especially needs one, since there's no natural stopping point otherwise.
 
+### Pre-release verification rule — visual screenshots required
+
+- Never rely solely on passing unit/widget tests before approving a release candidate.
+- Run automated UI/integration tests and capture visual verification screenshot evidence across light/dark themes, varied text scales, and edge layouts (e.g. status bar padding, bottom sheets, dialogs, keyboard insets) on real or emulated devices before release. See `docs/qa.md`.
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 

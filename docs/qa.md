@@ -52,6 +52,20 @@ then **Delete forever** flow. These runs do not prove retained-state behavior
 between invocations. Replace the sample device ID with the intended Android device
 printed by `flutter devices`.
 
+### Visual regression & screenshot verification
+
+Passing widget/unit tests does not guarantee visual correctness on physical screens with notches, display cutouts, and dynamic system insets (status bar, navigation pill, virtual keyboard).
+Before release sign-off:
+1. **Device integration tests & screencap**: Run automated UI/integration tests (`flutter test integration_test/...`) or capture screenshots using ADB screencap on target devices.
+2. **Visual screenshot coverage**:
+   - Capture screens in both **Light** and **Dark** themes.
+   - Test critical UI surfaces: Note List, Note Editor, `MoreActionsSheet` (with Appearance & Language expanded), Tag Manager, Search, and Reminder picker.
+   - Verify layout safety: No interactive elements, text, or sheet headers must collide with or be occluded by status bar icons, clock, or camera punch-holes.
+3. **ADB capture command**:
+   ```powershell
+   adb exec-out screencap -p > docs/screenshots/device_screen.png
+   ```
+
 ### Hosted CI contract
 
 `.github/workflows/quality.yml` runs for pull requests and pushes to `main` with

@@ -17,3 +17,7 @@ This project is co-developed with **Claude Code** via a shared SQLite MCP Server
   - `lib/features/<feature>/data/` (models, datasources, repository implementations)
   - `lib/features/<feature>/presentation/` (bloc/cubit/riverpod, widgets, pages)
 - Must follow GitNexus impact analysis before refactoring or major symbol edits.
+
+## 3. Pre-Release Testing & Visual Screenshot Verification
+- Never rely solely on passing unit/widget tests before approving a release candidate.
+- Must execute automated UI/integration tests and capture visual verification screenshot evidence across light/dark themes, varied text scales, and edge layouts (e.g. status bar padding, bottom sheets, dialogs) on real or emulated devices.

@@ -1050,6 +1050,29 @@ void main() {
     await tester.pumpAndSettle();
     expect(context.locale.languageCode, context.deviceLocale.languageCode);
   });
+
+  testWidgets(
+    'constrains sheet height below status bar when top padding is present',
+    (tester) async {
+      const topPadding = 48.0;
+      await _pumpMore(
+        tester,
+        size: const Size(390, 844),
+        padding: const EdgeInsets.only(top: topPadding),
+      );
+
+      await _expandThemeChoices(tester);
+      final languageRow = find.byKey(const Key('more-row-language'));
+      await tester.ensureVisible(languageRow);
+      await tester.tap(languageRow);
+      await tester.pumpAndSettle();
+
+      final sheetFinder = find.byType(GlassSurface);
+      final sheetTop = tester.getTopLeft(sheetFinder).dy;
+
+      expect(sheetTop, greaterThanOrEqualTo(topPadding));
+    },
+  );
 }
 
 const _moreRowKeys = [
@@ -1105,6 +1128,7 @@ _pumpMore(
   InMemoryNoteRepository? repository,
   List<Note>? notes,
   Size size = const Size(375, 900),
+  EdgeInsets padding = EdgeInsets.zero,
   TextScaler textScaler = TextScaler.noScaling,
   ThemeMode themeMode = ThemeMode.light,
   double viewInsetsBottom = 0,
@@ -1138,6 +1162,7 @@ _pumpMore(
             locale: localizationContext.locale,
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context).copyWith(
+                padding: padding,
                 textScaler: textScaler,
                 viewInsets: EdgeInsets.only(bottom: viewInsetsBottom),
               ),
