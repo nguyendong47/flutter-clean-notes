@@ -26,6 +26,20 @@ GitHub Issues (`nguyendong47/flutter-clean-notes`), via `gh` CLI. See `docs/agen
 
 Single-context — `CONTEXT.md` + `docs/adr/` at repo root (created lazily when needed). See `docs/agents/domain.md`.
 
+### Session handoff — always leave a resumable trail
+
+**Rule: at the end of every session — and any time you're about to lose the thread (long pause, context compaction, handing off to another agent/session/machine) — write or update a handoff doc and commit it.** This project is worked on across multiple sessions, tools (Claude Code, Google Antigravity), and machines; nothing persists unless it's in a committed file. Assume the next reader (which may be you, a fresh session with zero conversation context, or a different agent entirely) has only `git log` and this file.
+
+- Location: `docs/agents/session-handoff-<YYYY-MM-DD>.md`. If one from today already exists, **update it in place** rather than creating a second file for the same day — append/revise sections, don't fork the trail.
+- Contents, at minimum:
+  - Current branch/worktree and the exact path/command to get back into it.
+  - Which plan/task is done (with commit SHAs) vs. next, referencing the plan doc.
+  - Any real bug, gotcha, or non-obvious fix discovered this session — write it down even if it feels obvious in the moment; it will not be obvious to the next agent starting cold. Include the reproduction and the fix, not just "watch out for X."
+  - Housekeeping already done that shouldn't be redone.
+  - Open questions or decisions that are the user's to make, not yours.
+- Commit the handoff doc itself (`docs/...` change, own commit or folded into the last task commit — either is fine, just don't leave it uncommitted).
+- This applies regardless of whether the session ends "cleanly" (task complete) or gets interrupted — an interrupted session especially needs one, since there's no natural stopping point otherwise.
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
