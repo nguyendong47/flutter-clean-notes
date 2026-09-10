@@ -3,7 +3,7 @@
 ## Where things are
 - Branch/worktree: `worktree-vietnamese-localization` at `H:\source\flutter-clean-notes\.claude\worktrees\vietnamese-localization`. Always `cd` there for this work, never the main checkout.
 - Plan doc: `docs/superpowers/plans/2026-09-06-vietnamese-localization.md` (23 tasks total).
-- **Tasks 1-21 done and committed.** Task 21's commit: `7059291` ("test(l10n): add Vietnamese smoke tests for Home and More sheet"). **Task 22 (locale-aware date-formatting test) is next.** Task 23 (final full-suite gate) after that — see the plan doc for both.
+- **Tasks 1-22 done and committed.** Task 22's commit: `5614066` ("test(l10n): add locale-aware date-formatting test for the Home header"). **Task 23 (final full-suite gate) is next** — see the plan doc.
 - Project-wide rule added this session (on `main`, commit `a6a4a34`, and mirrored into this branch's `CLAUDE.md`): **always write/update a `docs/agents/session-handoff-<date>.md` at the end of every session or before losing context**, so any session/agent can resume cold. This file is that handoff — keep updating it (don't fork a second file for the same day) as you complete more tasks today.
 
 ## Real bug found and fixed this session (Task 21) — read before writing any more `Locale('vi')` widget tests
