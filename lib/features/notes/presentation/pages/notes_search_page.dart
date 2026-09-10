@@ -709,7 +709,9 @@ class _SearchInvitation extends StatelessWidget {
                   child: ActionChip(
                     key: ValueKey('suggested-tag-$tag'),
                     label: Text(tag),
-                    tooltip: 'search.searchTagTooltip'.tr(namedArgs: {'tag': tag}),
+                    tooltip: 'search.searchTagTooltip'.tr(
+                      namedArgs: {'tag': tag},
+                    ),
                     onPressed: () => onTagSelected(tag),
                     materialTapTargetSize: MaterialTapTargetSize.padded,
                   ),

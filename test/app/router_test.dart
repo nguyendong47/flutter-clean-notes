@@ -1260,8 +1260,7 @@ Future<_RouterHarness> _pumpRouter(
             debugShowCheckedModeBanner: false,
             theme: theme ?? AuroraTheme.light(),
             darkTheme: AuroraTheme.dark(),
-            localizationsDelegates:
-                localizationContext.localizationDelegates,
+            localizationsDelegates: localizationContext.localizationDelegates,
             supportedLocales: localizationContext.supportedLocales,
             locale: localizationContext.locale,
             builder: (context, child) {

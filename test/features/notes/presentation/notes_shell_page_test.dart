@@ -420,8 +420,7 @@ void main() {
           Builder(
             builder: (localizationContext) => MaterialApp(
               theme: AuroraTheme.light(),
-              localizationsDelegates:
-                  localizationContext.localizationDelegates,
+              localizationsDelegates: localizationContext.localizationDelegates,
               supportedLocales: localizationContext.supportedLocales,
               locale: localizationContext.locale,
               builder: (context, child) => MediaQuery(

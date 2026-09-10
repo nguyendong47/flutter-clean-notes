@@ -32,7 +32,10 @@ class LibrarySegmentedControl extends StatelessWidget {
               ButtonSegment(
                 value: LibrarySection.archived,
                 icon: const Icon(Icons.archive_outlined),
-                label: Text('library.archived'.tr(), textAlign: TextAlign.center),
+                label: Text(
+                  'library.archived'.tr(),
+                  textAlign: TextAlign.center,
+                ),
               ),
               ButtonSegment(
                 value: LibrarySection.trash,
