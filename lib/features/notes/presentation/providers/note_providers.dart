@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:flutter_clean_notes/features/notes/data/repositories/note_repository_impl.dart';
@@ -7,6 +9,7 @@ import 'package:flutter_clean_notes/features/notes/domain/usecases/note_usecases
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_filters.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/local_note_datasource_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/widget_sync_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/invalid_note_reminder_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_mutation_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_save_exception.dart';
@@ -15,6 +18,8 @@ export 'package:flutter_clean_notes/features/notes/presentation/providers/note_f
     show NoteSort;
 export 'package:flutter_clean_notes/features/notes/presentation/providers/local_note_datasource_provider.dart'
     show localNoteDataSourceProvider;
+export 'package:flutter_clean_notes/features/notes/presentation/providers/widget_sync_provider.dart'
+    show widgetSyncGatewayProvider, widgetSyncServiceProvider;
 
 part 'note_providers.g.dart';
 
@@ -221,7 +226,23 @@ class NotesNotifier extends _$NotesNotifier {
 
   @override
   FutureOr<List<Note>> build() async {
-    return _fetchAllNotes();
+    final notes = await _fetchAllNotes();
+    unawaited(_syncWidgets(notes));
+    return notes;
+  }
+
+  Future<void> _syncWidgets(List<Note> notes) async {
+    try {
+      final syncService = ref.read(widgetSyncServiceProvider);
+      await syncService.syncNotes(notes);
+    } catch (_) {
+      // Platform communication or widget sync failures are non-fatal
+    }
+  }
+
+  Future<void> syncWidgets() async {
+    final notes = state.value ?? await _fetchAllNotes();
+    await _syncWidgets(notes);
   }
 
   Future<List<Note>> _fetchAllNotes() async {
@@ -256,7 +277,9 @@ class NotesNotifier extends _$NotesNotifier {
       }
 
       try {
-        state = AsyncData(await _fetchAllNotes());
+        final notes = await _fetchAllNotes();
+        state = AsyncData(notes);
+        unawaited(_syncWidgets(notes));
       } catch (error, stackTrace) {
         state = AsyncError<List<Note>>(error, stackTrace);
         Error.throwWithStackTrace(
@@ -406,7 +429,9 @@ class NotesNotifier extends _$NotesNotifier {
       }
 
       try {
-        state = AsyncData(await _fetchAllNotes());
+        final notes = await _fetchAllNotes();
+        state = AsyncData(notes);
+        unawaited(_syncWidgets(notes));
       } catch (refreshError, refreshStackTrace) {
         state = AsyncError<List<Note>>(refreshError, refreshStackTrace);
         if (snoozeError == null) {
@@ -449,7 +474,9 @@ class NotesNotifier extends _$NotesNotifier {
     }
 
     try {
-      state = AsyncData(await _fetchAllNotes());
+      final notes = await _fetchAllNotes();
+      state = AsyncData(notes);
+      unawaited(_syncWidgets(notes));
     } catch (error, stackTrace) {
       // The transaction has already committed. Keep the cached list available
       // and do not turn a refresh issue into a retryable import failure.
