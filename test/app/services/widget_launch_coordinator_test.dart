@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_clean_notes/app/services/widget_launch_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -55,6 +56,19 @@ void main() {
           Uri.parse('clean-notes:///note/123'),
         ),
         '/note/123',
+      );
+    });
+
+    test('resolves pinned notes URIs correctly', () {
+      expect(
+        WidgetLaunchCoordinator.resolveRoute(Uri.parse('clean-notes://pinned')),
+        '/',
+      );
+      expect(
+        WidgetLaunchCoordinator.resolveRoute(
+          Uri.parse('clean-notes:///pinned'),
+        ),
+        '/',
       );
     });
 
@@ -118,6 +132,61 @@ void main() {
 
         coordinator.dispose();
         await streamController.close();
+      },
+    );
+
+    test('deduplicates rapid identical URI events within 2 seconds', () async {
+      final fakeRouter = _FakeGoRouter();
+      final streamController = StreamController<Uri?>();
+      final coordinator = WidgetLaunchCoordinator(
+        router: fakeRouter,
+        initialUriFetcher: () async => null,
+        widgetClickedStream: streamController.stream,
+      );
+
+      coordinator.initialize();
+      await Future<void>.delayed(Duration.zero);
+
+      final uri = Uri.parse('clean-notes://new');
+      streamController.add(uri);
+      await Future<void>.delayed(Duration.zero);
+      expect(fakeRouter.pushedPaths, ['/note/new']);
+
+      // Immediate second emission should be deduplicated
+      streamController.add(uri);
+      await Future<void>.delayed(Duration.zero);
+      expect(fakeRouter.pushedPaths, ['/note/new']);
+
+      coordinator.dispose();
+      await streamController.close();
+    });
+
+    test(
+      'rechecks initial URI on didChangeAppLifecycleState resumed',
+      () async {
+        final fakeRouter = _FakeGoRouter();
+        var fetchCount = 0;
+        final coordinator = WidgetLaunchCoordinator(
+          router: fakeRouter,
+          initialUriFetcher: () async {
+            fetchCount++;
+            if (fetchCount == 2) {
+              return Uri.parse('clean-notes://search');
+            }
+            return null;
+          },
+          widgetClickedStream: const Stream.empty(),
+        );
+
+        coordinator.initialize();
+        await Future<void>.delayed(Duration.zero);
+        expect(fakeRouter.pushedPaths, isEmpty);
+
+        coordinator.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await Future<void>.delayed(Duration.zero);
+        expect(fakeRouter.pushedPaths, ['/search']);
+
+        coordinator.dispose();
       },
     );
   });
