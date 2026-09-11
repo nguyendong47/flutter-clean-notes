@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:flutter_clean_notes/app/app_providers.dart';
+import 'package:flutter_clean_notes/app/services/widget_launch_coordinator.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/add_edit_note_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/existing_note_route_page.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/notes_home_page.dart';
@@ -113,7 +114,11 @@ GoRouter router(Ref ref) {
     }
     ..attachContext(rootNavigatorKey);
 
+  final widgetLaunchCoordinator = WidgetLaunchCoordinator(router: router)
+    ..initialize();
+
   ref.onDispose(() {
+    widgetLaunchCoordinator.dispose();
     notificationService.onNotificationTap = null;
     router.dispose();
   });
