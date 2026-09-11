@@ -50,6 +50,7 @@ history. Major later checkpoints are:
 | `550b9f8` | Wired `WidgetSyncService` into `NotesNotifier` with full mutation coverage and integration test. |
 | `a88dad9` | Implemented Android AppWidgets (`QuickActionsWidget`, `PinnedNoteWidget`) and iOS deep linking scheme. |
 | `2cf686a` | Enhanced `WidgetLaunchCoordinator` lifecycle resume observer, 2s deduplication, and physical device verification screenshots. |
+| `eb0672a` | Fixed `RemoteViews` inflation crash in `widget_pinned_note.xml` by replacing `<View>` divider with `<FrameLayout>`, verified live on Android emulator. |
 
 ## Evidence and its scope
 
