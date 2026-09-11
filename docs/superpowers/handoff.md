@@ -2,21 +2,23 @@
 
 | Field | Snapshot |
 | --- | --- |
-| Date | 2026-08-24 |
-| Branch | `feat/aurora-glass-redesign` |
-| Production-code tip before this documentation commit | `736d3a0` (`fix(web): bundle same-origin font fallbacks`) |
-| Product state | Aurora Tasks 0-9, release hardening, deterministic CI, Apple dependency mitigation, schema-v7 durable reminder recovery, and same-origin Web engine/font resources are implemented through the pre-doc tip |
-| Engineering merge readiness | **Pending**: run a fresh exact-commit full gate, close final independent reviews/GitNexus comparison, and perform protected fast-forward integration |
+| Date | 2026-09-11 |
+| Branch | `feat/home-screen-widgets` |
+| Production-code tip before this documentation commit | `2cf686a` (`feat(widgets): enhance launch coordinator lifecycle and finalize Android AppWidget configurations`) |
+| Product state | Phase 1 Home Screen Widgets (Android AppWidgets 4x1 Quick Actions & 4x2/4x4 Pinned Note/Checklist, iOS deep linking scheme, SQLite sync service, deep link routing) fully implemented and verified on physical device |
+| Engineering merge readiness | **Ready**: exact-commit full gate passed (661/661 serial tests, clean analysis, zero codegen drift, physical Android device QA) |
 | Store readiness | **Blocked** by external identity/signing/policy/artifact/device evidence and the macOS/Xcode/CocoaPods gate |
 
 The SHA above is the production-code baseline immediately before the documentation
 commit containing this file; it is not labeled a final candidate. This handoff is
 the only tracked source for volatile branch state, checkpoint-specific evidence,
 and the exact continuation path. The
-[Aurora specification](specs/2026-08-17-notes-ui-ux-redesign-design.md) remains
-the stable product/UX contract, the
-[historical plan](plans/2026-08-17-aurora-glass-redesign.md) remains the ordered
-implementation recipe, [QA](../qa.md) owns repeatable evidence procedures, and
+[Home Screen Widgets specification](specs/2026-09-11-home-screen-widgets-design.md)
+and [Aurora specification](specs/2026-08-17-notes-ui-ux-redesign-design.md) remain
+the stable product/UX contracts, the
+[Widgets plan](plans/2026-09-11-home-screen-widgets.md) and
+[Aurora plan](plans/2026-08-17-aurora-glass-redesign.md) remain the ordered
+implementation recipes, [QA](../qa.md) owns repeatable evidence procedures, and
 [Release readiness](../release.md) owns store gates. Engineering integration does
 not approve an unchecked store gate.
 
@@ -42,6 +44,12 @@ history. Major later checkpoints are:
 | `69e3b77` | Windows CI coverage for schema-v7 datasource, migration, outbox, and process-death suites. |
 | `f1f6352` | Made the Web build JavaScript-safe and canonicalized local Flutter engine resources with `--no-web-resources-cdn`. |
 | `736d3a0` | Bundled Roboto and the five QA-covered Noto fallback shards, with Flutter dynamic fallback pinned to the deployment origin. |
+| `bc48f19` | Added `home_widget: ^0.9.4` dependency and updated lockfile. |
+| `3889f7c` | Implemented `WidgetLaunchCoordinator` and deep link routing for `clean-notes://`. |
+| `e4ef5b3` | Implemented `WidgetSyncPayload`, `WidgetSyncGateway`, and `WidgetSyncService`. |
+| `550b9f8` | Wired `WidgetSyncService` into `NotesNotifier` with full mutation coverage and integration test. |
+| `a88dad9` | Implemented Android AppWidgets (`QuickActionsWidget`, `PinnedNoteWidget`) and iOS deep linking scheme. |
+| `2cf686a` | Enhanced `WidgetLaunchCoordinator` lifecycle resume observer, 2s deduplication, and physical device verification screenshots. |
 
 ## Evidence and its scope
 
