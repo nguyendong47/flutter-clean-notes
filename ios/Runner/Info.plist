@@ -68,5 +68,18 @@
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLName</key>
+				<string>com.cleannotes.app</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>clean-notes</string>
+				</array>
+			</dict>
+		</array>
 	</dict>
 </plist>

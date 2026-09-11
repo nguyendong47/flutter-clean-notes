@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_quick_actions_title">Clean Notes - Phím tắt</string>
+    <string name="widget_quick_actions_description">Tạo ghi chú nhanh và tìm kiếm ngay từ màn hình chính.</string>
+    <string name="widget_pinned_note_title">Clean Notes - Ghi chú ghim</string>
+    <string name="widget_pinned_note_description">Hiển thị ghi chú đã ghim hoặc danh sách việc cần làm.</string>
+    <string name="widget_new_note">Ghi chú</string>
+    <string name="widget_search">Tìm kiếm</string>
+    <string name="widget_pinned">Đã ghim</string>
+    <string name="widget_no_pinned">Chưa có ghi chú được ghim</string>
+    <string name="widget_no_pinned_hint">Mở Clean Notes để ghim ghi chú quan trọng!</string>
+</resources>
