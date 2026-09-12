@@ -6,40 +6,73 @@
     android:background="@drawable/widget_glass_card"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:paddingStart="8dp"
-    android:paddingEnd="8dp"
-    android:paddingTop="6dp"
-    android:paddingBottom="6dp">
+    android:paddingStart="6dp"
+    android:paddingEnd="6dp"
+    android:paddingTop="5dp"
+    android:paddingBottom="5dp">
 
+    <!-- 1. New Note -->
     <LinearLayout
         android:id="@+id/widget_btn_new"
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="1"
         android:background="@drawable/widget_glass_pill"
-        android:layout_marginEnd="4dp"
+        android:layout_marginEnd="3dp"
         android:gravity="center"
         android:orientation="horizontal"
-        android:padding="6dp">
+        android:padding="4dp">
 
         <ImageView
-            android:layout_width="18dp"
-            android:layout_height="18dp"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
             android:src="@drawable/ic_widget_edit"
             android:contentDescription="@string/widget_new_note" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="4dp"
             android:text="@string/widget_new_note"
             android:textColor="#FFFFFFFF"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end" />
     </LinearLayout>
 
+    <!-- 2. New Checklist -->
+    <LinearLayout
+        android:id="@+id/widget_btn_checklist"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:background="@drawable/widget_glass_pill"
+        android:layout_marginStart="1dp"
+        android:layout_marginEnd="2dp"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:padding="4dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_widget_checklist"
+            android:contentDescription="@string/widget_checklist" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:text="@string/widget_checklist"
+            android:textColor="#FFFFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <!-- 3. Search -->
     <LinearLayout
         android:id="@+id/widget_btn_search"
         android:layout_width="0dp"
@@ -47,52 +80,53 @@
         android:layout_weight="1"
         android:background="@drawable/widget_glass_pill"
         android:layout_marginStart="2dp"
-        android:layout_marginEnd="2dp"
+        android:layout_marginEnd="1dp"
         android:gravity="center"
         android:orientation="horizontal"
-        android:padding="6dp">
+        android:padding="4dp">
 
         <ImageView
-            android:layout_width="18dp"
-            android:layout_height="18dp"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
             android:src="@drawable/ic_widget_search"
             android:contentDescription="@string/widget_search" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="4dp"
             android:text="@string/widget_search"
             android:textColor="#E0FFFFFF"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:maxLines="1"
             android:ellipsize="end" />
     </LinearLayout>
 
+    <!-- 4. Pinned -->
     <LinearLayout
         android:id="@+id/widget_btn_pinned"
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="1"
         android:background="@drawable/widget_glass_pill"
-        android:layout_marginStart="4dp"
+        android:layout_marginStart="3dp"
         android:gravity="center"
         android:orientation="horizontal"
-        android:padding="6dp">
+        android:padding="4dp">
 
         <ImageView
-            android:layout_width="18dp"
-            android:layout_height="18dp"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
             android:src="@drawable/ic_widget_pin"
             android:contentDescription="@string/widget_pinned" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="4dp"
             android:text="@string/widget_pinned"
             android:textColor="#E0FFFFFF"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:maxLines="1"
             android:ellipsize="end" />
     </LinearLayout>

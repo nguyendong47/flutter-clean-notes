@@ -91,6 +91,9 @@ class WidgetLaunchCoordinator with WidgetsBindingObserver {
     final path = uri.path;
 
     if (host == 'new' || path == '/new' || path == 'new') {
+      if (uri.queryParameters.isNotEmpty) {
+        return '/note/new?${uri.query}';
+      }
       return '/note/new';
     }
     if (host == 'search' || path == '/search' || path == 'search') {

@@ -26,6 +26,35 @@ class WidgetChecklistItem {
   int get hashCode => Object.hash(text, isDone);
 }
 
+class WidgetNoteItem {
+  const WidgetNoteItem({
+    required this.id,
+    required this.title,
+    required this.contentPreview,
+    this.checklist = const [],
+    this.colorValue = 0xFFFFFFFF,
+  });
+
+  final int id;
+  final String title;
+  final String contentPreview;
+  final List<WidgetChecklistItem> checklist;
+  final int colorValue;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WidgetNoteItem &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          title == other.title &&
+          contentPreview == other.contentPreview &&
+          colorValue == other.colorValue;
+
+  @override
+  int get hashCode => Object.hash(id, title, contentPreview, colorValue);
+}
+
 class WidgetSyncPayload {
   const WidgetSyncPayload({
     required this.hasPinned,
@@ -35,6 +64,7 @@ class WidgetSyncPayload {
     this.checklist = const [],
     this.colorValue = 0xFFFFFFFF,
     this.updatedAt,
+    this.boundNotes = const [],
   });
 
   final bool hasPinned;
@@ -44,6 +74,7 @@ class WidgetSyncPayload {
   final List<WidgetChecklistItem> checklist;
   final int colorValue;
   final DateTime? updatedAt;
+  final List<WidgetNoteItem> boundNotes;
 
   static const empty = WidgetSyncPayload(hasPinned: false);
 

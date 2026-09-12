@@ -1718,6 +1718,31 @@ void main() {
     expect(safeBar.bottom, greaterThan(560));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('opens with initialContent populated and validates blank checklist', (
+    tester,
+  ) async {
+    final harness = await _pumpEditor(
+      tester,
+      initialContent: '- [ ] ',
+    );
+
+    expect(_text(tester, 'editor-body-field'), '- [ ] ');
+
+    await tester.tap(find.byKey(const Key('editor-done-button')));
+    await tester.pumpAndSettle();
+    expect(harness.repository.notes, isEmpty);
+    expect(find.byKey(const Key('editor-validation')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('editor-body-field')),
+      '- [ ] Buy groceries',
+    );
+    await tester.tap(find.byKey(const Key('editor-done-button')));
+    await tester.pumpAndSettle();
+    expect(harness.repository.notes, hasLength(1));
+    expect(harness.repository.notes.first.content, '- [ ] Buy groceries');
+  });
 }
 
 typedef _EditorHarness = ({
@@ -1732,6 +1757,7 @@ typedef _EditorHarness = ({
 Future<_EditorHarness> _pumpEditor(
   WidgetTester tester, {
   Note? note,
+  String? initialContent,
   InMemoryNoteRepository? repository,
   FakeNoteReminderGateway? gateway,
   ReminderSyncCoordinator? coordinator,
@@ -1812,6 +1838,7 @@ Future<_EditorHarness> _pumpEditor(
                       ),
                   child: _editorPage(
                     note: note,
+                    initialContent: initialContent,
                     onClose: () => closeCount.value += 1,
                     now: now,
                   ),
@@ -1842,8 +1869,14 @@ Widget _editorPage({
   required Note? note,
   required VoidCallback onClose,
   required DateTime Function()? now,
+  String? initialContent,
 }) {
-  return AddEditNotePage(note: note, onClose: onClose, now: now);
+  return AddEditNotePage(
+    note: note,
+    initialContent: initialContent,
+    onClose: onClose,
+    now: now,
+  );
 }
 
 String _text(WidgetTester tester, String key) {

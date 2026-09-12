@@ -24,6 +24,13 @@ class QuickActionsWidget : HomeWidgetProvider() {
                 )
                 setOnClickPendingIntent(R.id.widget_btn_new, newNoteIntent)
 
+                val checklistIntent = HomeWidgetLaunchIntent.getActivity(
+                    context,
+                    MainActivity::class.java,
+                    Uri.parse("clean-notes://new?template=checklist")
+                )
+                setOnClickPendingIntent(R.id.widget_btn_checklist, checklistIntent)
+
                 val searchIntent = HomeWidgetLaunchIntent.getActivity(
                     context,
                     MainActivity::class.java,
@@ -34,7 +41,7 @@ class QuickActionsWidget : HomeWidgetProvider() {
                 val pinnedIntent = HomeWidgetLaunchIntent.getActivity(
                     context,
                     MainActivity::class.java,
-                    Uri.parse("clean-notes://search")
+                    Uri.parse("clean-notes://pinned")
                 )
                 setOnClickPendingIntent(R.id.widget_btn_pinned, pinnedIntent)
             }

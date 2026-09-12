@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/widget_sync_payload.dart';
@@ -56,6 +58,31 @@ class HomeWidgetSyncGateway implements WidgetSyncGateway {
         'widget_pinned_updated_at',
         payload.updatedAt?.toIso8601String() ?? '',
       );
+
+      for (final note in payload.boundNotes) {
+        if (note.id != 0) {
+          await HomeWidget.saveWidgetData<bool>(
+            'widget_note_${note.id}_exists',
+            true,
+          );
+          await HomeWidget.saveWidgetData<String>(
+            'widget_note_${note.id}_title',
+            note.title,
+          );
+          await HomeWidget.saveWidgetData<String>(
+            'widget_note_${note.id}_content',
+            note.contentPreview,
+          );
+          await HomeWidget.saveWidgetData<String>(
+            'widget_note_${note.id}_checklist',
+            jsonEncode(note.checklist.map((e) => e.toJson()).toList()),
+          );
+          await HomeWidget.saveWidgetData<int>(
+            'widget_note_${note.id}_color',
+            note.colorValue,
+          );
+        }
+      }
 
       await HomeWidget.updateWidget(
         name: quickActionsWidgetName,

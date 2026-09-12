@@ -29,6 +29,12 @@ void main() {
         WidgetLaunchCoordinator.resolveRoute(Uri.parse('clean-notes:///new')),
         '/note/new',
       );
+      expect(
+        WidgetLaunchCoordinator.resolveRoute(
+          Uri.parse('clean-notes://new?template=checklist'),
+        ),
+        '/note/new?template=checklist',
+      );
     });
 
     test('resolves search URIs correctly', () {

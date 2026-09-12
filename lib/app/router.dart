@@ -93,8 +93,14 @@ GoRouter router(Ref ref) {
       GoRoute(
         parentNavigatorKey: rootNavigatorKey,
         path: '/note/new',
-        builder: (context, state) =>
-            AddEditNotePage(onClose: () => _closeEditor(context)),
+        builder: (context, state) {
+          final template = state.uri.queryParameters['template'];
+          final initialContent = template == 'checklist' ? '- [ ] ' : null;
+          return AddEditNotePage(
+            initialContent: initialContent,
+            onClose: () => _closeEditor(context),
+          );
+        },
       ),
       GoRoute(
         parentNavigatorKey: rootNavigatorKey,

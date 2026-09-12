@@ -16,11 +16,18 @@ import 'package:flutter_clean_notes/features/notes/presentation/widgets/editor_f
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/note_metadata_sheet.dart';
 
 class AddEditNotePage extends ConsumerStatefulWidget {
-  const AddEditNotePage({super.key, this.note, this.onClose, this.now});
+  const AddEditNotePage({
+    super.key,
+    this.note,
+    this.onClose,
+    this.now,
+    this.initialContent,
+  });
 
   final Note? note;
   final VoidCallback? onClose;
   final DateTime Function()? now;
+  final String? initialContent;
 
   @override
   ConsumerState<AddEditNotePage> createState() => _AddEditNotePageState();
@@ -73,8 +80,17 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     super.initState();
     canPopNotifier = ValueNotifier<bool>(false);
     final note = widget.note;
+    final initialContent = note?.content ?? widget.initialContent ?? '';
     _titleController = TextEditingController(text: note?.title ?? '');
-    _contentController = TextEditingController(text: note?.content ?? '');
+    _contentController = TextEditingController(text: initialContent);
+    if (widget.initialContent != null && note == null) {
+      _contentController.selection = TextSelection.collapsed(
+        offset: initialContent.length,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _contentFocusNode.requestFocus();
+      });
+    }
     _titleFocusNode = FocusNode(debugLabel: 'Note title');
     _contentFocusNode = FocusNode(debugLabel: 'Note content');
     _metadataFocusNode = FocusNode(debugLabel: 'Note details');
@@ -707,7 +723,9 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
     if (_saving || _closed) return;
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
-    if (title.isEmpty && content.isEmpty) {
+    final isBlankChecklist =
+        content == '- [ ]' || content == '- [x]' || content == '- [X]';
+    if (title.isEmpty && (content.isEmpty || isBlankChecklist)) {
       setState(() {
         _previewMode = false;
         _validationMessage = 'editor.validationMessage'.tr();

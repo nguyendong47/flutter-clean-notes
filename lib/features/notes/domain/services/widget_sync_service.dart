@@ -82,8 +82,18 @@ class WidgetSyncService {
         .toList();
     final pinnedNotes = activeNotes.where((n) => n.isPinned).toList();
 
+    final boundItems = activeNotes.take(10).map((n) {
+      return WidgetNoteItem(
+        id: n.id ?? 0,
+        title: n.title.trim().isNotEmpty ? n.title.trim() : 'Ghi chú',
+        contentPreview: extractPreview(n.content),
+        checklist: extractChecklist(n.content),
+        colorValue: n.color,
+      );
+    }).toList();
+
     if (pinnedNotes.isEmpty) {
-      return WidgetSyncPayload.empty;
+      return WidgetSyncPayload(hasPinned: false, boundNotes: boundItems);
     }
 
     pinnedNotes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -102,6 +112,7 @@ class WidgetSyncService {
       checklist: checklist,
       colorValue: target.color,
       updatedAt: target.createdAt,
+      boundNotes: boundItems,
     );
   }
 

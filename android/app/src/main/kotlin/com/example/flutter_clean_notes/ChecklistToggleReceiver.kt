@@ -17,20 +17,41 @@ class ChecklistToggleReceiver : BroadcastReceiver() {
         if (uri != null && uri.scheme == "clean-notes" && uri.host == "toggle-check") {
             val indexStr = uri.getQueryParameter("index")
             val index = indexStr?.toIntOrNull()
+            val noteIdStr = uri.getQueryParameter("id")
 
             // 1. Instant optimistic update in SharedPreferences & RemoteViews (~5-20ms)
             if (index != null) {
                 try {
                     val prefs = HomeWidgetPlugin.getData(context)
-                    val checklistJson = prefs.getString("widget_pinned_checklist", "[]") ?: "[]"
-                    val jsonArray = JSONArray(checklistJson)
-                    if (index in 0 until jsonArray.length()) {
-                        val item = jsonArray.getJSONObject(index)
-                        val isDone = item.optBoolean("done", false)
-                        item.put("done", !isDone)
-                        val updatedJson = jsonArray.toString()
-                        prefs.edit().putString("widget_pinned_checklist", updatedJson).commit()
+                    val pinnedId = prefs.getString("widget_pinned_id", "") ?: ""
 
+                    // Determine which checklist key(s) to update
+                    val keysToUpdate = mutableListOf<String>()
+                    if (noteIdStr.isNullOrEmpty() || noteIdStr == pinnedId) {
+                        keysToUpdate.add("widget_pinned_checklist")
+                    }
+                    if (!noteIdStr.isNullOrEmpty()) {
+                        keysToUpdate.add("widget_note_${noteIdStr}_checklist")
+                    }
+
+                    var updated = false
+                    val editor = prefs.edit()
+                    for (key in keysToUpdate) {
+                        val checklistJson = prefs.getString(key, null)
+                        if (checklistJson != null) {
+                            val jsonArray = JSONArray(checklistJson)
+                            if (index in 0 until jsonArray.length()) {
+                                val item = jsonArray.getJSONObject(index)
+                                val isDone = item.optBoolean("done", false)
+                                item.put("done", !isDone)
+                                editor.putString(key, jsonArray.toString())
+                                updated = true
+                            }
+                        }
+                    }
+
+                    if (updated) {
+                        editor.commit()
                         val appWidgetManager = AppWidgetManager.getInstance(context)
                         val component = ComponentName(context, PinnedNoteWidget::class.java)
                         val appWidgetIds = appWidgetManager.getAppWidgetIds(component)
