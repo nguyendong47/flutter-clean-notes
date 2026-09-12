@@ -25,6 +25,7 @@ const _notificationsChannel = MethodChannel(
 const _preferencesChannel = MethodChannel(
   'plugins.flutter.io/shared_preferences',
 );
+const _homeWidgetChannel = MethodChannel('home_widget');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +40,8 @@ void main() {
             _ => null,
           };
         });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_homeWidgetChannel, (call) async => true);
     // bootstrapApplication now calls EasyLocalization.ensureInitialized(),
     // which reads SharedPreferences unconditionally (independent of any
     // themeModeStoreProvider override). Without a default mock handler on
@@ -58,6 +61,8 @@ void main() {
         .setMockMethodCallHandler(_notificationsChannel, null);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_preferencesChannel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_homeWidgetChannel, null);
   });
 
   testWidgets(

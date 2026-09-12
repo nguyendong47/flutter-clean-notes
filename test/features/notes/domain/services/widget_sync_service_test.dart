@@ -55,6 +55,45 @@ Not a bullet
     });
   });
 
+  group('WidgetSyncService.toggleChecklistItem', () {
+    const sampleMarkdown = '''
+# Todo List
+- [ ] First task
+- [x] Second task
+Some middle note
+* [ ] Third task
+* [X] Fourth task
+''';
+
+    test('toggles unchecked item to checked', () {
+      final result = WidgetSyncService.toggleChecklistItem(sampleMarkdown, 0);
+      expect(result, contains('- [x] First task'));
+      expect(result, contains('- [x] Second task'));
+      expect(result, contains('* [ ] Third task'));
+    });
+
+    test('toggles checked item to unchecked', () {
+      final result = WidgetSyncService.toggleChecklistItem(sampleMarkdown, 1);
+      expect(result, contains('- [ ] First task'));
+      expect(result, contains('- [ ] Second task'));
+    });
+
+    test('toggles asterisk bullet and uppercase checkmark', () {
+      final result = WidgetSyncService.toggleChecklistItem(sampleMarkdown, 3);
+      expect(result, contains('* [ ] Fourth task'));
+    });
+
+    test('returns unmodified markdown when index is negative', () {
+      final result = WidgetSyncService.toggleChecklistItem(sampleMarkdown, -1);
+      expect(result, sampleMarkdown);
+    });
+
+    test('returns unmodified markdown when index is out of bounds', () {
+      final result = WidgetSyncService.toggleChecklistItem(sampleMarkdown, 99);
+      expect(result, sampleMarkdown);
+    });
+  });
+
   group('WidgetSyncService.buildPayload', () {
     final gateway = _FakeWidgetSyncGateway();
     final service = WidgetSyncService(gateway: gateway);

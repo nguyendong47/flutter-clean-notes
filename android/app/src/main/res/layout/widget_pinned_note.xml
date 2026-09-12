@@ -48,10 +48,11 @@
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="6dp"
             android:background="#20FFFFFF" />
 
+        <!-- Plain note preview (when no checklist items) -->
         <TextView
             android:id="@+id/widget_pinned_body"
             android:layout_width="match_parent"
@@ -63,6 +64,172 @@
             android:text="Nội dung ghi chú..."
             android:textColor="#D0FFFFFF"
             android:textSize="13sp" />
+
+        <!-- Interactive checklist container -->
+        <LinearLayout
+            android:id="@+id/widget_pinned_checklist_container"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <!-- Item Row 0 -->
+            <LinearLayout
+                android:id="@+id/widget_item_row_0"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:visibility="gone">
+                <ImageView
+                    android:id="@+id/widget_item_check_0"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:padding="2dp"
+                    android:src="@drawable/ic_widget_checkbox_unchecked"
+                    android:contentDescription="Check item 0" />
+                <TextView
+                    android:id="@+id/widget_item_text_0"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="#E0FFFFFF"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- Item Row 1 -->
+            <LinearLayout
+                android:id="@+id/widget_item_row_1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:visibility="gone">
+                <ImageView
+                    android:id="@+id/widget_item_check_1"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:padding="2dp"
+                    android:src="@drawable/ic_widget_checkbox_unchecked"
+                    android:contentDescription="Check item 1" />
+                <TextView
+                    android:id="@+id/widget_item_text_1"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="#E0FFFFFF"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- Item Row 2 -->
+            <LinearLayout
+                android:id="@+id/widget_item_row_2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:visibility="gone">
+                <ImageView
+                    android:id="@+id/widget_item_check_2"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:padding="2dp"
+                    android:src="@drawable/ic_widget_checkbox_unchecked"
+                    android:contentDescription="Check item 2" />
+                <TextView
+                    android:id="@+id/widget_item_text_2"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="#E0FFFFFF"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- Item Row 3 -->
+            <LinearLayout
+                android:id="@+id/widget_item_row_3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:visibility="gone">
+                <ImageView
+                    android:id="@+id/widget_item_check_3"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:padding="2dp"
+                    android:src="@drawable/ic_widget_checkbox_unchecked"
+                    android:contentDescription="Check item 3" />
+                <TextView
+                    android:id="@+id/widget_item_text_3"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="#E0FFFFFF"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- Item Row 4 -->
+            <LinearLayout
+                android:id="@+id/widget_item_row_4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:visibility="gone">
+                <ImageView
+                    android:id="@+id/widget_item_check_4"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:padding="2dp"
+                    android:src="@drawable/ic_widget_checkbox_unchecked"
+                    android:contentDescription="Check item 4" />
+                <TextView
+                    android:id="@+id/widget_item_text_4"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="#E0FFFFFF"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- More items text -->
+            <TextView
+                android:id="@+id/widget_item_more"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="28dp"
+                android:layout_marginTop="2dp"
+                android:textColor="#80FFFFFF"
+                android:textSize="11sp"
+                android:visibility="gone" />
+        </LinearLayout>
     </LinearLayout>
 
     <LinearLayout

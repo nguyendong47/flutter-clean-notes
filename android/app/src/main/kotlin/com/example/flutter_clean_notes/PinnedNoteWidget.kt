@@ -1,7 +1,9 @@
 package com.example.flutter_clean_notes
 
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.view.View
@@ -11,6 +13,7 @@ import es.antonborri.home_widget.HomeWidgetProvider
 import org.json.JSONArray
 
 class PinnedNoteWidget : HomeWidgetProvider() {
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -23,6 +26,28 @@ class PinnedNoteWidget : HomeWidgetProvider() {
         val content = widgetData.getString("widget_pinned_content", "") ?: ""
         val checklistJson = widgetData.getString("widget_pinned_checklist", "[]") ?: "[]"
 
+        val rowIds = intArrayOf(
+            R.id.widget_item_row_0,
+            R.id.widget_item_row_1,
+            R.id.widget_item_row_2,
+            R.id.widget_item_row_3,
+            R.id.widget_item_row_4
+        )
+        val checkIds = intArrayOf(
+            R.id.widget_item_check_0,
+            R.id.widget_item_check_1,
+            R.id.widget_item_check_2,
+            R.id.widget_item_check_3,
+            R.id.widget_item_check_4
+        )
+        val textIds = intArrayOf(
+            R.id.widget_item_text_0,
+            R.id.widget_item_text_1,
+            R.id.widget_item_text_2,
+            R.id.widget_item_text_3,
+            R.id.widget_item_text_4
+        )
+
         appWidgetIds.forEach { widgetId ->
             val views = RemoteViews(context.packageName, R.layout.widget_pinned_note).apply {
                 if (hasPinned) {
@@ -33,9 +58,6 @@ class PinnedNoteWidget : HomeWidgetProvider() {
                         R.id.widget_pinned_title,
                         if (title.isNotBlank()) title else "Ghi chú đã ghim"
                     )
-
-                    val bodyText = formatBodyText(content, checklistJson)
-                    setTextViewText(R.id.widget_pinned_body, bodyText)
 
                     val targetUri = if (noteId.isNotBlank()) {
                         Uri.parse("clean-notes://note?id=$noteId")
@@ -50,8 +72,74 @@ class PinnedNoteWidget : HomeWidgetProvider() {
                     )
                     setOnClickPendingIntent(R.id.widget_pinned_root, openNoteIntent)
                     setOnClickPendingIntent(R.id.widget_pinned_active_layout, openNoteIntent)
-                    setOnClickPendingIntent(R.id.widget_pinned_body, openNoteIntent)
                     setOnClickPendingIntent(R.id.widget_pinned_action_edit, openNoteIntent)
+
+                    val jsonArray = try {
+                        JSONArray(checklistJson)
+                    } catch (_: Exception) {
+                        JSONArray()
+                    }
+
+                    if (jsonArray.length() > 0) {
+                        // Display interactive checklist rows
+                        setViewVisibility(R.id.widget_pinned_body, View.GONE)
+                        setViewVisibility(R.id.widget_pinned_checklist_container, View.VISIBLE)
+
+                        for (i in 0 until 5) {
+                            if (i < jsonArray.length()) {
+                                setViewVisibility(rowIds[i], View.VISIBLE)
+                                val item = jsonArray.getJSONObject(i)
+                                val isDone = item.optBoolean("done", false)
+                                val text = item.optString("text", "")
+
+                                setTextViewText(textIds[i], text)
+                                if (isDone) {
+                                    setImageViewResource(checkIds[i], R.drawable.ic_widget_checkbox_checked)
+                                    setTextColor(textIds[i], 0x80FFFFFF.toInt())
+                                } else {
+                                    setImageViewResource(checkIds[i], R.drawable.ic_widget_checkbox_unchecked)
+                                    setTextColor(textIds[i], 0xE0FFFFFF.toInt())
+                                }
+
+                                // Interactive toggle click on checkbox
+                                val toggleUri = Uri.parse("clean-notes://toggle-check?id=$noteId&index=$i")
+                                val toggleIntent = Intent(context, ChecklistToggleReceiver::class.java).apply {
+                                    data = toggleUri
+                                    action = "es.antonborri.home_widget.action.BACKGROUND"
+                                }
+                                val requestCode = (noteId.hashCode() * 31 + i) and 0x7FFFFFFF
+                                val togglePendingIntent = PendingIntent.getBroadcast(
+                                    context,
+                                    requestCode,
+                                    toggleIntent,
+                                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                                )
+                                setOnClickPendingIntent(checkIds[i], togglePendingIntent)
+
+                                // Tapping the text opens the note in editor
+                                setOnClickPendingIntent(textIds[i], openNoteIntent)
+                            } else {
+                                setViewVisibility(rowIds[i], View.GONE)
+                            }
+                        }
+
+                        if (jsonArray.length() > 5) {
+                            setViewVisibility(R.id.widget_item_more, View.VISIBLE)
+                            setTextViewText(R.id.widget_item_more, "+ ${jsonArray.length() - 5} mục khác...")
+                            setOnClickPendingIntent(R.id.widget_item_more, openNoteIntent)
+                        } else {
+                            setViewVisibility(R.id.widget_item_more, View.GONE)
+                        }
+                    } else {
+                        // Plain note preview
+                        setViewVisibility(R.id.widget_pinned_checklist_container, View.GONE)
+                        setViewVisibility(R.id.widget_pinned_body, View.VISIBLE)
+                        setTextViewText(
+                            R.id.widget_pinned_body,
+                            if (content.isNotBlank()) content else "Không có nội dung"
+                        )
+                        setOnClickPendingIntent(R.id.widget_pinned_body, openNoteIntent)
+                    }
                 } else {
                     setViewVisibility(R.id.widget_pinned_active_layout, View.GONE)
                     setViewVisibility(R.id.widget_pinned_empty_layout, View.VISIBLE)
@@ -67,26 +155,5 @@ class PinnedNoteWidget : HomeWidgetProvider() {
             }
             appWidgetManager.updateAppWidget(widgetId, views)
         }
-    }
-
-    private fun formatBodyText(content: String, checklistJson: String): String {
-        try {
-            val jsonArray = JSONArray(checklistJson)
-            if (jsonArray.length() > 0) {
-                val sb = StringBuilder()
-                for (i in 0 until jsonArray.length()) {
-                    val item = jsonArray.getJSONObject(i)
-                    val isDone = item.optBoolean("done", false)
-                    val text = item.optString("text", "")
-                    val icon = if (isDone) "☑ " else "☐ "
-                    sb.append(icon).append(text)
-                    if (i < jsonArray.length() - 1) sb.append("\n")
-                }
-                return sb.toString()
-            }
-        } catch (_: Exception) {
-            // Fall back to plain content
-        }
-        return if (content.isNotBlank()) content else "Không có nội dung"
     }
 }

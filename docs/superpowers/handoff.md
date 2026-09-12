@@ -51,6 +51,7 @@ history. Major later checkpoints are:
 | `a88dad9` | Implemented Android AppWidgets (`QuickActionsWidget`, `PinnedNoteWidget`) and iOS deep linking scheme. |
 | `2cf686a` | Enhanced `WidgetLaunchCoordinator` lifecycle resume observer, 2s deduplication, and physical device verification screenshots. |
 | `eb0672a` | Fixed `RemoteViews` inflation crash in `widget_pinned_note.xml` by replacing `<View>` divider with `<FrameLayout>`, verified live on Android emulator. |
+| `HEAD` | Implemented interactive checklist toggle on Android AppWidget (`ChecklistToggleReceiver` optimistic UI update in ~20ms, unawaited background registration, full visual touch verification on emulator, 671/671 tests passed). |
 
 ## Evidence and its scope
 

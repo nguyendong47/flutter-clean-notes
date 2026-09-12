@@ -82,6 +82,25 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/pinned_note_widget_info" />
         </receiver>
+
+        <!-- Checklist Toggle Receiver for instant optimistic toggle -->
+        <receiver
+            android:name=".ChecklistToggleReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="es.antonborri.home_widget.action.BACKGROUND" />
+                <data android:scheme="clean-notes" android:host="toggle-check" />
+            </intent-filter>
+        </receiver>
+
+        <!-- HomeWidget Background Work Receiver -->
+        <receiver
+            android:name="es.antonborri.home_widget.HomeWidgetBackgroundReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="es.antonborri.home_widget.action.BACKGROUND" />
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -12,6 +12,8 @@ import 'package:flutter_clean_notes/app/app_providers.dart';
 import 'package:flutter_clean_notes/app/notification_service.dart';
 import 'package:flutter_clean_notes/app/router.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
+import 'package:home_widget/home_widget.dart';
+import 'package:flutter_clean_notes/app/services/widget_interactive_callback.dart';
 import 'package:flutter_clean_notes/features/notes/domain/services/reminder_coordinator.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
@@ -35,6 +37,16 @@ Future<void> bootstrapApplication({
     _initializeDatabase();
   } else {
     await Future<void>.sync(databaseInitializer);
+  }
+
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS)) {
+    try {
+      unawaited(
+        HomeWidget.registerInteractivityCallback(widgetInteractiveCallback),
+      );
+    } catch (_) {}
   }
 
   final notifications = notificationService ?? NotificationService();

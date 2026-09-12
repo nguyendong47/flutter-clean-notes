@@ -27,6 +27,40 @@ class WidgetSyncService {
     return items;
   }
 
+  /// Toggle a checklist item at the given [targetIndex] (0-based) in markdown text.
+  /// Converts `- [ ]` / `* [ ]` to `- [x]` and `- [x]` / `* [x]` to `- [ ]`.
+  /// Returns the modified markdown content, or original markdown if [targetIndex] is out of bounds.
+  static String toggleChecklistItem(String markdown, int targetIndex) {
+    if (targetIndex < 0) return markdown;
+
+    final lines = markdown.split('\n');
+    final checkPattern = RegExp(r'^(\s*[-*]\s*\[)([ xX])(\]\s*.*)$');
+    var currentIndex = 0;
+    var modified = false;
+    final updatedLines = <String>[];
+
+    for (final line in lines) {
+      final match = checkPattern.firstMatch(line);
+      if (match != null) {
+        if (currentIndex == targetIndex) {
+          final prefix = match.group(1)!;
+          final mark = match.group(2)!;
+          final suffix = match.group(3)!;
+          final newMark = (mark == 'x' || mark == 'X') ? ' ' : 'x';
+          updatedLines.add('$prefix$newMark$suffix');
+          modified = true;
+        } else {
+          updatedLines.add(line);
+        }
+        currentIndex++;
+      } else {
+        updatedLines.add(line);
+      }
+    }
+
+    return modified ? updatedLines.join('\n') : markdown;
+  }
+
   /// Create a preview text by taking up to [maxLines] non-empty lines.
   static String extractPreview(String content, {int maxLines = 4}) {
     final lines = content
