@@ -872,7 +872,10 @@ zipStorePath=wrapper/dists
     test(
       'launcher shim restores the original after success and failure',
       () async {
-        final fixture = await Directory.systemTemp.createTemp(
+        final resolvedTempBase = Directory(
+          Directory.systemTemp.resolveSymbolicLinksSync(),
+        );
+        final fixture = await resolvedTempBase.createTemp(
           'clean-notes-launcher-shim-test-',
         );
         addTearDown(() async {
@@ -916,7 +919,10 @@ zipStorePath=wrapper/dists
     );
 
     test('launcher shim detects tampering and safely restores bytes', () async {
-      final fixture = await Directory.systemTemp.createTemp(
+      final resolvedTempBase = Directory(
+        Directory.systemTemp.resolveSymbolicLinksSync(),
+      );
+      final fixture = await resolvedTempBase.createTemp(
         'clean-notes-launcher-tamper-test-',
       );
       addTearDown(() async {
