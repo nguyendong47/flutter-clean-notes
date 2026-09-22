@@ -9,6 +9,7 @@ import 'package:home_widget/home_widget.dart';
 class WidgetLaunchCoordinator with WidgetsBindingObserver {
   WidgetLaunchCoordinator({
     required this.router,
+    this.onSearchRequested,
     Future<Uri?> Function()? initialUriFetcher,
     Stream<Uri?>? widgetClickedStream,
   }) : _initialUriFetcher = initialUriFetcher ?? _defaultInitialUriFetcher,
@@ -16,6 +17,7 @@ class WidgetLaunchCoordinator with WidgetsBindingObserver {
            widgetClickedStream ?? _defaultWidgetClickedStream;
 
   final GoRouter router;
+  final VoidCallback? onSearchRequested;
   final Future<Uri?> Function() _initialUriFetcher;
   final Stream<Uri?> _widgetClickedStream;
   StreamSubscription<Uri?>? _subscription;
@@ -67,7 +69,7 @@ class WidgetLaunchCoordinator with WidgetsBindingObserver {
     final now = DateTime.now();
     if (_lastHandledUri == uri &&
         _lastHandledAt != null &&
-        now.difference(_lastHandledAt!) < const Duration(seconds: 2)) {
+        now.difference(_lastHandledAt!) < const Duration(milliseconds: 1000)) {
       return;
     }
 
@@ -75,7 +77,10 @@ class WidgetLaunchCoordinator with WidgetsBindingObserver {
     if (path != null) {
       _lastHandledUri = uri;
       _lastHandledAt = now;
-      router.push<void>(path);
+      router.go(path);
+      if (path == '/search') {
+        onSearchRequested?.call();
+      }
     }
   }
 

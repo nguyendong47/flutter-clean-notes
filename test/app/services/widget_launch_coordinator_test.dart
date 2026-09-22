@@ -6,7 +6,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 class _FakeGoRouter implements GoRouter {
+  final List<String> navigatedPaths = [];
   final List<String> pushedPaths = [];
+
+  @override
+  void go(String location, {Object? extra}) {
+    navigatedPaths.add(location);
+  }
 
   @override
   Future<T?> push<T extends Object?>(String location, {Object? extra}) async {
@@ -104,7 +110,7 @@ void main() {
       coordinator.initialize();
       await Future<void>.delayed(Duration.zero);
 
-      expect(fakeRouter.pushedPaths, ['/note/new']);
+      expect(fakeRouter.navigatedPaths, ['/note/new']);
       coordinator.dispose();
     });
 
@@ -121,27 +127,27 @@ void main() {
 
         coordinator.initialize();
         await Future<void>.delayed(Duration.zero);
-        expect(fakeRouter.pushedPaths, isEmpty);
+        expect(fakeRouter.navigatedPaths, isEmpty);
 
         streamController.add(Uri.parse('clean-notes://search'));
         await Future<void>.delayed(Duration.zero);
-        expect(fakeRouter.pushedPaths, ['/search']);
+        expect(fakeRouter.navigatedPaths, ['/search']);
 
         streamController.add(null);
         streamController.add(Uri.parse('clean-notes://unknown'));
         await Future<void>.delayed(Duration.zero);
-        expect(fakeRouter.pushedPaths, ['/search']);
+        expect(fakeRouter.navigatedPaths, ['/search']);
 
         streamController.add(Uri.parse('clean-notes://note?id=99'));
         await Future<void>.delayed(Duration.zero);
-        expect(fakeRouter.pushedPaths, ['/search', '/note/99']);
+        expect(fakeRouter.navigatedPaths, ['/search', '/note/99']);
 
         coordinator.dispose();
         await streamController.close();
       },
     );
 
-    test('deduplicates rapid identical URI events within 2 seconds', () async {
+    test('deduplicates rapid identical URI events within debounce window', () async {
       final fakeRouter = _FakeGoRouter();
       final streamController = StreamController<Uri?>();
       final coordinator = WidgetLaunchCoordinator(
@@ -156,16 +162,43 @@ void main() {
       final uri = Uri.parse('clean-notes://new');
       streamController.add(uri);
       await Future<void>.delayed(Duration.zero);
-      expect(fakeRouter.pushedPaths, ['/note/new']);
+      expect(fakeRouter.navigatedPaths, ['/note/new']);
 
       // Immediate second emission should be deduplicated
       streamController.add(uri);
       await Future<void>.delayed(Duration.zero);
-      expect(fakeRouter.pushedPaths, ['/note/new']);
+      expect(fakeRouter.navigatedPaths, ['/note/new']);
 
       coordinator.dispose();
       await streamController.close();
     });
+
+    test(
+      'triggers onSearchRequested when navigating to search route',
+      () async {
+        final fakeRouter = _FakeGoRouter();
+        final streamController = StreamController<Uri?>();
+        var searchRequested = false;
+        final coordinator = WidgetLaunchCoordinator(
+          router: fakeRouter,
+          onSearchRequested: () => searchRequested = true,
+          initialUriFetcher: () async => null,
+          widgetClickedStream: streamController.stream,
+        );
+
+        coordinator.initialize();
+        await Future<void>.delayed(Duration.zero);
+
+        streamController.add(Uri.parse('clean-notes://search'));
+        await Future<void>.delayed(Duration.zero);
+
+        expect(fakeRouter.navigatedPaths, ['/search']);
+        expect(searchRequested, isTrue);
+
+        coordinator.dispose();
+        await streamController.close();
+      },
+    );
 
     test(
       'rechecks initial URI on didChangeAppLifecycleState resumed',
@@ -186,11 +219,11 @@ void main() {
 
         coordinator.initialize();
         await Future<void>.delayed(Duration.zero);
-        expect(fakeRouter.pushedPaths, isEmpty);
+        expect(fakeRouter.navigatedPaths, isEmpty);
 
         coordinator.didChangeAppLifecycleState(AppLifecycleState.resumed);
         await Future<void>.delayed(Duration.zero);
-        expect(fakeRouter.pushedPaths, ['/search']);
+        expect(fakeRouter.navigatedPaths, ['/search']);
 
         coordinator.dispose();
       },

@@ -120,8 +120,12 @@ GoRouter router(Ref ref) {
     }
     ..attachContext(rootNavigatorKey);
 
-  final widgetLaunchCoordinator = WidgetLaunchCoordinator(router: router)
-    ..initialize();
+  final widgetLaunchCoordinator = WidgetLaunchCoordinator(
+    router: router,
+    onSearchRequested: () {
+      ref.read(searchFocusRequestProvider.notifier).requestFocus();
+    },
+  )..initialize();
 
   ref.onDispose(() {
     widgetLaunchCoordinator.dispose();

@@ -1,11 +1,13 @@
 package com.example.flutter_clean_notes
 
+import android.app.ActivityOptions
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
+import android.os.Build
 import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
@@ -83,10 +85,10 @@ class PinnedNoteWidget : HomeWidgetProvider() {
                         Uri.parse("clean-notes://new")
                     }
 
-                    val openNoteIntent = HomeWidgetLaunchIntent.getActivity(
+                    val openNoteIntent = createLaunchIntent(
                         context,
-                        MainActivity::class.java,
-                        targetUri
+                        targetUri,
+                        (noteId.hashCode() and 0x3FFFFFFF) + 200
                     )
                     setOnClickPendingIntent(R.id.widget_pinned_root, openNoteIntent)
                     setOnClickPendingIntent(R.id.widget_pinned_active_layout, openNoteIntent)
@@ -162,10 +164,10 @@ class PinnedNoteWidget : HomeWidgetProvider() {
                     setViewVisibility(R.id.widget_pinned_active_layout, View.GONE)
                     setViewVisibility(R.id.widget_pinned_empty_layout, View.VISIBLE)
 
-                    val newNoteIntent = HomeWidgetLaunchIntent.getActivity(
+                    val newNoteIntent = createLaunchIntent(
                         context,
-                        MainActivity::class.java,
-                        Uri.parse("clean-notes://new")
+                        Uri.parse("clean-notes://new"),
+                        105
                     )
                     setOnClickPendingIntent(R.id.widget_pinned_root, newNoteIntent)
                     setOnClickPendingIntent(R.id.widget_btn_empty_create, newNoteIntent)
@@ -173,5 +175,30 @@ class PinnedNoteWidget : HomeWidgetProvider() {
             }
             appWidgetManager.updateAppWidget(widgetId, views)
         }
+    }
+
+    private fun createLaunchIntent(context: Context, uri: Uri, requestCode: Int): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            data = uri
+            action = HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        var flags = PendingIntent.FLAG_UPDATE_CURRENT
+        if (Build.VERSION.SDK_INT >= 23) {
+            flags = flags or PendingIntent.FLAG_IMMUTABLE
+        }
+        if (Build.VERSION.SDK_INT >= 34) {
+            val options = ActivityOptions.makeBasic()
+            if (Build.VERSION.SDK_INT >= 35) {
+                options.setPendingIntentCreatorBackgroundActivityStartMode(
+                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                )
+            } else {
+                options.pendingIntentBackgroundActivityStartMode =
+                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }
+            return PendingIntent.getActivity(context, requestCode, intent, flags, options.toBundle())
+        }
+        return PendingIntent.getActivity(context, requestCode, intent, flags)
     }
 }
