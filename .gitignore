@@ -6,6 +6,9 @@
 build/
 .worktrees/
 .superpowers/sdd/
+
+# macOS Finder metadata
+.DS_Store
 # Directory created by dartdoc
 # If you don't generate documentation locally you can remove this line.
 doc/api/
