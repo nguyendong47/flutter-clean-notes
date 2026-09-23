@@ -82,7 +82,10 @@ files_to_add = [
   'PinnedNoteWidget.swift',
   'AuroraWidgetTheme.swift',
   'Info.plist',
-  'CleanNotesWidgetExtension.entitlements'
+  'CleanNotesWidgetExtension.entitlements',
+  'Debug.xcconfig',
+  'Release.xcconfig',
+  'Profile.xcconfig'
 ]
 
 swift_sources = [
@@ -105,6 +108,20 @@ files_to_add.each do |filename|
       sources_phase.add_file_reference(file_ref)
       puts "Added #{filename} to Sources build phase of #{target_name}."
     end
+  end
+end
+
+# Wire baseConfigurationReference for CleanNotesWidgetExtension build configurations
+extension_target.build_configurations.each do |config|
+  xcconfig_name = "#{config.name}.xcconfig"
+  xcconfig_ref = ext_group.files.find { |f| f.path == xcconfig_name }
+  if xcconfig_ref
+    if config.base_configuration_reference != xcconfig_ref
+      config.base_configuration_reference = xcconfig_ref
+      puts "Set baseConfigurationReference for #{config.name} to #{xcconfig_name}."
+    end
+  else
+    puts "Warning: #{xcconfig_name} not found in #{target_name} group."
   end
 end
 
