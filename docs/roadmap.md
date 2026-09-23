@@ -52,8 +52,10 @@ flowchart TD
 
 ---
 
-### GIAI ĐOẠN 1: Widget Ngoài Màn Hình (Home Screen Widgets)
+### GIAI ĐOẠN 1: Widget Ngoài Màn Hình (Home Screen Widgets) — ✅ Hoàn tất
 *Mục tiêu: Đưa ghi chú ra màn hình chính điện thoại, giúp người dùng chớp ý tưởng và theo dõi công việc mà không cần mở app.*
+
+**Trạng thái thực tế (2026-09-24):** Quick Capture Widget và Pinned Note Widget đã triển khai và QA xong trên cả Android (AppWidget, checklist toggle tương tác) và iOS (WidgetKit extension, SwiftUI). Khác biệt so với tầm nhìn ban đầu: checklist trên iOS hiện **chỉ đọc** (tap mở note để tương tác), chưa dùng App Intents/iOS 17+ Interactive Widgets như mục 2 bên dưới mô tả — quyết định phạm vi có chủ đích cho v1, có thể bổ sung sau.
 
 #### Chi tiết tính năng
 1. **Quick Capture Widget (4x1 / 2x2)**:
@@ -151,8 +153,8 @@ flowchart TD
 | **Giao diện Aurora Glass** | ✅ Hoàn tất | Redesign toàn bộ màn hình, Glassmorphism, Theme Sáng/Tối. |
 | **Bản địa hóa tiếng Việt (i18n)** | ✅ Hoàn tất | 23/23 tasks hoàn tất, 643/643 unit/widget tests xanh. |
 | **Sửa lỗi Status Bar & Visual QA Rule** | ✅ Hoàn tất | Safe area constraints, hỗ trợ viewPadding, chụp ảnh thực tế. |
-| **Phase 1: Home Screen Widget** | 🎯 Tiếp theo | Tạo Quick Capture Widget & Pinned Note Widget. |
-| **Phase 2: Voice Memo & Speech-to-Text**| ⏳ Kế hoạch | Ghi âm, waveform visualizer, chuyển giọng nói thành text. |
+| **Phase 1: Home Screen Widget** | ✅ Hoàn tất | Quick Capture Widget & Pinned Note Widget trên cả Android (AppWidget) và iOS (WidgetKit extension), đã QA tương tác thật trên thiết bị/simulator. |
+| **Phase 2: Voice Memo & Speech-to-Text**| 🎯 Tiếp theo | Ghi âm, waveform visualizer, chuyển giọng nói thành text. |
 | **Phase 3: Handwriting Canvas & OCR** | ⏳ Kế hoạch | Bảng vẽ vector mượt, nhận diện chữ viết tay offline. |
 | **Phase 4: Biometrics Lock & Local AI** | ⏳ Kế hoạch | Mã hóa AES, khóa vân tay, quét tài liệu OCR. |
 
