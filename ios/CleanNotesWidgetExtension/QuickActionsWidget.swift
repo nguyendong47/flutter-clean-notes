@@ -65,22 +65,22 @@ struct QuickActionsWidgetView: View {
             actionPill(
                 title: "Ghi chú",
                 icon: "square.and.pencil",
-                url: "clean-notes://new"
+                url: "clean-notes://new?homeWidget=true"
             )
             actionPill(
                 title: "Checklist",
                 icon: "checklist",
-                url: "clean-notes://new?template=checklist"
+                url: "clean-notes://new?template=checklist&homeWidget=true"
             )
             actionPill(
                 title: "Tìm kiếm",
                 icon: "magnifyingglass",
-                url: "clean-notes://search"
+                url: "clean-notes://search?homeWidget=true"
             )
             actionPill(
                 title: "Đã ghim",
                 icon: "pin.fill",
-                url: "clean-notes://pinned"
+                url: "clean-notes://pinned?homeWidget=true"
             )
         }
         .padding(10)
@@ -89,16 +89,16 @@ struct QuickActionsWidgetView: View {
     private var smallLayout: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
-                actionPill(title: "Ghi chú", icon: "square.and.pencil", url: "clean-notes://new")
-                actionPill(title: "Checklist", icon: "checklist", url: "clean-notes://new?template=checklist")
+                actionPill(title: "Ghi chú", icon: "square.and.pencil", url: "clean-notes://new?homeWidget=true")
+                actionPill(title: "Checklist", icon: "checklist", url: "clean-notes://new?template=checklist&homeWidget=true")
             }
             HStack(spacing: 8) {
-                actionPill(title: "Tìm kiếm", icon: "magnifyingglass", url: "clean-notes://search")
-                actionPill(title: "Đã ghim", icon: "pin.fill", url: "clean-notes://pinned")
+                actionPill(title: "Tìm kiếm", icon: "magnifyingglass", url: "clean-notes://search?homeWidget=true")
+                actionPill(title: "Đã ghim", icon: "pin.fill", url: "clean-notes://pinned?homeWidget=true")
             }
         }
         .padding(10)
-        .widgetURL(URL(string: "clean-notes://new")!)
+        .widgetURL(URL(string: "clean-notes://new?homeWidget=true")!)
     }
 
     @ViewBuilder

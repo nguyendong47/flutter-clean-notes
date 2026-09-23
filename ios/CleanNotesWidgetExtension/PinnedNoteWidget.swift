@@ -187,7 +187,7 @@ struct PinnedNoteWidgetView: View {
             Spacer(minLength: 0)
         }
         .padding(12)
-        .widgetURL(URL(string: "clean-notes://new")!)
+        .widgetURL(URL(string: "clean-notes://new?homeWidget=true")!)
     }
 
     private var activeLayout: some View {
@@ -229,7 +229,7 @@ struct PinnedNoteWidgetView: View {
             Spacer(minLength: 0)
         }
         .padding(12)
-        .widgetURL(URL(string: entry.noteId.isEmpty ? "clean-notes://new" : "clean-notes://note?id=\(entry.noteId)")!)
+        .widgetURL(URL(string: entry.noteId.isEmpty ? "clean-notes://new?homeWidget=true" : "clean-notes://note?id=\(entry.noteId)&homeWidget=true")!)
     }
 
     private var checklistContent: some View {
