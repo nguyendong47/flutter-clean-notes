@@ -83,9 +83,9 @@ flowchart TD
 
 **Trạng thái thực tế (2026-09-26):** Phase 2A (mục 1 — Realtime Speech-to-Text) đã triển khai và QA
 xong (spec, plan, implementation, review, fix pass, QA đều hoàn tất — xem
-`docs/superpowers/specs/2026-09-26-realtime-dictation-design.md`). Mục 2-4 (Audio Note đính kèm,
-Whisper transcription, AI Quick Summary — gọi là Phase 2B) **chưa bắt đầu**, mục 4 (AI Summary) đang
-chờ có API AI/LLM khả dụng cho dự án theo quyết định trước đó của người dùng.
+`docs/superpowers/specs/2026-09-26-realtime-dictation-design.md`). Mục 2-3 (Audio Note đính kèm,
+Whisper transcription — gọi là Phase 2B) **chưa bắt đầu**. Mục AI Quick Summary đã bị loại khỏi lộ
+trình vì dự án không có API AI/LLM.
 
 #### Chi tiết tính năng
 1. **Realtime Speech-to-Text (Chuyển giọng nói thành chữ trực tiếp) — ✅ Hoàn tất (Phase 2A)**:
@@ -101,8 +101,6 @@ chờ có API AI/LLM khả dụng cho dự án theo quyết định trước đ�
 3. **On-Device Whisper Transcription (Chép băng ngoại tuyến cao cấp)**:
    - Tích hợp mô hình Whisper nén (Tiny/Base via TFLite hoặc ONNX Runtime).
    - Chép lại toàn bộ băng ghi âm thành văn bản ngay trên máy người dùng, **hoàn toàn không gửi giọng nói lên server**.
-4. **AI Quick Summary (Tóm tắt tự động)**:
-   - Tự động gợi ý Tiêu đề thông minh và tạo gạch đầu dòng tóm tắt 3 ý chính từ đoạn ghi âm.
 
 #### Giải pháp kỹ thuật (Architecture)
 - **Speech Engine**:
@@ -161,7 +159,7 @@ chờ có API AI/LLM khả dụng cho dự án theo quyết định trước đ�
 | **Sửa lỗi Status Bar & Visual QA Rule** | ✅ Hoàn tất | Safe area constraints, hỗ trợ viewPadding, chụp ảnh thực tế. |
 | **Phase 1: Home Screen Widget** | ✅ Hoàn tất | Quick Capture Widget & Pinned Note Widget trên cả Android (AppWidget) và iOS (WidgetKit extension), đã QA tương tác thật trên thiết bị/simulator. |
 | **Phase 2A: Realtime Speech-to-Text** | ✅ Hoàn tất | Đọc chính tả trực tiếp vào thân ghi chú, đa ngôn ngữ (vi/en), đã QA thật trên simulator. |
-| **Phase 2B: Audio Memo, Whisper, AI Summary** | ⏳ Kế hoạch | Ghi âm, waveform, Whisper on-device, tóm tắt AI — mục AI Summary chờ có API AI/LLM. |
+| **Phase 2B: Audio Memo & Whisper** | ⏳ Kế hoạch | Ghi âm, waveform, Whisper on-device transcription. (AI Quick Summary đã loại khỏi lộ trình — không có API AI/LLM.) |
 | **Phase 3: Handwriting Canvas & OCR** | ⏳ Kế hoạch | Bảng vẽ vector mượt, nhận diện chữ viết tay offline. |
 | **Phase 4: Biometrics Lock & Local AI** | ⏳ Kế hoạch | Mã hóa AES, khóa vân tay, quét tài liệu OCR. |
 
