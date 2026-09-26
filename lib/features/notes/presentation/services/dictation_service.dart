@@ -51,6 +51,12 @@ abstract interface class SpeechRecognizer {
 /// `permission_handler`.
 abstract interface class PermissionRequester {
   Future<DictationPermissionResult> requestMicrophoneAndSpeech();
+
+  /// Requests only microphone access - no iOS speech-recognition permission.
+  /// Used by features (like audio memo recording) that record raw audio and
+  /// never transcribe it, so they must not trigger the speech-recognition
+  /// consent prompt Phase 2A's dictation feature needs.
+  Future<DictationPermissionResult> requestMicrophone();
 }
 
 class DictationService {
@@ -274,6 +280,17 @@ class PlatformPermissionRequester implements PermissionRequester {
       return DictationPermissionResult.permanentlyDenied;
     }
     return speechStatus.isGranted
+        ? DictationPermissionResult.granted
+        : DictationPermissionResult.denied;
+  }
+
+  @override
+  Future<DictationPermissionResult> requestMicrophone() async {
+    final micStatus = await Permission.microphone.request();
+    if (micStatus.isPermanentlyDenied) {
+      return DictationPermissionResult.permanentlyDenied;
+    }
+    return micStatus.isGranted
         ? DictationPermissionResult.granted
         : DictationPermissionResult.denied;
   }

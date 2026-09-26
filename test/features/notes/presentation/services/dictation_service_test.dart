@@ -300,6 +300,19 @@ void main() {
       expect(missingPluginService.currentState, DictationState.unavailable);
     },
   );
+
+  test(
+    'FakePermissionRequester.requestMicrophone returns the configured result',
+    () async {
+      final permissions = FakePermissionRequester(
+        result: DictationPermissionResult.permanentlyDenied,
+      );
+
+      final result = await permissions.requestMicrophone();
+
+      expect(result, DictationPermissionResult.permanentlyDenied);
+    },
+  );
 }
 
 class _ControllableListenRecognizer extends FakeSpeechRecognizer {
@@ -354,6 +367,11 @@ class _UnsupportedErrorRecognizer extends FakeSpeechRecognizer {
 class _MissingPluginPermissionRequester implements PermissionRequester {
   @override
   Future<DictationPermissionResult> requestMicrophoneAndSpeech() async {
+    throw MissingPluginException();
+  }
+
+  @override
+  Future<DictationPermissionResult> requestMicrophone() async {
     throw MissingPluginException();
   }
 }

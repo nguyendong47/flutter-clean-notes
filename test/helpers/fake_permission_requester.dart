@@ -25,4 +25,10 @@ class FakePermissionRequester implements PermissionRequester {
     requestCalls += 1;
     return result;
   }
+
+  @override
+  Future<DictationPermissionResult> requestMicrophone() async {
+    requestCalls += 1;
+    return result;
+  }
 }
