@@ -70,7 +70,11 @@ void main() {
           RegExp(r'PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);')
               .allMatches(project)
               .map((match) => match.group(1)!)
-              .where((identifier) => !identifier.endsWith('.RunnerTests'));
+              .where(
+                (identifier) =>
+                    !identifier.endsWith('.RunnerTests') &&
+                    !identifier.endsWith('.CleanNotesWidgetExtension'),
+              );
       expect(applicationBundleIds.toSet(), {'com.example.flutterCleanNotes'});
     });
 
