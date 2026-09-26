@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import AppIntents
 
 // MARK: - Models
 struct ChecklistItem: Codable {
@@ -238,9 +239,18 @@ struct PinnedNoteWidgetView: View {
             ForEach(0..<items.count, id: \.self) { idx in
                 let item = items[idx]
                 HStack(spacing: 6) {
-                    Image(systemName: item.done ? "checkmark.square.fill" : "square")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(item.done ? AuroraWidgetTheme.mint : secondaryTextColor)
+                    if #available(iOS 17.0, *) {
+                        Button(intent: ToggleChecklistItemIntent(noteId: entry.noteId, index: idx)) {
+                            Image(systemName: item.done ? "checkmark.square.fill" : "square")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(item.done ? AuroraWidgetTheme.mint : secondaryTextColor)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Image(systemName: item.done ? "checkmark.square.fill" : "square")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(item.done ? AuroraWidgetTheme.mint : secondaryTextColor)
+                    }
                     Text(item.text)
                         .font(.system(size: 12))
                         .foregroundColor(item.done ? secondaryTextColor : textColor)

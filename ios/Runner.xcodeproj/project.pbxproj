@@ -12,12 +12,15 @@
 		2D4E9B051EB60FB47F2F7870 /* CleanNotesWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2A684FEDA51D1AE2B31BC15E /* CleanNotesWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
+		4B7CC7A197C64E52ADBF6831 /* ToggleChecklistItemIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C605D634D364788A4B14C29 /* ToggleChecklistItemIntent.swift */; };
+		5558DE2C656B44919DA5115C /* ToggleChecklistItemIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C605D634D364788A4B14C29 /* ToggleChecklistItemIntent.swift */; };
 		4EC0B1CC548E3AA9BCBF44AD /* PinnedNoteWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7885AEA93F91C516A2B7ACAB /* PinnedNoteWidget.swift */; };
 		570DBFF1B1206A979285C7FE /* CleanNotesWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1C0B0C0F07572B82639D642 /* CleanNotesWidgetBundle.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7647C4C57DACF936442A33B0 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 74B6F0EEAB8F1470DC67A584 /* Foundation.framework */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
+		A001B002C003D004E005F006 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
 		93A4516E9BCB5F759AEAE904 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C7FFB4B65A5E1CBC716EFC6D /* Pods_Runner.framework */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
@@ -87,6 +90,7 @@
 		74B6F0EEAB8F1470DC67A584 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		75C91735BEEC16474927F958 /* AuroraWidgetTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuroraWidgetTheme.swift; sourceTree = "<group>"; };
 		7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		3C605D634D364788A4B14C29 /* ToggleChecklistItemIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ToggleChecklistItemIntent.swift; sourceTree = "<group>"; };
 		7885AEA93F91C516A2B7ACAB /* PinnedNoteWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PinnedNoteWidget.swift; sourceTree = "<group>"; };
 		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
@@ -113,6 +117,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7647C4C57DACF936442A33B0 /* Foundation.framework in Frameworks */,
+				A001B002C003D004E005F006 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -168,6 +173,7 @@
 				D1C0B0C0F07572B82639D642 /* CleanNotesWidgetBundle.swift */,
 				032AACECEDF9721E76636C41 /* QuickActionsWidget.swift */,
 				7885AEA93F91C516A2B7ACAB /* PinnedNoteWidget.swift */,
+				3C605D634D364788A4B14C29 /* ToggleChecklistItemIntent.swift */,
 				75C91735BEEC16474927F958 /* AuroraWidgetTheme.swift */,
 				212340E8B81E707A56CA482B /* Info.plist */,
 				3B779EF5F6FF56075496D582 /* CleanNotesWidgetExtension.entitlements */,
@@ -493,6 +499,7 @@
 				570DBFF1B1206A979285C7FE /* CleanNotesWidgetBundle.swift in Sources */,
 				C24B8A81DC6A5C258DD47927 /* QuickActionsWidget.swift in Sources */,
 				4EC0B1CC548E3AA9BCBF44AD /* PinnedNoteWidget.swift in Sources */,
+				4B7CC7A197C64E52ADBF6831 /* ToggleChecklistItemIntent.swift in Sources */,
 				10068AFD2771644F21EF7117 /* AuroraWidgetTheme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -504,6 +511,7 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
+				5558DE2C656B44919DA5115C /* ToggleChecklistItemIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
