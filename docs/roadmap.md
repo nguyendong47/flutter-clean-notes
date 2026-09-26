@@ -55,7 +55,7 @@ flowchart TD
 ### GIAI ĐOẠN 1: Widget Ngoài Màn Hình (Home Screen Widgets) — ✅ Hoàn tất
 *Mục tiêu: Đưa ghi chú ra màn hình chính điện thoại, giúp người dùng chớp ý tưởng và theo dõi công việc mà không cần mở app.*
 
-**Trạng thái thực tế (2026-09-24):** Quick Capture Widget và Pinned Note Widget đã triển khai và QA xong trên cả Android (AppWidget, checklist toggle tương tác) và iOS (WidgetKit extension, SwiftUI). Khác biệt so với tầm nhìn ban đầu: checklist trên iOS hiện **chỉ đọc** (tap mở note để tương tác), chưa dùng App Intents/iOS 17+ Interactive Widgets như mục 2 bên dưới mô tả — quyết định phạm vi có chủ đích cho v1, có thể bổ sung sau.
+**Trạng thái thực tế (2026-09-26):** Quick Capture Widget và Pinned Note Widget đã triển khai và QA xong trên cả Android (AppWidget) và iOS (WidgetKit extension, SwiftUI) — bao gồm checklist toggle tương tác trực tiếp trên widget ở **cả hai nền tảng** (Android: `ChecklistToggleReceiver`; iOS: `ToggleChecklistItemIntent`, App Intents/iOS 17+, có XCTest end-to-end xác nhận đồng bộ SQLite qua Dart background isolate).
 
 #### Chi tiết tính năng
 1. **Quick Capture Widget (4x1 / 2x2)**:
