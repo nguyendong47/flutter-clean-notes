@@ -79,16 +79,18 @@ flowchart TD
 
 - **`AudioRecordingService`** (new, `lib/features/notes/presentation/services/audio_recording_service.dart`, matching this project's existing `services/` convention — see `DictationService` from Phase 2A for the sibling pattern): thin wrapper around the `record` plugin, behind a `Recorder` interface (mirroring Phase 2A's `SpeechRecognizer`/`PermissionRequester` split) so it is fake-testable without touching platform channels. Owns recording state (`idle`/`recording`/`permissionDenied`/`permissionPermanentlyDenied`/`unavailable`/`error`), exposes `start()`/`stop()` returning the finished file's path and duration, and reuses a `PermissionRequester`-shaped abstraction — **actually reusing Phase 2A's own `PermissionRequester`/`DictationPermissionResult` types directly** (microphone-only request, no speech-recognition permission needed here) rather than duplicating that interface.
 - **Waveform extraction**: computed once, after the file is finished recording, from the decoded audio samples (package choice: `just_waveform` or manual PCM decode — confirmed during implementation against whatever the resolved `record`/`just_audio` version's actual API supports, per this project's established "verify against the resolved package version, don't assume" convention from Phase 2A). Stored as a compact numeric array (e.g. downsampled peak amplitudes) in `note_audio_attachments.waveform_data`, not recomputed on every playback.
-- **`note_audio_attachments` table** (schema v7 → v8 migration, following `local_note_datasource.dart`'s existing `_schemaVersion`/`onCreate`/`onUpgrade` pattern exactly):
+- **`note_audio_attachments` table** (schema v7 → v8 migration, following `local_note_datasource.dart`'s existing `_schemaVersion`/`onCreate`/`onUpgrade` pattern exactly). `notes.id` is `INTEGER PRIMARY KEY AUTOINCREMENT`, not a UUID/TEXT id (corrected from an earlier draft of this spec) — this table's `noteId` must match that type. Following this codebase's existing convention (`reminder_outbox` references `noteId` with a plain column, no SQL `FOREIGN KEY`/`ON DELETE CASCADE` — this project never enables `PRAGMA foreign_keys`, so a declared FK constraint would be silently unenforced), attachment cleanup on note deletion is handled at the application layer (§3), not by the database:
   ```sql
   CREATE TABLE note_audio_attachments (
-    id TEXT PRIMARY KEY,
-    note_id TEXT NOT NULL,
-    file_path TEXT NOT NULL,
-    duration_ms INTEGER NOT NULL,
-    waveform_data TEXT NOT NULL,        -- JSON-encoded numeric array
-    created_at INTEGER NOT NULL,
-    FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+    id TEXT PRIMARY KEY,               -- attachment's own id, a UUID (no AUTOINCREMENT
+                                        -- collision risk with notes.id, and lets the id be
+                                        -- generated before the DB insert, for the embed
+                                        -- syntax and any in-flight UI state)
+    noteId INTEGER NOT NULL,
+    filePath TEXT NOT NULL,
+    durationMs INTEGER NOT NULL,
+    waveformData TEXT NOT NULL,        -- JSON-encoded numeric array
+    createdAt TEXT NOT NULL            -- ISO 8601, matching notes.createdAt's own format
   );
   ```
 - **Embed mechanism**: a finished recording is represented in the note's plain-Markdown body as `![audio](attachment://<id>)` — deliberately reusing Markdown's own image syntax rather than inventing a new one, since `flutter_markdown`'s `imageBuilder` callback (already wired in `add_edit_note_page.dart`, currently used only for a real-image "unavailable" placeholder — real image rendering is not implemented) intercepts *all* image syntax uniformly. The existing `imageBuilder` is extended to branch on the URL: an `attachment://` scheme renders the real waveform/player block (looked up from `note_audio_attachments` by id); anything else keeps its current "unavailable" placeholder behavior unchanged. This keeps the note's raw text fully portable Markdown — exporting a note as `.md` still contains a real, if inert outside the app, reference to the attachment; nothing here breaks the "Zero Vendor Lock-in" pillar. Edit mode shows the raw `![audio](attachment://<id>)` line as plain text (same as any other Markdown syntax not specially handled in edit mode today); Preview mode renders the real player.
@@ -104,6 +106,7 @@ flowchart TD
 - Cloud storage, sync, or sharing of recordings — local-first, matching the rest of this app.
 - Editing/trimming a recording after it's made.
 - Any change to Phase 2A's dictation feature (a separate, already-shipped control in the same formatting bar).
+- Cleaning up orphaned attachment files when a trashed note is auto-purged by `LocalNoteDataSourceImpl.cleanupTrash()`'s existing 30-day sweep. This phase wires attachment cleanup into the direct, user-triggered `NoteRepositoryImpl.deleteNote()` path only (the common case); the trash-sweep path is a known, explicit follow-up (a disk-space leak, not a crash or data-loss risk — the DB rows and files simply outlive the note they referenced until a later cleanup pass).
 
 ---
 
