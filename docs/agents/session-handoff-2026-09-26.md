@@ -4,14 +4,78 @@ Continuation of `docs/agents/session-handoff-2026-09-24.md` (same machine migrat
 
 ## What's done this session (commits, newest first)
 
-1. `1e54d5d` docs(qa): add iOS Home Screen Widget visual QA screenshots (light + dark, real synced data)
-2. `c441919` docs: roadmap — iOS checklist interactivity gap closed
-3. `fa094f0` feat(widgets): interactive checklist toggling on the iOS widget (AppIntents, iOS 17+)
-4. `d413e31` chore(android): removed dead `PIN_QUICK_ACTIONS`/`PIN_PINNED_NOTE` code; fixed Android builds on this machine (Gradle/JDK mismatch)
+1. `17bfa5f` test(ios): cross-process App Group sharing verification tooling (entitlements checker + integration test + shell script)
+2. `9bef626` fix(test): update 2 iOS contract tests that had been silently broken since the widget extension was added
+3. `1e54d5d` docs(qa): add iOS Home Screen Widget visual QA screenshots (light + dark, real synced data)
+4. `c441919` docs: roadmap — iOS checklist interactivity gap closed
+5. `fa094f0` feat(widgets): interactive checklist toggling on the iOS widget (AppIntents, iOS 17+)
+6. `d413e31` chore(android): removed dead `PIN_QUICK_ACTIONS`/`PIN_PINNED_NOTE` code; fixed Android builds on this machine (Gradle/JDK mismatch)
 
 Also this session: installed `engrim` (cross-session memory tool) globally, wired into both Claude Code and Antigravity (`engrim setup --claude` + `engrim setup --agy`) — was mentioned in CLAUDE.md as already set up but wasn't on this Mac. `engrim doctor` shows Claude Code hooks valid; Antigravity has some secondary items still unresolved (Codex CLI hooks, OpenCode) — not blocking, those aren't used on this project.
 
 Created GitHub issue #1 tracking the still-open "test on a real iOS device" item (only simulator-verified so far).
+
+## Real bugs found in this session's second half (Telegram two-way + more test hardening)
+
+### 8. Telegram plugin inbound messages need the CLI's `--channels` flag — not a bug
+Spent a long time debugging why Telegram messages sent *to* the bot never
+surfaced in the session (outbound replies worked fine throughout). Traced it
+all the way down to the plugin's own `handleInbound()` in server.ts correctly
+receiving the message, passing the allowlist gate, and firing Telegram's
+"typing..." indicator (confirmed visually via a screenshot of Telegram
+Desktop) — i.e. everything up to and including the plugin's own
+`mcp.notification({method: 'notifications/claude/channel', ...})` call ran
+correctly. The notification was being silently dropped after that. Root
+cause: Claude Code's "Channels" feature (research preview) requires the
+session to be launched with an explicit `--channels` flag naming the server
+— being listed in `.mcp.json`/the plugin config is not enough; without the
+flag inbound relay is silently a no-op while outbound tools still work fine
+(matches the observed symptom exactly). Fix:
+```
+claude --resume <session-id> --channels plugin:telegram@claude-plugins-official
+```
+Neither `/reload-plugins` nor killing/respawning the MCP server subprocess
+fixes this — only relaunching the CLI with the flag does. Multiple
+`anthropics/claude-code` GitHub issues (#38534 and similar) report this same
+"typing indicator fires, message never arrives" symptom, mostly closed as
+not-a-bug for the same missing-flag reason.
+
+### 9. `codesign -d --entitlements` is the wrong tool for iOS Simulator builds — always shows empty, even on correctly-working ones
+This one cost real time and produced a false alarm: verifying the new
+`tool/verify_ios_widget_entitlements.dart` (added this session,
+commit `17bfa5f`) against a build already independently confirmed to have
+working cross-process App Group sharing (verified functionally, real data
+round-tripped through the shared container) — `codesign -d --entitlements -
+--xml Runner.app` still returned an empty `<dict></dict>`. This is not
+specific to `--no-codesign` builds (which genuinely lack entitlements) — a
+plain `flutter build ios --simulator` or a `flutter run`-produced build
+*also* shows empty via `codesign -d`, despite having correct, working
+entitlements. Reason: for iOS Simulator ad-hoc/local signing, Xcode embeds
+real entitlements into the Mach-O `__TEXT,__entitlements` section (what
+`launchd_sim` actually reads), not into the code-signature's own entitlements
+blob that `codesign -d --entitlements` inspects — that blob is reliably
+empty for simulator builds regardless of correctness. **Any future
+entitlements check for this project's iOS Simulator builds must read via
+`otool -s __TEXT __entitlements <path/to/executable-inside-the-bundle>`**
+(see `tool/verify_ios_widget_entitlements.dart`'s
+`_parseOtoolEntitlementsSections` for the hex-dump parsing) — confirmed this
+correctly distinguishes a `--no-codesign` build (no section at all) from a
+working one (section present, decodes to the real entitlements plist XML).
+
+### 10. Two iOS contract tests had been silently broken since the widget extension was added, unnoticed
+`test/app/display_identity_contract_test.dart` and
+`test/app/ios_deployment_target_contract_test.dart` both hardcoded
+assumptions from before `ios/CleanNotesWidgetExtension` existed (single
+bundle id project-wide; exactly 3 `IPHONEOS_DEPLOYMENT_TARGET` declarations
+project-wide). Once the extension target was added (commit `81b6ff7`,
+earlier this session) both assumptions became false, but nobody ran these
+two specific tests in isolation afterward to notice — the full-suite runs
+this session apparently didn't surface it clearly at a glance among 670+
+other tests. Fixed in `9bef626` by updating both to allowlist the extension
+target's legitimate additions rather than loosening the checks generally.
+**Lesson: after adding a new native target to the iOS project, specifically
+check `test/app/*contract_test.dart` files — they encode assumptions about
+project structure that a new target can silently invalidate.**
 
 ## Real bugs found this session
 
