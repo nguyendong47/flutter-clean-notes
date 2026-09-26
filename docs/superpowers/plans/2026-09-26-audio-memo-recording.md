@@ -1537,20 +1537,31 @@ bun .gitnexus/run.cjs impact "LocalNoteDataSourceImpl" --direction upstream --re
 - Create: `lib/features/notes/presentation/widgets/audio_player_block.dart`
 - Modify: `lib/features/notes/presentation/widgets/editor_formatting_bar.dart`
 - Modify: `lib/features/notes/presentation/pages/add_edit_note_page.dart`
+- Modify: `lib/features/notes/presentation/providers/note_providers.dart` (Step 3a)
+- Modify: `lib/app/router.dart`
+- Modify: `lib/features/notes/presentation/widgets/audio_record_button.dart` (Step 5's `noteId` ->
+  `ensureNoteId` interface supersession)
 - Modify: `test/features/notes/presentation/editor_formatting_bar_test.dart`
 - Modify: `test/features/notes/presentation/add_edit_note_page_test.dart`
+- Modify: `test/features/notes/presentation/widgets/audio_record_button_test.dart` (Step 5)
 - Test: `test/features/notes/presentation/widgets/audio_player_block_test.dart`
 
 **Interfaces:**
 - Consumes: `AudioRecordButton` (Task 6), `AudioAttachment`/`audioAttachmentRepositoryProvider` (Task 4/5), `just_audio`.
 - Produces: `AudioPlayerBlock` widget, constructor `AudioPlayerBlock({required String attachmentId, super.key})` - looks up the attachment by id (via `audioAttachmentRepositoryProvider`, matched against `noteId` is not needed here since ids are globally unique), renders waveform + play/pause + speed (1x/1.25x/1.5x/2x) + skip ±5s/±10s, or the reused "unavailable" placeholder if the attachment/file can't be found.
 
-**Before editing:** run GitNexus impact analysis on `EditorFormattingBar` and `AddEditNotePage` first, per CLAUDE.md:
+**Before editing:** run GitNexus impact analysis on `EditorFormattingBar`, `AddEditNotePage`, and
+`NotesNotifier` first, per CLAUDE.md:
 ```bash
 bun .gitnexus/run.cjs impact "EditorFormattingBar" --direction upstream --repo .
 bun .gitnexus/run.cjs impact "AddEditNotePage" --direction upstream --repo .
+bun .gitnexus/run.cjs impact "NotesNotifier" --direction upstream --repo .
 ```
-Confirm risk before proceeding; `AddEditNotePage` is a large, central file - stop and flag if either comes back HIGH/CRITICAL or UNKNOWN rather than proceeding on judgment alone.
+Confirm risk before proceeding; `AddEditNotePage` is a large, central file - stop and flag if any
+comes back HIGH/CRITICAL or UNKNOWN rather than proceeding on judgment alone. (Already checked while
+writing this plan, on a fresh index: `EditorFormattingBar` LOW/7, `AddEditNotePage` LOW/7,
+`NotesNotifier` MEDIUM/15 - the last one because Step 3a widens `addNote`'s return type; re-confirm
+rather than trust this stale note if much time has passed since it was written.)
 
 - [ ] **Step 1: Write the failing tests.**
 
@@ -1650,6 +1661,66 @@ Confirm risk before proceeding; `AddEditNotePage` is a large, central file - sto
   flutter test test/features/notes/presentation/editor_formatting_bar_test.dart
   ```
 - [ ] **Step 3: Implement `AudioPlayerBlock`.** Create `lib/features/notes/presentation/widgets/audio_player_block.dart` using `just_audio`'s `AudioPlayer` (`setFilePath`, `play`/`pause`, `setSpeed(double)`, `seek(Duration)`, `positionStream`/`durationStream` - **verify these exact method/stream names against the resolved `just_audio` version before finalizing**, same convention as Task 3's `PlatformRecorder`). Render: a `CustomPaint`-based waveform from `attachment.waveform` (simple bar visualization, no external charting package), a play/pause `IconButton`, a duration label, a speed `DropdownButton`/cycling button (1x/1.25x/1.5x/2x), two skip `IconButton`s (±5s handled via one tap, ±10s via a second control or a long-press - implementer's choice of exact interaction, but both must exist per the spec), and a delete `IconButton` (`Icons.delete_outline_rounded`, `key: Key('audio-player-delete-$attachmentId')`) that calls `audioAttachmentRepositoryProvider`'s `deleteAttachment(attachmentId)` and, via a required `VoidCallback onDeleted` constructor param, tells the caller (Task 7 Step 5's wiring) to remove the embed line from the note's text - `AudioPlayerBlock` itself does not have access to the note's `TextEditingController`, so it must not try to edit the note text directly. If `attachment` is null (id not found) or the file at `attachment.filePath` does not exist on disk (`File(path).existsSync()`), render the same placeholder pattern as `add_edit_note_page.dart`'s existing `imageBuilder` unavailable state (`Icons.image_not_supported_outlined`, same `Semantics`/`DecoratedBox` structure) with `editor.audioUnavailable`.tr() as the label (new translation key, both locales, same style as `editor.imageUnavailable`) - no delete button in this state (nothing valid to delete by id if the row itself is already gone; if the row exists but the file is missing, still show delete so the user can clear the dead reference).
+- [ ] **Step 3a: Fix a second real design gap found while writing this plan.** `_ensureNotePersisted()`
+  (Step 4 below) needs the new note's id back from `notesProvider.notifier.addNote(...)`, but that
+  method's real current signature (`lib/features/notes/presentation/providers/note_providers.dart`,
+  `NotesNotifier.addNote`) is `Future<void> addNote(Note note, {DateTime Function()? now}) async`
+  - it computes the id internally (`final id = await ref.read(addNoteUsecaseProvider)(requestedNote);`)
+  but never returns it. **This is a different `addNote` from the one 3 existing test files override
+  with `Future<int> addNote(Note note) async { ...; return super.addNote(note); }`** (in
+  `add_edit_note_page_test.dart`, `notes_notifier_test.dart`, `aurora_notes_flow_test.dart`) - those
+  override the lower-level `NoteRepository.addNote(Note)`/`NoteRepositoryImpl.addNote(Note)`, which
+  already returns `Future<int>` and is untouched by this fix; confirmed by reading
+  `lib/features/notes/domain/repositories/note_repository.dart` and
+  `lib/features/notes/data/repositories/note_repository_impl.dart` directly - do not confuse the two
+  `addNote` methods or "fix" the wrong one. GitNexus impact on `NotesNotifier` came back MEDIUM (15
+  impacted) before this fix was written, confirmed genuine and small enough to proceed given every
+  real call site (`grep`-confirmed) only does `await notifier.addNote(...)` without capturing a
+  return value - widening `Future<void>` to `Future<int>` breaks nothing else.
+
+  Fix: `_mutate` (same file, line ~273: `Future<void> _mutate(Future<void> Function() operation)`)
+  is shared by 5 different mutation methods and returns `Future<void>` itself - do not touch its
+  signature (too broad a change for what this needs). Instead, capture the id in a variable in
+  `addNote`'s own outer scope, set inside the `_mutate` closure, read after it completes:
+  ```dart
+  Future<int> addNote(Note note, {DateTime Function()? now}) async {
+    final requestedNote = _persistedSnapshot(note);
+    Note? persistedNote;
+    int? newId;
+    try {
+      await _mutate(() async {
+        final reminder = requestedNote.reminder;
+        final currentTime = now?.call() ?? DateTime.now();
+        if (reminder != null && !reminder.isAfter(currentTime)) {
+          throw const InvalidNoteReminderException();
+        }
+        final id = await ref.read(addNoteUsecaseProvider)(requestedNote);
+        newId = id;
+        persistedNote = requestedNote.copyWith(id: id);
+        if (requestedNote.reminder != null) {
+          await ref.read(noteReminderGatewayProvider).schedule(persistedNote!);
+        }
+      });
+    } catch (error, stackTrace) {
+      final checkpoint = persistedNote;
+      if (checkpoint != null) {
+        Error.throwWithStackTrace(
+          PersistedNoteSaveException(
+            persistedNote: checkpoint,
+            cause: error,
+            causeStackTrace: stackTrace,
+          ),
+          stackTrace,
+        );
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    return newId!;
+  }
+  ```
+  Every line of this except `int? newId;`, `newId = id;`, and the final `return newId!;` is the
+  method's existing real body, unchanged - the catch block already rethrows on every error path, so
+  reaching `return newId!;` is only possible after a real success, where `newId` is guaranteed set.
 - [ ] **Step 4: Add a silent "ensure persisted" path to `AddEditNotePage`, for recording on a brand-new note.** Read this plan's Review Focus entry on this exact scenario first. `AddEditNotePage._saveNote()` (line ~722) is an explicit, user-triggered save-and-close action - there is no autosave to reuse. Add a new private method, sibling to `_saveNote()`:
   ```dart
   Future<int> _ensureNotePersisted() async {
@@ -1666,17 +1737,20 @@ Confirm risk before proceeding; `AddEditNotePage` is a large, central file - sto
       reminder: _reminder,
     );
     final notifier = ref.read(notesProvider.notifier);
-    final persisted = await notifier.addNote(note, now: widget.now);
-    // Match whatever addNote's real return shape is (an id, or a Note with
-    // an id, or void with the id readable back from `notesProvider` state
-    // afterward) - read `notesProvider`'s `addNote` implementation before
-    // writing this line; this plan assumes it returns something the id can
-    // be read from, verify rather than assume.
-    _persistedId = /* extracted id */;
+    _persistedId = await notifier.addNote(note, now: widget.now);
     return _persistedId!;
   }
   ```
-  This deliberately skips `_saveNote()`'s blank-content validation (`title.isEmpty && content.isEmpty` guard) and its `_requestClose()`/`_saving` UI-state changes - starting a recording is not the same user action as tapping save, and must not navigate the user out of the editor or block on the same validation a real save enforces. A later explicit `_saveNote()` on the same page must see `_persistedId != null` and go through its existing update path, not create a second note - this is already `_saveNote()`'s existing behavior (line 774's `if (_persistedId == null)` branch), so no change needed there, only confirm it with the test in Step 6.
+  This now type-checks directly against Step 3a's fix - no extraction needed, `addNote` returns the
+  id itself. This deliberately skips `_saveNote()`'s blank-content validation (`title.isEmpty &&
+  content.isEmpty` guard) and its `_requestClose()`/`_saving` UI-state changes - starting a recording
+  is not the same user action as tapping save, and must not navigate the user out of the editor or
+  block on the same validation a real save enforces. A later explicit `_saveNote()` on the same page
+  must see `_persistedId != null` and go through its existing update path, not create a second note -
+  this is already `_saveNote()`'s existing behavior (line 774's `if (_persistedId == null)` branch),
+  so no change needed there, only confirm it with the test in Step 7. `_saveNote()`'s own
+  `await notifier.addNote(note, now: widget.now);` call (line ~775) now returns `Future<int>` too -
+  it doesn't capture the value today and doesn't need to; leave that call site as a bare `await`.
 - [ ] **Step 5: Wire `AudioRecordButton` into `EditorFormattingBar`.** In `editor_formatting_bar.dart`, import `audio_record_button.dart`, replace `EditorFormattingBar`'s implicit `noteId` requirement with a `Future<int> Function() ensureNoteId` constructor parameter (not a plain `int? noteId` - the id may not exist yet, per Step 4) threaded straight through to `AudioRecordButton`'s own `required Future<int> Function() ensureNoteId` param (replacing Task 6's originally-planned plain `required int noteId` - update Task 6's `AudioRecordButton` constructor and its `_toggle`'s start branch to `final noteId = await widget.ensureNoteId();` before calling `service.start()`, and update `audio_record_button_test.dart`'s `_pump` helper to pass `ensureNoteId: () async => 1` in place of the plain `noteId: 1` it used in Task 6 - note this discrepancy explicitly in this task's commit message, since it changes an interface Task 6 already committed). In `add_edit_note_page.dart`, pass `ensureNoteId: _ensureNotePersisted` into `EditorFormattingBar(...)`, and add `AudioRecordButton`... already added via `EditorFormattingBar`'s own controls list (no separate call needed here beyond what Task 6 wired into `EditorFormattingBar.build()`'s `controls`).
 - [ ] **Step 6: Wire the Markdown embed renderer and the delete-removes-embed-line behavior.** In `add_edit_note_page.dart`, extend the existing `MarkdownBody.imageBuilder` callback: parse the image `Uri` it receives (the callback's first positional parameter, currently unused/`_`) and check `uri.scheme == 'attachment'`; if so, `return AudioPlayerBlock(attachmentId: uri.host, onDeleted: () => _removeAudioEmbedFromBody(uri.host));` (host, since `attachment://<id>` puts the id in the URI's host position - confirm this parses as expected with a quick `Uri.parse('attachment://abc-123').host == 'abc-123'` sanity check while implementing, and adjust to `.path` instead if it does not); otherwise keep the existing unavailable-placeholder behavior unchanged for real image URLs. Add a new private method:
   ```dart
