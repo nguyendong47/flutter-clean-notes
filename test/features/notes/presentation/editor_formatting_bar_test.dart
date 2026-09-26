@@ -1,9 +1,14 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/dictation_service_provider.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/dictation_service.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/editor_formatting_bar.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../helpers/fake_permission_requester.dart';
+import '../../../helpers/fake_speech_recognizer.dart';
 import '../../../support/localization_test_wrapper.dart';
 
 void main() {
@@ -244,31 +249,71 @@ void main() {
     expect(tester.takeException(), isNull);
     semantics.dispose();
   });
+
+  testWidgets('renders a dictation mic control alongside formatting controls', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await _pumpBar(tester, controller);
+
+    expect(find.byIcon(Icons.mic_none_rounded), findsOneWidget);
+  });
+
+  testWidgets('dictation mic control is disabled when the bar is disabled', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await _pumpBar(tester, controller, enabled: false);
+
+    final micButton = tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byIcon(Icons.mic_none_rounded),
+        matching: find.byType(IconButton),
+      ),
+    );
+    expect(micButton.onPressed, isNull);
+  });
 }
 
 Future<void> _pumpBar(
   WidgetTester tester,
   TextEditingController controller, {
+  bool enabled = true,
   double width = 375,
   TextScaler textScaler = TextScaler.noScaling,
 }) async {
   await tester.pumpWidget(
-    wrapWithTestLocalization(
-      Builder(
-        builder: (localizationContext) => MaterialApp(
-          localizationsDelegates: localizationContext.localizationDelegates,
-          supportedLocales: localizationContext.supportedLocales,
-          locale: localizationContext.locale,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(textScaler: textScaler),
-            child: child!,
+    ProviderScope(
+      overrides: [
+        dictationServiceProvider.overrideWith(
+          (ref) => DictationService(
+            recognizer: FakeSpeechRecognizer(),
+            permissions: FakePermissionRequester(),
           ),
-          home: Scaffold(
-            body: Align(
-              alignment: Alignment.topLeft,
-              child: SizedBox(
-                width: width,
-                child: EditorFormattingBar(controller: controller),
+        ),
+      ],
+      child: wrapWithTestLocalization(
+        Builder(
+          builder: (localizationContext) => MaterialApp(
+            localizationsDelegates: localizationContext.localizationDelegates,
+            supportedLocales: localizationContext.supportedLocales,
+            locale: localizationContext.locale,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: width,
+                  child: EditorFormattingBar(
+                    controller: controller,
+                    enabled: enabled,
+                  ),
+                ),
               ),
             ),
           ),

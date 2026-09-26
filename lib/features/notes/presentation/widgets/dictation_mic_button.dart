@@ -8,9 +8,14 @@ import 'package:flutter_clean_notes/features/notes/presentation/providers/dictat
 import 'package:flutter_clean_notes/features/notes/presentation/services/dictation_service.dart';
 
 class DictationMicButton extends ConsumerStatefulWidget {
-  const DictationMicButton({required this.controller, super.key});
+  const DictationMicButton({
+    required this.controller,
+    this.enabled = true,
+    super.key,
+  });
 
   final TextEditingController controller;
+  final bool enabled;
 
   @override
   ConsumerState<DictationMicButton> createState() => _DictationMicButtonState();
@@ -21,6 +26,16 @@ class _DictationMicButtonState extends ConsumerState<DictationMicButton> {
   DictationService? _service;
   StreamSubscription<DictationState>? _stateSub;
   StreamSubscription<String>? _textSub;
+
+  @override
+  void didUpdateWidget(covariant DictationMicButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.enabled &&
+        !widget.enabled &&
+        _state == DictationState.listening) {
+      _service?.stop();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +51,7 @@ class _DictationMicButtonState extends ConsumerState<DictationMicButton> {
             ? Icons.mic_rounded
             : Icons.mic_none_rounded,
       ),
-      onPressed: _state == DictationState.unavailable
+      onPressed: (!widget.enabled || _state == DictationState.unavailable)
           ? null
           : () => _toggle(service),
     );

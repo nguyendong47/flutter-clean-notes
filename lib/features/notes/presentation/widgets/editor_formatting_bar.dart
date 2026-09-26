@@ -1,6 +1,8 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import 'package:flutter_clean_notes/features/notes/presentation/widgets/dictation_mic_button.dart';
+
 class EditorFormattingBar extends StatelessWidget {
   const EditorFormattingBar({
     required this.controller,
@@ -70,6 +72,7 @@ class EditorFormattingBar extends StatelessWidget {
         icon: Icons.check_box_outlined,
         onPressed: () => _toggleLinePrefix('- [ ] '),
       ),
+      DictationMicButton(controller: controller, enabled: enabled),
     ];
 
     return Semantics(
