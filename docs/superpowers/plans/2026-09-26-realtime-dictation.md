@@ -383,7 +383,10 @@ This task's production implementations of `SpeechRecognizer`/`PermissionRequeste
   /// so [DictationService] and its tests never depend on the third-party
   /// package's own API surface directly.
   abstract interface class SpeechRecognizer {
-    Future<bool> initialize();
+    Future<bool> initialize({
+      required void Function(String status) onStatus,
+      required void Function(String message) onError,
+    });
 
     Future<void> listen({
       required void Function(String text, bool isFinal) onResult,
