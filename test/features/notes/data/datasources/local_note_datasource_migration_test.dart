@@ -43,12 +43,12 @@ void main() {
     }
   });
 
-  test('creates a fresh v7 database with an empty reminder outbox', () async {
+  test('creates a fresh v8 database with an empty reminder outbox', () async {
     final dataSource = LocalNoteDataSourceImpl();
     final database = await dataSource.database;
     openedDatabases.add(database);
 
-    expect(await database.getVersion(), 7);
+    expect(await database.getVersion(), 8);
     final noteColumns = await database.rawQuery('PRAGMA table_xinfo(notes)');
     expect(
       noteColumns.singleWhere(
@@ -68,7 +68,7 @@ void main() {
     expect(await database.query('reminder_outbox'), isEmpty);
   });
 
-  test('upgrades a v1 file to v7 and preserves the legacy row', () async {
+  test('upgrades a v1 file to v8 and preserves the legacy row', () async {
     await _writeFixture(
       supportDirectory,
       version: 1,
@@ -100,7 +100,7 @@ void main() {
     expect(await _storedTags(openedDatabases.last), ['json:[]']);
   });
 
-  test('upgrades a v2 file to v7 without losing its pinned value', () async {
+  test('upgrades a v2 file to v8 without losing its pinned value', () async {
     await _writeFixture(
       supportDirectory,
       version: 2,
@@ -133,7 +133,7 @@ void main() {
     expect(await _storedTags(openedDatabases.last), ['json:[]']);
   });
 
-  test('upgrades a v3 file to v7 and keeps legacy tags readable', () async {
+  test('upgrades a v3 file to v8 and keeps legacy tags readable', () async {
     await _writeFixture(
       supportDirectory,
       version: 3,
@@ -169,7 +169,7 @@ void main() {
     ]);
   });
 
-  test('upgrades a v4 file to v7 and preserves every note status', () async {
+  test('upgrades a v4 file to v8 and preserves every note status', () async {
     await _writeFixture(
       supportDirectory,
       version: 4,
@@ -252,7 +252,7 @@ void main() {
   });
 
   test(
-    'upgrades a deployed v5 file to v7 without changing its rich row',
+    'upgrades a deployed v5 file to v8 without changing its rich row',
     () async {
       await _writeFixture(
         supportDirectory,
@@ -347,7 +347,7 @@ void main() {
     ]);
   });
 
-  test('migrates v6 once then reopens without mutating v7 bytes', () async {
+  test('migrates v6 once then reopens without mutating v8 bytes', () async {
     const persistedTags =
         r'json:["finance,2026","snow-\u96ea","quote\"tag","json:[\"nested\"]"]';
     await _writeFixture(
@@ -439,9 +439,9 @@ void main() {
   );
 
   test(
-    'reopens a fresh v7 file without mutating its pending command',
+    'reopens a fresh v8 file without mutating its pending command',
     () async {
-      await _writeV7Fixture(supportDirectory);
+      await _writeV8Fixture(supportDirectory);
       final databaseFile = File(
         path.join(supportDirectory.path, 'notes_database.db'),
       );
@@ -473,7 +473,7 @@ void main() {
     },
   );
 
-  test('creates a fresh empty v7 file with the exact current schema', () async {
+  test('creates a fresh empty v8 file with the exact current schema', () async {
     final dataSource = LocalNoteDataSourceImpl();
     final database = await dataSource.database;
     openedDatabases.add(database);
@@ -595,7 +595,7 @@ Future<List<Object?>> _storedReminderGenerations(Database database) async {
 }
 
 Future<void> _expectCurrentSchema(Database database) async {
-  expect(await database.getVersion(), 7);
+  expect(await database.getVersion(), 8);
   final objects = await database.rawQuery('''
     SELECT type, name, tbl_name, sql
     FROM sqlite_master
@@ -615,8 +615,18 @@ Future<void> _expectCurrentSchema(Database database) async {
     [
       {
         'type': 'index',
+        'name': 'audio_attachments_note_id',
+        'tbl_name': 'note_audio_attachments',
+      },
+      {
+        'type': 'index',
         'name': 'reminder_outbox_note_generation',
         'tbl_name': 'reminder_outbox',
+      },
+      {
+        'type': 'table',
+        'name': 'note_audio_attachments',
+        'tbl_name': 'note_audio_attachments',
       },
       {'type': 'table', 'name': 'notes', 'tbl_name': 'notes'},
       {
@@ -801,9 +811,79 @@ Future<void> _expectCurrentSchema(Database database) async {
   final indexes = await database.rawQuery('PRAGMA index_list(reminder_outbox)');
   expect(indexes, hasLength(1));
   expect(indexes.single['name'], 'reminder_outbox_note_generation');
+
+  expect(
+    await database.rawQuery('PRAGMA table_xinfo(note_audio_attachments)'),
+    [
+      {
+        'cid': 0,
+        'name': 'id',
+        'type': 'TEXT',
+        'notnull': 0,
+        'dflt_value': null,
+        'pk': 1,
+        'hidden': 0,
+      },
+      {
+        'cid': 1,
+        'name': 'noteId',
+        'type': 'INTEGER',
+        'notnull': 1,
+        'dflt_value': null,
+        'pk': 0,
+        'hidden': 0,
+      },
+      {
+        'cid': 2,
+        'name': 'filePath',
+        'type': 'TEXT',
+        'notnull': 1,
+        'dflt_value': null,
+        'pk': 0,
+        'hidden': 0,
+      },
+      {
+        'cid': 3,
+        'name': 'durationMs',
+        'type': 'INTEGER',
+        'notnull': 1,
+        'dflt_value': null,
+        'pk': 0,
+        'hidden': 0,
+      },
+      {
+        'cid': 4,
+        'name': 'waveformData',
+        'type': 'TEXT',
+        'notnull': 1,
+        'dflt_value': null,
+        'pk': 0,
+        'hidden': 0,
+      },
+      {
+        'cid': 5,
+        'name': 'createdAt',
+        'type': 'TEXT',
+        'notnull': 1,
+        'dflt_value': null,
+        'pk': 0,
+        'hidden': 0,
+      },
+    ],
+  );
+  // Unlike `notes` (INTEGER PRIMARY KEY, uses rowid directly, no side
+  // index), `note_audio_attachments.id` is TEXT PRIMARY KEY, so SQLite
+  // creates a real implicit unique index for it alongside the explicit one.
+  final audioIndexes = await database.rawQuery(
+    'PRAGMA index_list(note_audio_attachments)',
+  );
+  expect(audioIndexes.map((index) => index['name']), [
+    'audio_attachments_note_id',
+    'sqlite_autoindex_note_audio_attachments_1',
+  ]);
 }
 
-Future<void> _writeV7Fixture(Directory supportDirectory) async {
+Future<void> _writeV8Fixture(Directory supportDirectory) async {
   final databasePath = path.join(supportDirectory.path, 'notes_database.db');
   final database = await databaseFactoryFfi.openDatabase(
     databasePath,
@@ -828,9 +908,27 @@ Future<void> _writeV7Fixture(Directory supportDirectory) async {
       CREATE INDEX reminder_outbox_note_generation
       ON reminder_outbox(noteId, generation)
     ''');
+    // Matches _createAudioAttachments exactly - this fixture must already be
+    // at the CURRENT schema (v8) so opening it via LocalNoteDataSourceImpl
+    // is a same-version reopen, not an upgrade (which would legitimately
+    // rewrite the file and defeat the point of this byte-identity test).
+    await database.execute('''
+      CREATE TABLE note_audio_attachments (
+        id TEXT PRIMARY KEY,
+        noteId INTEGER NOT NULL,
+        filePath TEXT NOT NULL,
+        durationMs INTEGER NOT NULL,
+        waveformData TEXT NOT NULL,
+        createdAt TEXT NOT NULL
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX audio_attachments_note_id
+      ON note_audio_attachments(noteId)
+    ''');
     await database.insert('notes', {
       'id': 70,
-      'title': 'Fresh v7',
+      'title': 'Fresh v8',
       'content': 'Pending command survives reopen',
       'color': 17,
       'createdAt': '2031-01-15T10:15:00.000Z',
@@ -844,7 +942,7 @@ Future<void> _writeV7Fixture(Directory supportDirectory) async {
       'operation': 'schedule',
       'scheduledAt': '2031-01-15T11:15:00.000Z',
     });
-    await database.execute('PRAGMA user_version = 7');
+    await database.execute('PRAGMA user_version = 8');
   } finally {
     await database.close();
   }

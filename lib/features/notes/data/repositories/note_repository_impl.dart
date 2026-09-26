@@ -1,12 +1,18 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_clean_notes/features/notes/data/datasources/local_note_datasource.dart';
 import 'package:flutter_clean_notes/features/notes/data/models/note_model.dart';
+import 'package:flutter_clean_notes/features/notes/data/repositories/audio_attachment_repository.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/domain/repositories/note_repository.dart';
 
 class NoteRepositoryImpl implements NoteRepository {
   final LocalNoteDataSource localDataSource;
+  final AudioAttachmentRepository _audioAttachmentRepository;
 
-  NoteRepositoryImpl(this.localDataSource);
+  NoteRepositoryImpl(
+    this.localDataSource, {
+    required AudioAttachmentRepository audioAttachmentRepository,
+  }) : _audioAttachmentRepository = audioAttachmentRepository;
 
   @override
   Future<List<Note>> getNotes() async {
@@ -34,7 +40,17 @@ class NoteRepositoryImpl implements NoteRepository {
 
   @override
   Future<int> deleteNote(int id) async {
-    return await localDataSource.deleteNote(id);
+    final deleted = await localDataSource.deleteNote(id);
+    if (deleted == 1) {
+      try {
+        await _audioAttachmentRepository.deleteAttachmentsForNote(id);
+      } catch (e) {
+        // A secondary-cleanup failure must never make note deletion itself
+        // fail from the caller's point of view - the note is already gone.
+        debugPrint('audio attachment cleanup failed for note $id: $e');
+      }
+    }
+    return deleted;
   }
 
   @override

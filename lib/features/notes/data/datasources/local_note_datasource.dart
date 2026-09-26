@@ -35,16 +35,35 @@ abstract interface class ReminderOutboxDataSource {
   });
 }
 
+abstract interface class AudioAttachmentDataSource {
+  Future<void> insertAudioAttachment({
+    required String id,
+    required int noteId,
+    required String filePath,
+    required int durationMs,
+    required String waveformData,
+    required String createdAt,
+  });
+  Future<void> deleteAudioAttachment(String id);
+  Future<void> deleteAudioAttachmentsForNote(int noteId);
+  Future<List<Map<String, Object?>>> audioAttachmentsForNote(int noteId);
+  Future<Map<String, Object?>?> getAudioAttachment(String id);
+}
+
 abstract interface class NotesPersistenceDataSource
-    implements LocalNoteDataSource, ReminderOutboxDataSource {}
+    implements
+        LocalNoteDataSource,
+        ReminderOutboxDataSource,
+        AudioAttachmentDataSource {}
 
 class LocalNoteDataSourceImpl implements NotesPersistenceDataSource {
   LocalNoteDataSourceImpl({Database? database}) : _databaseOverride = database;
 
   Database? _database;
-  static const int _schemaVersion = 7;
+  static const int _schemaVersion = 8;
   static const String _tableName = 'notes';
   static const String _reminderOutboxTable = 'reminder_outbox';
+  static const String _audioAttachmentsTable = 'note_audio_attachments';
   final Database? _databaseOverride;
 
   @override
@@ -134,6 +153,7 @@ class LocalNoteDataSourceImpl implements NotesPersistenceDataSource {
       )
     ''');
     await _createReminderOutbox(db);
+    await _createAudioAttachments(db);
   }
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -178,6 +198,26 @@ class LocalNoteDataSourceImpl implements NotesPersistenceDataSource {
       );
       await _createReminderOutbox(db);
     }
+    if (oldVersion < 8) {
+      await _createAudioAttachments(db);
+    }
+  }
+
+  Future<void> _createAudioAttachments(Database db) async {
+    await db.execute('''
+      CREATE TABLE $_audioAttachmentsTable (
+        id TEXT PRIMARY KEY,
+        noteId INTEGER NOT NULL,
+        filePath TEXT NOT NULL,
+        durationMs INTEGER NOT NULL,
+        waveformData TEXT NOT NULL,
+        createdAt TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX audio_attachments_note_id
+      ON $_audioAttachmentsTable(noteId)
+    ''');
   }
 
   Future<void> _createReminderOutbox(Database db) async {
@@ -580,5 +620,62 @@ class LocalNoteDataSourceImpl implements NotesPersistenceDataSource {
       }
       return changed;
     });
+  }
+
+  @override
+  Future<void> insertAudioAttachment({
+    required String id,
+    required int noteId,
+    required String filePath,
+    required int durationMs,
+    required String waveformData,
+    required String createdAt,
+  }) async {
+    final db = await database;
+    await db.insert(_audioAttachmentsTable, {
+      'id': id,
+      'noteId': noteId,
+      'filePath': filePath,
+      'durationMs': durationMs,
+      'waveformData': waveformData,
+      'createdAt': createdAt,
+    });
+  }
+
+  @override
+  Future<void> deleteAudioAttachment(String id) async {
+    final db = await database;
+    await db.delete(_audioAttachmentsTable, where: 'id = ?', whereArgs: [id]);
+  }
+
+  @override
+  Future<void> deleteAudioAttachmentsForNote(int noteId) async {
+    final db = await database;
+    await db.delete(
+      _audioAttachmentsTable,
+      where: 'noteId = ?',
+      whereArgs: [noteId],
+    );
+  }
+
+  @override
+  Future<List<Map<String, Object?>>> audioAttachmentsForNote(int noteId) async {
+    final db = await database;
+    return db.query(
+      _audioAttachmentsTable,
+      where: 'noteId = ?',
+      whereArgs: [noteId],
+    );
+  }
+
+  @override
+  Future<Map<String, Object?>?> getAudioAttachment(String id) async {
+    final db = await database;
+    final rows = await db.query(
+      _audioAttachmentsTable,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    return rows.isEmpty ? null : rows.first;
   }
 }

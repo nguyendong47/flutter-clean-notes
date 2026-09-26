@@ -7,7 +7,7 @@ import 'package:flutter_clean_notes/features/notes/domain/services/widget_sync_g
 import 'package:flutter_clean_notes/features/notes/domain/services/widget_sync_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-class _FakeDataSource implements NotesPersistenceDataSource {
+class _FakeDataSource extends Fake implements NotesPersistenceDataSource {
   final List<NoteModel> storedNotes = [];
   NoteModel? lastUpdatedNote;
 
@@ -58,7 +58,8 @@ class _FakeDataSource implements NotesPersistenceDataSource {
   Future<bool> isReminderCommandCurrent(int generation) async => true;
 
   @override
-  Future<List<ReminderCommand>> pendingReminderCommands({int? noteId}) async => [];
+  Future<List<ReminderCommand>> pendingReminderCommands({int? noteId}) async =>
+      [];
 
   @override
   Future<void> reconcileReminderNotifications({
@@ -108,36 +109,42 @@ void main() {
       );
     });
 
-    test('toggles checklist item from unchecked to checked and syncs', () async {
-      await handleChecklistToggle(
-        noteId: 42,
-        itemIndex: 0,
-        dataSource: dataSource,
-        syncService: syncService,
-      );
+    test(
+      'toggles checklist item from unchecked to checked and syncs',
+      () async {
+        await handleChecklistToggle(
+          noteId: 42,
+          itemIndex: 0,
+          dataSource: dataSource,
+          syncService: syncService,
+        );
 
-      expect(dataSource.lastUpdatedNote, isNotNull);
-      expect(dataSource.lastUpdatedNote!.content, contains('- [x] Task 1'));
-      expect(dataSource.lastUpdatedNote!.content, contains('- [x] Task 2'));
-      expect(gateway.syncCalls, 1);
-      expect(gateway.lastPayload?.hasPinned, isTrue);
-      expect(gateway.lastPayload?.checklist.first.isDone, isTrue);
-    });
+        expect(dataSource.lastUpdatedNote, isNotNull);
+        expect(dataSource.lastUpdatedNote!.content, contains('- [x] Task 1'));
+        expect(dataSource.lastUpdatedNote!.content, contains('- [x] Task 2'));
+        expect(gateway.syncCalls, 1);
+        expect(gateway.lastPayload?.hasPinned, isTrue);
+        expect(gateway.lastPayload?.checklist.first.isDone, isTrue);
+      },
+    );
 
-    test('toggles checklist item from checked to unchecked and syncs', () async {
-      await handleChecklistToggle(
-        noteId: 42,
-        itemIndex: 1,
-        dataSource: dataSource,
-        syncService: syncService,
-      );
+    test(
+      'toggles checklist item from checked to unchecked and syncs',
+      () async {
+        await handleChecklistToggle(
+          noteId: 42,
+          itemIndex: 1,
+          dataSource: dataSource,
+          syncService: syncService,
+        );
 
-      expect(dataSource.lastUpdatedNote, isNotNull);
-      expect(dataSource.lastUpdatedNote!.content, contains('- [ ] Task 1'));
-      expect(dataSource.lastUpdatedNote!.content, contains('- [ ] Task 2'));
-      expect(gateway.syncCalls, 1);
-      expect(gateway.lastPayload?.checklist[1].isDone, isFalse);
-    });
+        expect(dataSource.lastUpdatedNote, isNotNull);
+        expect(dataSource.lastUpdatedNote!.content, contains('- [ ] Task 1'));
+        expect(dataSource.lastUpdatedNote!.content, contains('- [ ] Task 2'));
+        expect(gateway.syncCalls, 1);
+        expect(gateway.lastPayload?.checklist[1].isDone, isFalse);
+      },
+    );
 
     test('does nothing when noteId does not exist', () async {
       await handleChecklistToggle(
@@ -174,10 +181,7 @@ void main() {
         widgetInteractiveCallback(Uri.parse('clean-notes://note?id=42')),
         completes,
       );
-      await expectLater(
-        widgetInteractiveCallback(null),
-        completes,
-      );
+      await expectLater(widgetInteractiveCallback(null), completes);
     });
   });
 }

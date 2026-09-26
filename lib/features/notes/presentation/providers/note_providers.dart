@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import 'package:flutter_clean_notes/features/notes/data/repositories/audio_attachment_repository.dart';
 import 'package:flutter_clean_notes/features/notes/data/repositories/note_repository_impl.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/domain/repositories/note_repository.dart';
@@ -26,7 +27,12 @@ part 'note_providers.g.dart';
 @riverpod
 NoteRepository noteRepository(Ref ref) {
   final localDataSource = ref.watch(localNoteDataSourceProvider);
-  return NoteRepositoryImpl(localDataSource);
+  return NoteRepositoryImpl(
+    localDataSource,
+    audioAttachmentRepository: AudioAttachmentRepositoryImpl(
+      dataSource: localDataSource,
+    ),
+  );
 }
 
 @riverpod
