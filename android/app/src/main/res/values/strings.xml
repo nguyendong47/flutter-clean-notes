@@ -8,6 +8,7 @@
     <string name="widget_checklist">Checklist</string>
     <string name="widget_search">Tìm kiếm</string>
     <string name="widget_pinned">Đã ghim</string>
+    <string name="widget_record">Ghi âm</string>
     <string name="widget_no_pinned">Chưa có ghi chú được ghim</string>
     <string name="widget_no_pinned_hint">Mở Clean Notes để ghim ghi chú quan trọng!</string>
 </resources>

@@ -37,6 +37,10 @@ class QuickActionsWidget : HomeWidgetProvider() {
                     R.id.widget_btn_pinned,
                     createLaunchIntent(context, Uri.parse("clean-notes://pinned"), 104)
                 )
+                setOnClickPendingIntent(
+                    R.id.widget_btn_record,
+                    createLaunchIntent(context, Uri.parse("clean-notes://new?action=record"), 105)
+                )
             }
             appWidgetManager.updateAppWidget(widgetId, views)
         }

@@ -82,6 +82,11 @@ struct QuickActionsWidgetView: View {
                 icon: "pin.fill",
                 url: "clean-notes://pinned?homeWidget=true"
             )
+            actionPill(
+                title: "Ghi âm",
+                icon: "mic.fill",
+                url: "clean-notes://new?action=record&homeWidget=true"
+            )
         }
         .padding(10)
     }

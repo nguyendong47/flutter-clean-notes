@@ -41,6 +41,12 @@ void main() {
         ),
         '/note/new?template=checklist',
       );
+      expect(
+        WidgetLaunchCoordinator.resolveRoute(
+          Uri.parse('clean-notes://new?action=record'),
+        ),
+        '/note/new?action=record',
+      );
     });
 
     test('resolves search URIs correctly', () {
@@ -147,31 +153,34 @@ void main() {
       },
     );
 
-    test('deduplicates rapid identical URI events within debounce window', () async {
-      final fakeRouter = _FakeGoRouter();
-      final streamController = StreamController<Uri?>();
-      final coordinator = WidgetLaunchCoordinator(
-        router: fakeRouter,
-        initialUriFetcher: () async => null,
-        widgetClickedStream: streamController.stream,
-      );
+    test(
+      'deduplicates rapid identical URI events within debounce window',
+      () async {
+        final fakeRouter = _FakeGoRouter();
+        final streamController = StreamController<Uri?>();
+        final coordinator = WidgetLaunchCoordinator(
+          router: fakeRouter,
+          initialUriFetcher: () async => null,
+          widgetClickedStream: streamController.stream,
+        );
 
-      coordinator.initialize();
-      await Future<void>.delayed(Duration.zero);
+        coordinator.initialize();
+        await Future<void>.delayed(Duration.zero);
 
-      final uri = Uri.parse('clean-notes://new');
-      streamController.add(uri);
-      await Future<void>.delayed(Duration.zero);
-      expect(fakeRouter.navigatedPaths, ['/note/new']);
+        final uri = Uri.parse('clean-notes://new');
+        streamController.add(uri);
+        await Future<void>.delayed(Duration.zero);
+        expect(fakeRouter.navigatedPaths, ['/note/new']);
 
-      // Immediate second emission should be deduplicated
-      streamController.add(uri);
-      await Future<void>.delayed(Duration.zero);
-      expect(fakeRouter.navigatedPaths, ['/note/new']);
+        // Immediate second emission should be deduplicated
+        streamController.add(uri);
+        await Future<void>.delayed(Duration.zero);
+        expect(fakeRouter.navigatedPaths, ['/note/new']);
 
-      coordinator.dispose();
-      await streamController.close();
-    });
+        coordinator.dispose();
+        await streamController.close();
+      },
+    );
 
     test(
       'triggers onSearchRequested when navigating to search route',
