@@ -654,6 +654,7 @@ This task's production `PlatformRecorder` (wrapping the real `record` plugin) is
 - Modify: `lib/features/notes/data/datasources/local_note_datasource.dart`
 - Create: `lib/features/notes/data/repositories/audio_attachment_repository.dart`
 - Modify: `lib/features/notes/data/repositories/note_repository_impl.dart`
+- Modify: `lib/features/notes/presentation/providers/note_providers.dart`
 - Test: `test/features/notes/data/repositories/audio_attachment_repository_test.dart`
 - Modify: `test/features/notes/data/repositories/note_repository_impl_test.dart` (if it exists - check first; if not, check whatever test file already covers `NoteRepositoryImpl.deleteNote`, following that file's existing conventions)
 
@@ -765,7 +766,44 @@ bun .gitnexus/run.cjs impact "LocalNoteDataSourceImpl" --direction upstream --re
   ```bash
   flutter test test/features/notes/data/repositories/audio_attachment_repository_test.dart
   ```
-- [ ] **Step 3: Implement the migration.** In `local_note_datasource.dart`, bump `_schemaVersion` from `7` to `8`, add a table-name constant, add the table creation to `_createDB`, and add the upgrade branch to `_upgradeDB`:
+- [ ] **Step 3a: Fix a real design gap found while writing this plan.** `AudioAttachmentRepositoryImpl`
+  (Step 4 below) needs `LocalNoteDataSourceImpl`'s concrete audio-attachment methods (added in Step 4),
+  but the only Riverpod provider that reaches it (`localNoteDataSourceProvider`, in
+  `local_note_datasource_provider.dart`) returns the abstract `NotesPersistenceDataSource` interface,
+  never the concrete class - so a naive `AudioAttachmentRepositoryImpl(dataSource:
+  ref.watch(localNoteDataSourceProvider))` in Task 5 would not type-check. Fix, following this file's
+  own existing pattern (`ReminderOutboxDataSource` as a separate interface, combined via
+  `NotesPersistenceDataSource implements LocalNoteDataSource, ReminderOutboxDataSource {}`): add a
+  third small interface, sibling to the other two in `local_note_datasource.dart`:
+  ```dart
+  abstract interface class AudioAttachmentDataSource {
+    Future<void> insertAudioAttachment({
+      required String id,
+      required int noteId,
+      required String filePath,
+      required int durationMs,
+      required String waveformData,
+      required String createdAt,
+    });
+    Future<void> deleteAudioAttachment(String id);
+    Future<void> deleteAudioAttachmentsForNote(int noteId);
+    Future<List<Map<String, Object?>>> audioAttachmentsForNote(int noteId);
+    Future<Map<String, Object?>?> getAudioAttachment(String id);
+  }
+  ```
+  and widen the combined interface:
+  ```dart
+  abstract interface class NotesPersistenceDataSource
+      implements LocalNoteDataSource, ReminderOutboxDataSource, AudioAttachmentDataSource {}
+  ```
+  `LocalNoteDataSourceImpl` already implements `NotesPersistenceDataSource`, so once Step 4 below adds
+  the five concrete methods to the class body, it automatically satisfies this widened interface too -
+  add `@override` to each of those five methods for consistency with this file's existing style, no
+  other change needed. **`AudioAttachmentRepositoryImpl`'s constructor (Step 4) takes
+  `required AudioAttachmentDataSource dataSource`, not `required LocalNoteDataSourceImpl dataSource`**
+  - this is the corrected type; `ref.watch(localNoteDataSourceProvider)` (Task 5) now satisfies it
+  directly, no cast, no new provider needed.
+- [ ] **Step 3b: Implement the migration.** In `local_note_datasource.dart`, bump `_schemaVersion` from `7` to `8`, add a table-name constant, add the table creation to `_createDB`, and add the upgrade branch to `_upgradeDB`:
   ```dart
   static const String _audioAttachmentsTable = 'note_audio_attachments';
   ```
@@ -849,12 +887,12 @@ bun .gitnexus/run.cjs impact "LocalNoteDataSourceImpl" --direction upstream --re
 
   class AudioAttachmentRepositoryImpl implements AudioAttachmentRepository {
     AudioAttachmentRepositoryImpl({
-      required LocalNoteDataSourceImpl dataSource,
+      required AudioAttachmentDataSource dataSource,
       Uuid? uuid,
     }) : _dataSource = dataSource,
          _uuid = uuid ?? const Uuid();
 
-    final LocalNoteDataSourceImpl _dataSource;
+    final AudioAttachmentDataSource _dataSource;
     final Uuid _uuid;
 
     @override
@@ -958,17 +996,22 @@ bun .gitnexus/run.cjs impact "LocalNoteDataSourceImpl" --direction upstream --re
   }
   ```
   Run `flutter pub add uuid` first if this project does not already depend on it - check `pubspec.yaml` before adding; this project may already have a UUID generator in use elsewhere (grep for `Uuid()`/`package:uuid` before assuming it needs adding).
-- [ ] **Step 5: Wire cleanup into `NoteRepositoryImpl.deleteNote`.** In `note_repository_impl.dart`, add a constructor dependency and the cleanup call:
+- [ ] **Step 5: Wire cleanup into `NoteRepositoryImpl.deleteNote`.** `note_repository_impl.dart`'s real
+  current constructor is `NoteRepositoryImpl(this.localDataSource);` - a single positional param, field
+  typed `LocalNoteDataSource localDataSource` (the interface, not the concrete class; unrelated to
+  Step 3a's fix, which is about a *different* consumer of the datasource). Keep that positional param
+  as-is and add the new dependency as a required named param:
   ```dart
   class NoteRepositoryImpl implements NoteRepository {
-    NoteRepositoryImpl({
-      required this.localDataSource,
+    final LocalNoteDataSource localDataSource;
+    final AudioAttachmentRepository _audioAttachmentRepository;
+
+    NoteRepositoryImpl(
+      this.localDataSource, {
       required AudioAttachmentRepository audioAttachmentRepository,
-      // ...existing constructor params unchanged...
     }) : _audioAttachmentRepository = audioAttachmentRepository;
 
-    final AudioAttachmentRepository _audioAttachmentRepository;
-    // ...existing fields unchanged...
+    // ...every existing method unchanged, except deleteNote below...
 
     @override
     Future<int> deleteNote(int id) async {
@@ -986,12 +1029,105 @@ bun .gitnexus/run.cjs impact "LocalNoteDataSourceImpl" --direction upstream --re
     }
   }
   ```
-  Read the actual current constructor and `deleteNote` body first (`note_repository_impl.dart` may have more existing constructor params than shown above) - this step must merge into what's really there, not overwrite it. Add `import 'package:flutter/foundation.dart' show debugPrint;` if not already imported.
-  Update wherever `NoteRepositoryImpl(...)` is constructed (its Riverpod provider - grep for `NoteRepositoryImpl(` to find every call site) to pass the new `audioAttachmentRepository` argument, constructing an `AudioAttachmentRepositoryImpl(dataSource: ...)` there using whatever `LocalNoteDataSourceImpl` instance that provider already has access to.
-- [ ] **Step 6: Run to verify pass, plus the existing note-repository/deleteNote test(s) for regressions:**
+  Add `import 'package:flutter/foundation.dart' show debugPrint;` to this file (not already imported).
+  Update the one real call site, `lib/features/notes/presentation/providers/note_providers.dart`'s
+  `noteRepository` provider (currently `return NoteRepositoryImpl(localDataSource);`):
+  ```dart
+  @riverpod
+  NoteRepository noteRepository(Ref ref) {
+    final localDataSource = ref.watch(localNoteDataSourceProvider);
+    return NoteRepositoryImpl(
+      localDataSource,
+      audioAttachmentRepository: AudioAttachmentRepositoryImpl(dataSource: localDataSource),
+    );
+  }
+  ```
+  This works without a cast because of Step 3a's fix: `localDataSource` here is typed
+  `NotesPersistenceDataSource`, which now includes `AudioAttachmentDataSource`'s methods.
+  (Task 5 later adds a *separate* `audioAttachmentRepositoryProvider` for the widget/UI layer to read
+  attachments directly - this inline construction here is specifically for `NoteRepositoryImpl`'s own
+  internal cleanup dependency, and constructing two `AudioAttachmentRepositoryImpl` instances backed by
+  the same underlying data source is harmless, since the class itself is stateless.)
+- [ ] **Step 5b: Update the existing `NoteRepositoryImpl` test and add the missing deleteNote-cleanup
+  coverage.** `test/features/notes/data/repositories/note_repository_impl_test.dart` exists (108 lines)
+  and constructs `NoteRepositoryImpl(dataSource)` at 3 call sites (lines ~12, 41, 51) - none of its
+  existing tests exercise `deleteNote` at all (its `_RecordingLocalNoteDataSource.deleteNote` stub just
+  returns `0`, untested). Add a small fake and update all 3 call sites:
+  ```dart
+  class _FakeAudioAttachmentRepository implements AudioAttachmentRepository {
+    int deleteForNoteCalls = 0;
+    int? lastNoteId;
+    bool throwOnDelete = false;
+
+    @override
+    Future<String> addAttachment({
+      required int noteId,
+      required String filePath,
+      required int durationMs,
+      required List<double> waveform,
+    }) async => throw UnimplementedError();
+
+    @override
+    Future<void> deleteAttachment(String id) async {}
+
+    @override
+    Future<void> deleteAttachmentsForNote(int noteId) async {
+      deleteForNoteCalls += 1;
+      lastNoteId = noteId;
+      if (throwOnDelete) throw StateError('cleanup failed');
+    }
+
+    @override
+    Future<List<AudioAttachment>> attachmentsForNote(int noteId) async => const [];
+  }
+  ```
+  Update the 3 existing `NoteRepositoryImpl(dataSource)` calls to
+  `NoteRepositoryImpl(dataSource, audioAttachmentRepository: _FakeAudioAttachmentRepository())`
+  (a fresh fake per test is fine, matching this file's existing per-test `dataSource` pattern).
+  Add two new tests - this plan's Review Focus item on note deletion with attachments, and the
+  brief's own "never let cleanup failure fail the primary delete" requirement:
+  ```dart
+  test('deleteNote cleans up audio attachments after the note row is deleted', () async {
+    final dataSource = _RecordingLocalNoteDataSource()..nextDeleteResult = 1;
+    final attachments = _FakeAudioAttachmentRepository();
+    final repository = NoteRepositoryImpl(dataSource, audioAttachmentRepository: attachments);
+
+    final deleted = await repository.deleteNote(7);
+
+    expect(deleted, 1);
+    expect(attachments.deleteForNoteCalls, 1);
+    expect(attachments.lastNoteId, 7);
+  });
+
+  test('deleteNote does not clean up attachments when the note row was not actually deleted', () async {
+    final dataSource = _RecordingLocalNoteDataSource()..nextDeleteResult = 0;
+    final attachments = _FakeAudioAttachmentRepository();
+    final repository = NoteRepositoryImpl(dataSource, audioAttachmentRepository: attachments);
+
+    await repository.deleteNote(7);
+
+    expect(attachments.deleteForNoteCalls, 0);
+  });
+
+  test('deleteNote still reports success even if attachment cleanup throws', () async {
+    final dataSource = _RecordingLocalNoteDataSource()..nextDeleteResult = 1;
+    final attachments = _FakeAudioAttachmentRepository()..throwOnDelete = true;
+    final repository = NoteRepositoryImpl(dataSource, audioAttachmentRepository: attachments);
+
+    final deleted = await repository.deleteNote(7);
+
+    expect(deleted, 1, reason: 'a secondary cleanup failure must never fail the primary delete');
+  });
+  ```
+  Add a settable `int nextDeleteResult = 0;` field to `_RecordingLocalNoteDataSource` and change its
+  `deleteNote` override to `Future<int> deleteNote(int id) async => nextDeleteResult;` (currently
+  hardcoded to always return `0`, which would make the first new test above fail for the wrong reason -
+  fix this as part of adding the test, not as a separate step). Add the two new imports this needs:
+  `package:flutter_clean_notes/features/notes/data/repositories/audio_attachment_repository.dart`.
+- [ ] **Step 6: Run to verify pass, plus the full existing note-repository suite for regressions:**
   ```bash
   flutter test test/features/notes/data/repositories/audio_attachment_repository_test.dart
-  flutter test test/features/notes/data/repositories/  # or the specific file covering NoteRepositoryImpl.deleteNote
+  flutter test test/features/notes/data/repositories/note_repository_impl_test.dart
   ```
 - [ ] **Step 7: Gate.**
   ```bash
