@@ -81,8 +81,14 @@ flowchart TD
 ### GIAI ĐOẠN 2: Ghi Âm & Chuyển Giọng Nói Thành Note (Voice Memo & Speech-to-Text)
 *Mục tiêu: Ghi lại suy nghĩ khi đang lái xe, đi bộ hoặc trong cuộc họp mà không cần gõ bàn phím.*
 
+**Trạng thái thực tế (2026-09-26):** Phase 2A (mục 1 — Realtime Speech-to-Text) đã triển khai và QA
+xong (spec, plan, implementation, review, fix pass, QA đều hoàn tất — xem
+`docs/superpowers/specs/2026-09-26-realtime-dictation-design.md`). Mục 2-4 (Audio Note đính kèm,
+Whisper transcription, AI Quick Summary — gọi là Phase 2B) **chưa bắt đầu**, mục 4 (AI Summary) đang
+chờ có API AI/LLM khả dụng cho dự án theo quyết định trước đó của người dùng.
+
 #### Chi tiết tính năng
-1. **Realtime Speech-to-Text (Chuyển giọng nói thành chữ trực tiếp)**:
+1. **Realtime Speech-to-Text (Chuyển giọng nói thành chữ trực tiếp) — ✅ Hoàn tất (Phase 2A)**:
    - Nói đến đâu văn bản hiển thị đến đó vào thân ghi chú.
    - Nhận diện dấu câu cơ bản (chấm, phẩy, xuống dòng).
    - Hỗ trợ đa ngôn ngữ linh hoạt (Tiếng Việt và Tiếng Anh).
@@ -154,7 +160,8 @@ flowchart TD
 | **Bản địa hóa tiếng Việt (i18n)** | ✅ Hoàn tất | 23/23 tasks hoàn tất, 643/643 unit/widget tests xanh. |
 | **Sửa lỗi Status Bar & Visual QA Rule** | ✅ Hoàn tất | Safe area constraints, hỗ trợ viewPadding, chụp ảnh thực tế. |
 | **Phase 1: Home Screen Widget** | ✅ Hoàn tất | Quick Capture Widget & Pinned Note Widget trên cả Android (AppWidget) và iOS (WidgetKit extension), đã QA tương tác thật trên thiết bị/simulator. |
-| **Phase 2: Voice Memo & Speech-to-Text**| 🎯 Tiếp theo | Ghi âm, waveform visualizer, chuyển giọng nói thành text. |
+| **Phase 2A: Realtime Speech-to-Text** | ✅ Hoàn tất | Đọc chính tả trực tiếp vào thân ghi chú, đa ngôn ngữ (vi/en), đã QA thật trên simulator. |
+| **Phase 2B: Audio Memo, Whisper, AI Summary** | ⏳ Kế hoạch | Ghi âm, waveform, Whisper on-device, tóm tắt AI — mục AI Summary chờ có API AI/LLM. |
 | **Phase 3: Handwriting Canvas & OCR** | ⏳ Kế hoạch | Bảng vẽ vector mượt, nhận diện chữ viết tay offline. |
 | **Phase 4: Biometrics Lock & Local AI** | ⏳ Kế hoạch | Mã hóa AES, khóa vân tay, quét tài liệu OCR. |
 
