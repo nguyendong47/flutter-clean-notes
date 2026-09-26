@@ -81,5 +81,9 @@
 				</array>
 			</dict>
 		</array>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Clean Notes needs microphone access to let you dictate notes by voice.</string>
+		<key>NSSpeechRecognitionUsageDescription</key>
+		<string>Clean Notes uses on-device speech recognition to turn your voice into note text.</string>
 	</dict>
 </plist>
