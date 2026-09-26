@@ -108,6 +108,7 @@
     "audioRecord": "Ghi âm",
     "audioRecordUnavailable": "Không thể ghi âm",
     "audioRecordError": "Ghi âm đã dừng do lỗi",
+    "audioUnavailable": "Không có âm thanh",
     "openSettings": "Cài đặt",
     "formattingTools": "Công cụ định dạng",
     "detailsTooltip": "Chi tiết ghi chú",

@@ -304,9 +304,10 @@ class NotesNotifier extends _$NotesNotifier {
     return result;
   }
 
-  Future<void> addNote(Note note, {DateTime Function()? now}) async {
+  Future<int> addNote(Note note, {DateTime Function()? now}) async {
     final requestedNote = _persistedSnapshot(note);
     Note? persistedNote;
+    int? newId;
     try {
       await _mutate(() async {
         final reminder = requestedNote.reminder;
@@ -315,6 +316,7 @@ class NotesNotifier extends _$NotesNotifier {
           throw const InvalidNoteReminderException();
         }
         final id = await ref.read(addNoteUsecaseProvider)(requestedNote);
+        newId = id;
         persistedNote = requestedNote.copyWith(id: id);
         if (requestedNote.reminder != null) {
           await ref.read(noteReminderGatewayProvider).schedule(persistedNote!);
@@ -334,6 +336,7 @@ class NotesNotifier extends _$NotesNotifier {
       }
       Error.throwWithStackTrace(error, stackTrace);
     }
+    return newId!;
   }
 
   Future<void> updateNote(

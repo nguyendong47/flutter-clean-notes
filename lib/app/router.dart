@@ -96,8 +96,11 @@ GoRouter router(Ref ref) {
         builder: (context, state) {
           final template = state.uri.queryParameters['template'];
           final initialContent = template == 'checklist' ? '- [ ] ' : null;
+          final autoStartRecording =
+              state.uri.queryParameters['action'] == 'record';
           return AddEditNotePage(
             initialContent: initialContent,
+            autoStartRecording: autoStartRecording,
             onClose: () => _closeEditor(context),
           );
         },

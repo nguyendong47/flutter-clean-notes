@@ -12,6 +12,8 @@ import 'package:flutter_clean_notes/features/notes/presentation/providers/note_r
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/invalid_note_reminder_exception.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/persisted_note_save_exception.dart';
+import 'package:flutter_clean_notes/features/notes/data/repositories/audio_attachment_repository.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/widgets/audio_player_block.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/editor_formatting_bar.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/note_metadata_sheet.dart';
 
@@ -22,12 +24,14 @@ class AddEditNotePage extends ConsumerStatefulWidget {
     this.onClose,
     this.now,
     this.initialContent,
+    this.autoStartRecording = false,
   });
 
   final Note? note;
   final VoidCallback? onClose;
   final DateTime Function()? now;
   final String? initialContent;
+  final bool autoStartRecording;
 
   @override
   ConsumerState<AddEditNotePage> createState() => _AddEditNotePageState();
@@ -524,7 +528,14 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
           const SizedBox(height: 12),
           MarkdownBody(
             data: content.isEmpty ? 'editor.nothingToPreview'.tr() : content,
-            imageBuilder: (_, _, altText) {
+            imageBuilder: (uri, _, altText) {
+              if (uri.scheme == 'attachment') {
+                final attachmentId = uri.host.isNotEmpty ? uri.host : uri.path;
+                return AudioPlayerBlock(
+                  attachmentId: attachmentId,
+                  onDeleted: () => _removeAudioEmbedFromBody(attachmentId),
+                );
+              }
               final alt = altText?.trim();
               final label = alt == null || alt.isEmpty
                   ? 'editor.imageUnavailable'.tr()
@@ -624,6 +635,8 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: EditorFormattingBar(
         controller: _contentController,
+        ensureNoteId: _ensureNotePersisted,
+        autoStartRecording: widget.autoStartRecording,
         enabled: !_saving,
       ),
     );
@@ -717,6 +730,33 @@ class _AddEditNotePageState extends ConsumerState<AddEditNotePage>
       _isDirty = _currentSnapshot() != _cleanSnapshot;
     });
     _syncCanPop();
+  }
+
+  Future<int> _ensureNotePersisted() async {
+    if (_persistedId != null) return _persistedId!;
+    final note = Note(
+      id: null,
+      title: _titleController.text.trim(),
+      content: _contentController.text.trim(),
+      color: _selectedColor.toARGB32(),
+      createdAt: _createdAt,
+      isPinned: _isPinned,
+      tags: List<String>.unmodifiable(_tags),
+      status: _status,
+      reminder: _reminder,
+    );
+    final notifier = ref.read(notesProvider.notifier);
+    _persistedId = await notifier.addNote(note, now: widget.now);
+    return _persistedId!;
+  }
+
+  void _removeAudioEmbedFromBody(String attachmentId) {
+    setState(() {
+      _contentController.text = removeAudioEmbed(
+        _contentController.text,
+        attachmentId,
+      );
+    });
   }
 
   Future<void> _saveNote() async {

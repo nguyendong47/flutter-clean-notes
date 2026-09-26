@@ -5,11 +5,15 @@ import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_clean_notes/app/theme/aurora_theme.dart';
+import 'package:flutter_clean_notes/features/notes/data/repositories/audio_attachment_repository.dart';
 import 'package:flutter_clean_notes/features/notes/domain/entities/note.dart';
 import 'package:flutter_clean_notes/features/notes/domain/services/reminder_coordinator.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/pages/add_edit_note_page.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/audio_attachment_repository_provider.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/audio_recording_service_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_reminder_gateway_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/note_providers.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/audio_recording_service.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/editor_formatting_bar.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +21,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../helpers/fake_note_reminder_gateway.dart';
+import '../../../helpers/fake_permission_requester.dart';
+import '../../../helpers/fake_recorder.dart';
 import '../../../helpers/in_memory_note_repository.dart';
 import '../../../helpers/note_fixtures.dart';
 import '../../../helpers/repository_snooze_coordinator.dart';
@@ -1719,30 +1725,89 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('opens with initialContent populated and validates blank checklist', (
-    tester,
-  ) async {
-    final harness = await _pumpEditor(
-      tester,
-      initialContent: '- [ ] ',
-    );
+  testWidgets(
+    'opens with initialContent populated and validates blank checklist',
+    (tester) async {
+      final harness = await _pumpEditor(tester, initialContent: '- [ ] ');
 
-    expect(_text(tester, 'editor-body-field'), '- [ ] ');
+      expect(_text(tester, 'editor-body-field'), '- [ ] ');
 
-    await tester.tap(find.byKey(const Key('editor-done-button')));
-    await tester.pumpAndSettle();
-    expect(harness.repository.notes, isEmpty);
-    expect(find.byKey(const Key('editor-validation')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('editor-done-button')));
+      await tester.pumpAndSettle();
+      expect(harness.repository.notes, isEmpty);
+      expect(find.byKey(const Key('editor-validation')), findsOneWidget);
 
-    await tester.enterText(
-      find.byKey(const Key('editor-body-field')),
-      '- [ ] Buy groceries',
-    );
-    await tester.tap(find.byKey(const Key('editor-done-button')));
-    await tester.pumpAndSettle();
-    expect(harness.repository.notes, hasLength(1));
-    expect(harness.repository.notes.first.content, '- [ ] Buy groceries');
-  });
+      await tester.enterText(
+        find.byKey(const Key('editor-body-field')),
+        '- [ ] Buy groceries',
+      );
+      await tester.tap(find.byKey(const Key('editor-done-button')));
+      await tester.pumpAndSettle();
+      expect(harness.repository.notes, hasLength(1));
+      expect(harness.repository.notes.first.content, '- [ ] Buy groceries');
+    },
+  );
+
+  testWidgets(
+    'starting a recording on a brand-new note persists it exactly once',
+    (tester) async {
+      final repository = InMemoryNoteRepository.seeded([]);
+      final harness = await _pumpEditor(tester, repository: repository);
+
+      expect(harness.repository.addCalls, 0);
+
+      final recordButton = find.byIcon(Icons.fiber_manual_record_outlined);
+      await tester.ensureVisible(recordButton);
+      await tester.tap(recordButton);
+      await tester.pump();
+
+      expect(harness.recorder.startCalls, 1);
+      expect(harness.repository.addCalls, 1);
+      expect(harness.repository.notes, hasLength(1));
+
+      harness.recorder.nextStopResult = const AudioRecordingResult(
+        filePath: '/tmp/rec.m4a',
+        durationMs: 3000,
+        waveform: [0.1, 0.2],
+      );
+
+      await tester.tap(find.byIcon(Icons.stop_circle_rounded));
+      await tester.pumpAndSettle();
+
+      expect(harness.recorder.stopCalls, 1);
+      expect(harness.repository.addCalls, 1);
+      expect(harness.audioAttachmentRepository.addCalls, 1);
+    },
+  );
+}
+
+class _FakeAudioAttachmentRepository implements AudioAttachmentRepository {
+  int addCalls = 0;
+  String nextId = 'attachment-1';
+
+  @override
+  Future<String> addAttachment({
+    required int noteId,
+    required String filePath,
+    required int durationMs,
+    required List<double> waveform,
+  }) async {
+    addCalls += 1;
+    return nextId;
+  }
+
+  @override
+  Future<void> deleteAttachment(String id) async {}
+
+  @override
+  Future<void> deleteAttachmentsForNote(int noteId) async {}
+
+  @override
+  Future<List<AudioAttachment>> attachmentsForNote(int noteId) async =>
+      const [];
+
+  @override
+  Future<AudioAttachment?> getAttachment(String id) async => null;
 }
 
 typedef _EditorHarness = ({
@@ -1752,6 +1817,8 @@ typedef _EditorHarness = ({
   ValueNotifier<int> closeCount,
   ValueNotifier<TextScaler> textScaler,
   ValueNotifier<EdgeInsets> viewInsets,
+  FakeRecorder recorder,
+  _FakeAudioAttachmentRepository audioAttachmentRepository,
 });
 
 Future<_EditorHarness> _pumpEditor(
@@ -1761,6 +1828,8 @@ Future<_EditorHarness> _pumpEditor(
   InMemoryNoteRepository? repository,
   FakeNoteReminderGateway? gateway,
   ReminderSyncCoordinator? coordinator,
+  FakeRecorder? recorder,
+  _FakeAudioAttachmentRepository? audioAttachmentRepository,
   Size size = const Size(375, 812),
   ThemeData? theme,
   TextScaler textScaler = TextScaler.noScaling,
@@ -1776,10 +1845,22 @@ Future<_EditorHarness> _pumpEditor(
   final resolvedRepository =
       repository ?? InMemoryNoteRepository.seeded(note == null ? [] : [note]);
   final resolvedGateway = gateway ?? FakeNoteReminderGateway();
+  final resolvedRecorder = recorder ?? FakeRecorder();
+  final resolvedAudioRepo =
+      audioAttachmentRepository ?? _FakeAudioAttachmentRepository();
   final container = ProviderContainer(
     overrides: [
       noteRepositoryProvider.overrideWithValue(resolvedRepository),
       noteReminderGatewayProvider.overrideWithValue(resolvedGateway),
+      audioRecordingServiceProvider.overrideWith(
+        (ref) => AudioRecordingService(
+          recorder: resolvedRecorder,
+          permissions: FakePermissionRequester(),
+        ),
+      ),
+      audioAttachmentRepositoryProvider.overrideWith(
+        (ref) => resolvedAudioRepo,
+      ),
       if (coordinator != null)
         reminderCoordinatorProvider.overrideWithValue(coordinator),
     ],
@@ -1862,6 +1943,8 @@ Future<_EditorHarness> _pumpEditor(
     closeCount: closeCount,
     textScaler: mutableTextScaler,
     viewInsets: mutableViewInsets,
+    recorder: resolvedRecorder,
+    audioAttachmentRepository: resolvedAudioRepo,
   );
 }
 

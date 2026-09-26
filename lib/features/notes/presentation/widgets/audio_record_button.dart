@@ -13,14 +13,14 @@ import 'package:flutter_clean_notes/features/notes/presentation/services/audio_r
 class AudioRecordButton extends ConsumerStatefulWidget {
   const AudioRecordButton({
     required this.controller,
-    required this.noteId,
+    required this.ensureNoteId,
     this.enabled = true,
     this.autoStart = false,
     super.key,
   });
 
   final TextEditingController controller;
-  final int noteId;
+  final Future<int> Function() ensureNoteId;
   final bool enabled;
   final bool autoStart;
 
@@ -47,7 +47,7 @@ class _AudioRecordButtonState extends ConsumerState<AudioRecordButton> {
       icon: Icon(
         _state == AudioRecordingState.recording
             ? Icons.stop_circle_rounded
-            : Icons.mic_none_rounded,
+            : Icons.fiber_manual_record_outlined,
       ),
       onPressed:
           (!widget.enabled ||
@@ -103,9 +103,10 @@ class _AudioRecordButtonState extends ConsumerState<AudioRecordButton> {
     if (_state == AudioRecordingState.recording) {
       final result = await service.stop();
       if (result == null || !mounted) return;
+      final noteId = await widget.ensureNoteId();
       final repo = ref.read(audioAttachmentRepositoryProvider);
       final id = await repo.addAttachment(
-        noteId: widget.noteId,
+        noteId: noteId,
         filePath: result.filePath,
         durationMs: result.durationMs,
         waveform: result.waveform,
@@ -115,6 +116,7 @@ class _AudioRecordButtonState extends ConsumerState<AudioRecordButton> {
       _pendingInsertOffset = widget.controller.selection.isValid
           ? widget.controller.selection.start
           : widget.controller.text.length;
+      await widget.ensureNoteId();
       await service.start();
     }
   }

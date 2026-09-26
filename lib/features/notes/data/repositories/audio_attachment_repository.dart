@@ -44,6 +44,8 @@ abstract interface class AudioAttachmentRepository {
   Future<void> deleteAttachmentsForNote(int noteId);
 
   Future<List<AudioAttachment>> attachmentsForNote(int noteId);
+
+  Future<AudioAttachment?> getAttachment(String id);
 }
 
 class AudioAttachmentRepositoryImpl implements AudioAttachmentRepository {
@@ -100,20 +102,26 @@ class AudioAttachmentRepositoryImpl implements AudioAttachmentRepository {
   @override
   Future<List<AudioAttachment>> attachmentsForNote(int noteId) async {
     final rows = await _dataSource.audioAttachmentsForNote(noteId);
-    return rows
-        .map(
-          (row) => AudioAttachment(
-            id: row['id'] as String,
-            noteId: row['noteId'] as int,
-            filePath: row['filePath'] as String,
-            durationMs: row['durationMs'] as int,
-            waveform: (jsonDecode(row['waveformData'] as String) as List)
-                .cast<num>()
-                .map((n) => n.toDouble())
-                .toList(),
-            createdAt: DateTime.parse(row['createdAt'] as String),
-          ),
-        )
-        .toList();
+    return rows.map(_fromRow).toList();
+  }
+
+  @override
+  Future<AudioAttachment?> getAttachment(String id) async {
+    final row = await _dataSource.getAudioAttachment(id);
+    return row == null ? null : _fromRow(row);
+  }
+
+  AudioAttachment _fromRow(Map<String, Object?> row) {
+    return AudioAttachment(
+      id: row['id'] as String,
+      noteId: row['noteId'] as int,
+      filePath: row['filePath'] as String,
+      durationMs: row['durationMs'] as int,
+      waveform: (jsonDecode(row['waveformData'] as String) as List)
+          .cast<num>()
+          .map((n) => n.toDouble())
+          .toList(),
+      createdAt: DateTime.parse(row['createdAt'] as String),
+    );
   }
 }

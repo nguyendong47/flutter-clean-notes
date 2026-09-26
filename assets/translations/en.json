@@ -108,6 +108,7 @@
     "audioRecord": "Record audio",
     "audioRecordUnavailable": "Audio recording unavailable",
     "audioRecordError": "Recording stopped due to an error",
+    "audioUnavailable": "Audio unavailable",
     "openSettings": "Settings",
     "formattingTools": "Formatting tools",
     "detailsTooltip": "Note details",

@@ -1,16 +1,21 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import 'package:flutter_clean_notes/features/notes/presentation/widgets/audio_record_button.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/dictation_mic_button.dart';
 
 class EditorFormattingBar extends StatelessWidget {
   const EditorFormattingBar({
     required this.controller,
+    this.ensureNoteId,
+    this.autoStartRecording = false,
     this.enabled = true,
     super.key,
   });
 
   final TextEditingController controller;
+  final Future<int> Function()? ensureNoteId;
+  final bool autoStartRecording;
   final bool enabled;
 
   @override
@@ -73,6 +78,12 @@ class EditorFormattingBar extends StatelessWidget {
         onPressed: () => _toggleLinePrefix('- [ ] '),
       ),
       DictationMicButton(controller: controller, enabled: enabled),
+      AudioRecordButton(
+        controller: controller,
+        ensureNoteId: ensureNoteId ?? () async => 0,
+        enabled: enabled,
+        autoStart: autoStartRecording,
+      ),
     ];
 
     return Semantics(

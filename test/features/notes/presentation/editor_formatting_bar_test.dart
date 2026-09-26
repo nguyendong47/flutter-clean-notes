@@ -1,13 +1,18 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_clean_notes/features/notes/data/repositories/audio_attachment_repository.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/audio_attachment_repository_provider.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/providers/audio_recording_service_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/providers/dictation_service_provider.dart';
+import 'package:flutter_clean_notes/features/notes/presentation/services/audio_recording_service.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/dictation_service.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/widgets/editor_formatting_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../helpers/fake_permission_requester.dart';
+import '../../../helpers/fake_recorder.dart';
 import '../../../helpers/fake_speech_recognizer.dart';
 import '../../../support/localization_test_wrapper.dart';
 
@@ -275,6 +280,39 @@ void main() {
     );
     expect(micButton.onPressed, isNull);
   });
+
+  testWidgets('renders an audio record control alongside formatting controls', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await _pumpBar(tester, controller);
+
+    expect(find.byIcon(Icons.fiber_manual_record_outlined), findsOneWidget);
+  });
+}
+
+class _FakeAudioAttachmentRepository implements AudioAttachmentRepository {
+  @override
+  Future<String> addAttachment({
+    required int noteId,
+    required String filePath,
+    required int durationMs,
+    required List<double> waveform,
+  }) async => 'id';
+
+  @override
+  Future<void> deleteAttachment(String id) async {}
+
+  @override
+  Future<void> deleteAttachmentsForNote(int noteId) async {}
+
+  @override
+  Future<List<AudioAttachment>> attachmentsForNote(int noteId) async =>
+      const [];
+
+  @override
+  Future<AudioAttachment?> getAttachment(String id) async => null;
 }
 
 Future<void> _pumpBar(
@@ -292,6 +330,15 @@ Future<void> _pumpBar(
             recognizer: FakeSpeechRecognizer(),
             permissions: FakePermissionRequester(),
           ),
+        ),
+        audioRecordingServiceProvider.overrideWith(
+          (ref) => AudioRecordingService(
+            recorder: FakeRecorder(),
+            permissions: FakePermissionRequester(),
+          ),
+        ),
+        audioAttachmentRepositoryProvider.overrideWith(
+          (ref) => _FakeAudioAttachmentRepository(),
         ),
       ],
       child: wrapWithTestLocalization(

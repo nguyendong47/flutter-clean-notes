@@ -35,6 +35,9 @@ class _FakeAudioAttachmentRepository implements AudioAttachmentRepository {
   @override
   Future<List<AudioAttachment>> attachmentsForNote(int noteId) async =>
       const [];
+
+  @override
+  Future<AudioAttachment?> getAttachment(String id) async => null;
 }
 
 Future<({FakeRecorder recorder, _FakeAudioAttachmentRepository repo})> _pump(
@@ -65,7 +68,7 @@ Future<({FakeRecorder recorder, _FakeAudioAttachmentRepository repo})> _pump(
         home: Scaffold(
           body: AudioRecordButton(
             controller: controller,
-            noteId: 1,
+            ensureNoteId: () async => 1,
             enabled: enabled,
           ),
         ),
@@ -80,7 +83,7 @@ void main() {
     final controller = TextEditingController();
     final fakes = await _pump(tester, controller);
 
-    await tester.tap(find.byIcon(Icons.mic_none_rounded));
+    await tester.tap(find.byIcon(Icons.fiber_manual_record_outlined));
     await tester.pump();
 
     expect(fakes.recorder.startCalls, 1);
@@ -98,7 +101,7 @@ void main() {
         waveform: [0.1, 0.2],
       );
 
-      await tester.tap(find.byIcon(Icons.mic_none_rounded));
+      await tester.tap(find.byIcon(Icons.fiber_manual_record_outlined));
       await tester.pump();
       await tester.tap(find.byIcon(Icons.stop_circle_rounded));
       await tester.pumpAndSettle();

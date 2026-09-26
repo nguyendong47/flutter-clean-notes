@@ -149,6 +149,9 @@ class _FakeAudioAttachmentRepository implements AudioAttachmentRepository {
   @override
   Future<List<AudioAttachment>> attachmentsForNote(int noteId) async =>
       const [];
+
+  @override
+  Future<AudioAttachment?> getAttachment(String id) async => null;
 }
 
 class _RecordingLocalNoteDataSource implements LocalNoteDataSource {
