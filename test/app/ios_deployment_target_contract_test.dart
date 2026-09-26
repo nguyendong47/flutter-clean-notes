@@ -53,11 +53,9 @@ void main() {
 
     for (final configuration in configurations) {
       final settings = _buildSettings(project, configuration);
-      expect(
-        _deploymentTargets(settings),
-        [_requiredDeploymentTarget],
-        reason: '${configuration.name} must explicitly target iOS 15.0.',
-      );
+      expect(_deploymentTargets(settings), [
+        _requiredDeploymentTarget,
+      ], reason: '${configuration.name} must explicitly target iOS 15.0.');
     }
 
     targetOverrides.forEach((bundleSuffix, values) {

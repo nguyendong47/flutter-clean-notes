@@ -602,12 +602,9 @@ void main() {
   ) async {
     final notes = List.generate(
       250,
-      (index) => _note(
-        index + 1,
-        'Viewport result $index',
-        const ['large'],
-        DateTime.utc(2026, 1, 1).add(Duration(minutes: index)),
-      ),
+      (index) => _note(index + 1, 'Viewport result $index', const [
+        'large',
+      ], DateTime.utc(2026, 1, 1).add(Duration(minutes: index))),
     );
     await _pumpSearch(tester, repository: InMemoryNoteRepository.seeded(notes));
 

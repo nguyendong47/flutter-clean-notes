@@ -45,16 +45,14 @@ Future<void> handleChecklistToggle({
     if (updatedContent == targetNote.content) return;
 
     final updatedModel = NoteModel.fromEntity(
-      targetNote.copyWith(
-        content: updatedContent,
-        createdAt: DateTime.now(),
-      ),
+      targetNote.copyWith(content: updatedContent, createdAt: DateTime.now()),
     );
     await ds.updateNote(updatedModel);
 
     final refreshedNotes = await ds.getNotes();
     final service =
-        syncService ?? const WidgetSyncService(gateway: HomeWidgetSyncGateway());
+        syncService ??
+        const WidgetSyncService(gateway: HomeWidgetSyncGateway());
     await service.syncNotes(refreshedNotes);
   } catch (e, st) {
     debugPrint('Error toggling checklist item in background: $e\n$st');
