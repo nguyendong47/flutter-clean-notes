@@ -166,3 +166,171 @@ If this needs re-verifying in an automated way later, that distinction matters.
 - New: is it worth hardening the actual `ToggleChecklistItemIntent`/App Group cross-process
   sharing with an automated test that doesn't rely on `@testable import` in-process invocation
   (see the "open question" above)? Nobody has proven this end-to-end except by hand this session.
+
+---
+
+## Part 2 (later same day): Realtime Dictation (Phase 2A) — full brainstorm → spec → plan →
+## implementation → review → QA cycle, then pushed to origin/main
+
+User picked up interaction via Telegram partway through Part 1 above; stayed on Telegram for all of
+Part 2. Went through `superpowers:brainstorming` → `superpowers:writing-plans` →
+`superpowers:executing-plans` (Native execution: Claude drives the loop in-session, dispatching each
+task's actual code/test authorship to Google Antigravity via `agy-delegate`, per this project's
+CLAUDE.md convention) end to end for one feature, plus a mandatory final whole-branch review and a
+real device/simulator QA pass. This is the fullest exercise of that whole pipeline on this project
+to date — worth reading in full if picking up related work.
+
+### What shipped (commits, oldest first — this is the actual chronological build order)
+
+1. `2b052dc`..`f02322b` (Part 1, already listed above)
+2. `512bf41` docs(spec): design spec, `docs/superpowers/specs/2026-09-26-realtime-dictation-design.md`
+3. (plan doc) `docs/superpowers/plans/2026-09-26-realtime-dictation.md` — committed as part of `512bf41`
+4. `16b7588` feat(dictation): deps (`speech_to_text`, `permission_handler`) + iOS/Android permission
+   declarations — done directly (not delegated), config-only
+5. `9030073` fix(plan): a self-review-missed bug in the plan doc itself (see "Real bugs" below)
+6. `1af379c` feat(dictation): `DictationService` core logic (delegated to Antigravity)
+7. `e4295f2` feat(dictation): `dictationServiceProvider` (delegated)
+8. `7455a44` feat(dictation): `DictationMicButton` widget (delegated)
+9. `507f08f` feat(dictation): wired into `EditorFormattingBar`, `enabled` propagation added beyond
+   the plan's literal text (delegated)
+10. `e9c19f0` fix(dictation): 7 real defects found by an independent whole-branch review, all fixed
+    (delegated as one comprehensive fix-pass brief)
+11. `47ffc1e` docs(qa): 7 real-device/simulator screenshots (done directly, hands-on QA)
+
+All pushed to `origin/main` (`f02322b..47ffc1e`) — this project has no feature-branch convention,
+every commit above landed straight on `main`, confirmed again this session.
+
+### Real bugs / gotchas found this half of the session
+
+#### 11. A plan document can have its own bugs — self-review is not infallible
+The written plan's Task 2 code block declared `SpeechRecognizer.initialize()` with no parameters in
+one place while every other reference to it (the Interfaces bullet, the fake, the call site) already
+used the `onStatus`/`onError` version — a leftover from an earlier editing pass that survived the
+plan's own "self-review" step. Caught only when about to dispatch Task 2, not during writing-plans
+itself. **Lesson: re-grep a plan for internal signature consistency right before dispatching each
+task, not just once at the end of writing it** — a plan is a program too, and program edits drift
+inconsistent the same way code does.
+
+#### 12. `node` is not on PATH on this Mac — also affects `agy-delegate`'s `relay.mjs`, not just GitNexus
+Already documented for GitNexus in CLAUDE.md/earlier handoffs; same fix applies to
+`.claude/skills/agy-delegate/scripts/relay.mjs`: `node scripts/relay.mjs ...` fails with
+`command not found: node` (exit 127) — use `bun scripts/relay.mjs ...` instead, same arguments. Bun
+runs it fine as a drop-in. Worth checking whether `agy-delegate`'s own docs should mention this
+Mac-specific fallback the way CLAUDE.md already does for GitNexus.
+
+#### 13. GitNexus `detect-changes` reports CRITICAL/100+ affected-processes for small, correct,
+#### well-tested widget-lifecycle changes once a new widget is wired into the app's real tree
+First seen after wiring `DictationMicButton` into `EditorFormattingBar` (previously a self-contained,
+unreferenced widget — Task 4 — showed only LOW/medium risk; the moment Task 5 wired it into
+`EditorFormattingBar` → `AddEditNotePage` → the app root, EVERY subsequent change to that widget's
+internals, however small, showed CRITICAL risk with 140+ "affected processes" whose actual targets
+(`ScheduleReminder`, `CopyWith`, `HandleNotificationResponse`, `_isValidGeneration`...) have zero
+plausible dependency on note-editor UI code. Root-caused (partially by direct `grep`, partially
+confirmed independently by the whole-branch reviewer using `impact` directly) to GitNexus's dynamic-
+dispatch/name-based fallback resolution folding a generically-named override (first seen:
+`didUpdateWidget`, later: any changed method on a class reachable from `Main`/`BootstrapApplication`)
+into the SAME graph node as other unrelated overrides/methods elsewhere in the app that happen to
+share a name or sit "near" the entry point in the walk — the graph's own index log already
+self-reports this class of imprecision ("candidate set exceeded the cap; no partial CALLS emitted",
+"guessed/refused by language"). **Confirmed via two independent investigations (this session's own,
+and a fresh reviewer's) that this is a structural over-linking artifact, not a real dependency** —
+but per CLAUDE.md ("never ignore HIGH/CRITICAL... never use riskSharedAxes to waive it"), this was
+never silently dismissed: investigated each time, ruling documented in the plan's ledger (now
+deleted along with the rest of the workspace — see the commit messages of `507f08f` and `e9c19f0`
+for the summarized version), and surfaced to the user. **Lesson for future work on any widget that's
+part of the main app tree (not a leaf/orphan): expect CRITICAL/100+ from `detect-changes` on
+routine internal changes once wired in; don't skip investigating it, but don't expect it to mean
+what it usually means either.**
+
+#### 14. `speech_to_text`'s real API behaves very differently from what a plan (or a naive fake)
+#### assumes — an independent whole-branch review (fresh Opus subagent, verified against the actual
+#### pub-cache plugin source, not just this feature's own tests) found 7 real defects that 695
+#### passing tests completely missed:
+- **Critical**: `speech_to_text` sends the FULL cumulative transcript on every partial result (not
+  just new words) — the original implementation inserted each result as brand-new text, so real
+  dictation duplicated text on every session (`"hello"` → `"hello world"` → final produced
+  `"hellohello worldhello world, how are you"` in the note body). Fixed with span-tracking
+  replace-in-place insertion.
+- **Important**: the underlying `stt.SpeechToText` is a process-wide singleton whose real
+  `initialize()` silently no-ops (doesn't rewire callbacks) on the second+ call — since
+  `dictationServiceProvider` is autoDispose, every second+ note-editor session got a
+  `DictationService` whose OS-status/error callbacks were dead. Fixed by directly reassigning
+  `_speech.statusListener`/`_speech.errorListener` after every `initialize()` call, not just relying
+  on the plugin's own (short-circuiting) logic.
+- **Important x5**: no re-entrancy guard across `start()`'s awaits (rapid double-tap raced two
+  sessions); `dispose()` during an in-flight `start()` didn't cancel/prevent "listening"; a denied-
+  permission snackbar only fired once (repeat taps looked like silent no-ops); permanent denial
+  (Settings-only fix) was indistinguishable from ordinary/retriable denial, showing the wrong "tap
+  to retry" message; a missing on-device language model surfaced as a generic error instead of
+  "unavailable".
+- **Lesson, stated explicitly by the reviewer and worth repeating for any future plugin-wrapping
+  work on this project: test fakes that are more forgiving than the real plugin hide real bugs.**
+  `FakeSpeechRecognizer`'s original design (single result per call, always-fresh listener wiring,
+  no re-entrancy) didn't match `speech_to_text`'s actual documented/observed behavior at all — the
+  fix pass's first step was making the fakes realistic (cumulative results, singleton short-circuit
+  simulation) *before* fixing anything, and only then did the real bugs reproduce as failing tests.
+  **When wrapping a native plugin behind an interface for testability, verify the fake's behavior
+  against the plugin's actual documented semantics, not just against what makes the interface easy
+  to implement.**
+
+#### 15. iOS Simulator's CoreAudio can genuinely deadlock/crash an app that calls
+#### `AVAudioEngine`-based APIs (which `speech_to_text.listen()` does under the hood) — not a code bug
+During manual QA (iPhone 17 simulator, iOS 27.0, via DeviceHub): first attempt to actually start
+listening (after granting both real permission dialogs) produced this in the device log —
+```
+AVAudioIONodeImpl.mm:235 Engine@0x...: associating with audio session (0x0), error -10879
+AudioToolboxCore: Initialize: RPC timeout. Apparently deadlocked. Aborting now.
+```
+— and the whole app was killed (kicked to the iOS home screen, Flutter's `flutter run` debug
+connection dropped with "Lost connection to device"). This is a known category of iOS Simulator
+limitation (CoreAudio/AVAudioEngine audio-session init hanging when the simulator's virtual
+microphone isn't properly routed to real host audio — likely fixable via macOS System Settings →
+Privacy & Security → Microphone granting access to `DeviceHub`/`Simulator`, not confirmed this
+session, abandoned after one side-quest attempt at navigating System Settings ate too much time for
+too little certainty of success). **On a second relaunch+retry, the identical underlying failure did
+NOT crash the app the second time — it was caught cleanly by `DictationService.start()`'s
+catch-all and surfaced as the correct, real, localized "Dictation stopped due to an error" snackbar,
+then returned cleanly to a tappable idle mic.** This inconsistency (crash once, graceful failure the
+next time, same root cause) is itself worth knowing: don't assume a single crash means the code is
+broken, and don't assume a single graceful run means the simulator issue is gone — it's
+intermittent. **Real, actual speech recognition (not just the permission flow and error-path UI) was
+never verified this session** — this needs a real device or a properly audio-routed simulator, and
+is the same class of gap as the already-open GitHub issue #1 (real iOS device QA) from the widget
+feature. Consider filing a dedicated issue for "verify actual dictation transcription accuracy on a
+real device" rather than folding it into #1, since the failure modes are different (permission
+flow ≠ live audio transcription).
+
+### What DID get proven for real on-device (not just by test) this session
+- The real iOS microphone permission dialog renders with the exact `Info.plist`-declared copy,
+  correctly Vietnamese-localized by the OS.
+- The real iOS speech-recognition permission dialog (separate, second prompt) also renders
+  correctly — confirms `PlatformPermissionRequester`'s two-permission iOS flow runs for real, not
+  just against fakes.
+- Light and dark theme both render correctly for the note editor and the mic control.
+- A genuine native `listen()` failure is caught and degrades gracefully (see #15 above) — proven
+  with a real failure, not `FakeSpeechRecognizer.simulateError()`.
+- 7 screenshots committed: `docs/screenshots/ios_dictation_{light,dark}_{home,editor_idle}.png`,
+  `ios_dictation_permission_{microphone,speech}.png`, `ios_dictation_error_state.png`.
+
+### Housekeeping done, don't redo (Part 2)
+
+- `docs/superpowers/plans/2026-09-26-realtime-dictation.md`'s SDD workspace
+  (`.superpowers/sdd/2026-09-26-realtime-dictation/`) was deleted after the plan finished — its
+  ledger (rulings, deferred minors, review verdict) is summarized into this doc and the commit
+  messages of `507f08f`/`e9c19f0`/`47ffc1e`; don't expect to find it on disk anymore.
+- `docs/roadmap.md`'s Phase 2 entry should probably be updated to reflect Phase 2A (Realtime
+  Dictation) shipped — not done this session, flagging as a small follow-up.
+
+### Open questions / decisions for the user (Part 2)
+
+- Real-device verification of actual dictation accuracy/behavior — genuinely unverified, see #15.
+- Whether to pursue Phase 2B (Audio Memo: recording, Whisper, AI summary) — the user has previously
+  and explicitly deferred this pending an available AI/LLM API for this project; unchanged this
+  session.
+- Deferred minors from the whole-branch review, not fixed (low-risk, reported to user, see
+  `e9c19f0`'s commit message and the (now-deleted) ledger for the full list): default `ListenMode`
+  vs `ListenMode.dictation`; silence surfaces as a user-facing error instead of quietly returning to
+  idle; the mic control doesn't visually match the formatting bar's other controls (48dp sizing,
+  accent color while listening, toggled semantics for screen readers); no space inserted between
+  separate dictation utterances; one narrow race (`enabled` flipping false while `start()` is still
+  in its permission/init phase, not yet `listening`) not covered by the general dispose-safety fix.
