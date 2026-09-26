@@ -104,6 +104,8 @@
     "dictationUnavailable": "Dictation unavailable",
     "dictationError": "Dictation stopped due to an error",
     "dictationPermissionDenied": "Microphone access is needed for dictation — tap to try again",
+    "dictationPermissionPermanentlyDenied": "Microphone access is permanently denied. Open Settings to enable it.",
+    "openSettings": "Settings",
     "formattingTools": "Formatting tools",
     "detailsTooltip": "Note details",
     "savingSemantics": "Saving note",

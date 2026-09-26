@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart'
+    show openAppSettings;
 
 import 'package:flutter_clean_notes/features/notes/presentation/providers/dictation_service_provider.dart';
 import 'package:flutter_clean_notes/features/notes/presentation/services/dictation_service.dart';
@@ -26,6 +28,8 @@ class _DictationMicButtonState extends ConsumerState<DictationMicButton> {
   DictationService? _service;
   StreamSubscription<DictationState>? _stateSub;
   StreamSubscription<String>? _textSub;
+  int? _trackedSpanStart;
+  int _trackedSpanLength = 0;
 
   @override
   void didUpdateWidget(covariant DictationMicButton oldWidget) {
@@ -60,7 +64,7 @@ class _DictationMicButtonState extends ConsumerState<DictationMicButton> {
   // Subscribing manually (instead of nesting StreamBuilders around the
   // returned widget) is deliberate: this widget's job on a text event is to
   // mutate `widget.controller` — a *side effect* — not just to re-render.
-  // Doing that inside a StreamBuilder's `builder` callback runs it during
+  // Doing that inside a StreamBuilder's builder callback runs it during
   // this widget's own build phase, which can trigger "setState()/
   // markNeedsBuild() called during build" once the sibling TextField
   // listening to the same controller reacts synchronously. Subscribing in
@@ -72,6 +76,8 @@ class _DictationMicButtonState extends ConsumerState<DictationMicButton> {
     _textSub?.cancel();
     _service = service;
     _state = service.currentState;
+    _trackedSpanStart = null;
+    _trackedSpanLength = 0;
     _stateSub = service.stateStream.listen(_handleState);
     _textSub = service.recognizedTextStream.listen(_insertText);
   }
@@ -79,15 +85,20 @@ class _DictationMicButtonState extends ConsumerState<DictationMicButton> {
   void _handleState(DictationState state) {
     final previous = _state;
     if (!mounted) return;
+    if (state == DictationState.listening &&
+        previous != DictationState.listening) {
+      _trackedSpanStart = null;
+      _trackedSpanLength = 0;
+    }
     setState(() => _state = state);
-    if (state == DictationState.error && previous != DictationState.error) {
+    if (state == DictationState.error) {
       _showSnackBar('editor.dictationError'.tr());
-    } else if (state == DictationState.unavailable &&
-        previous != DictationState.unavailable) {
+    } else if (state == DictationState.unavailable) {
       _showSnackBar('editor.dictationUnavailable'.tr());
-    } else if (state == DictationState.permissionDenied &&
-        previous != DictationState.permissionDenied) {
+    } else if (state == DictationState.permissionDenied) {
       _showSnackBar('editor.dictationPermissionDenied'.tr());
+    } else if (state == DictationState.permissionPermanentlyDenied) {
+      _showPermanentlyDeniedSnackBar();
     }
   }
 
@@ -98,15 +109,55 @@ class _DictationMicButtonState extends ConsumerState<DictationMicButton> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  void _showPermanentlyDeniedSnackBar() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('editor.dictationPermissionPermanentlyDenied'.tr()),
+        action: SnackBarAction(
+          label: 'editor.openSettings'.tr(),
+          onPressed: openAppSettings,
+        ),
+      ),
+    );
+  }
+
   void _insertText(String text) {
     final controller = widget.controller;
     final selection = controller.selection;
-    final offset = selection.isValid ? selection.start : controller.text.length;
-    final newText = controller.text.replaceRange(offset, offset, text);
-    controller.value = controller.value.copyWith(
-      text: newText,
-      selection: TextSelection.collapsed(offset: offset + text.length),
-    );
+    final textLength = controller.text.length;
+
+    final hasActiveSpan =
+        _trackedSpanStart != null &&
+        _trackedSpanStart! + _trackedSpanLength <= textLength;
+    final isAtExpectedEnd =
+        hasActiveSpan &&
+        selection.isValid &&
+        selection.isCollapsed &&
+        selection.start == _trackedSpanStart! + _trackedSpanLength;
+
+    if (isAtExpectedEnd) {
+      final start = _trackedSpanStart!;
+      final end = start + _trackedSpanLength;
+      final newText = controller.text.replaceRange(start, end, text);
+      _trackedSpanLength = text.length;
+      controller.value = controller.value.copyWith(
+        text: newText,
+        selection: TextSelection.collapsed(offset: start + text.length),
+        composing: TextRange.empty,
+      );
+    } else {
+      final start = selection.isValid ? selection.start : textLength;
+      final end = selection.isValid ? selection.end : textLength;
+      final newText = controller.text.replaceRange(start, end, text);
+      _trackedSpanStart = start;
+      _trackedSpanLength = text.length;
+      controller.value = controller.value.copyWith(
+        text: newText,
+        selection: TextSelection.collapsed(offset: start + text.length),
+        composing: TextRange.empty,
+      );
+    }
   }
 
   Future<void> _toggle(DictationService service) async {

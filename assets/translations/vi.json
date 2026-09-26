@@ -104,6 +104,8 @@
     "dictationUnavailable": "Không thể đọc chính tả",
     "dictationError": "Đọc chính tả đã dừng do lỗi",
     "dictationPermissionDenied": "Cần quyền micro để đọc chính tả — nhấn để thử lại",
+    "dictationPermissionPermanentlyDenied": "Quyền micro đã bị từ chối vĩnh viễn. Mở Cài đặt để bật lại.",
+    "openSettings": "Cài đặt",
     "formattingTools": "Công cụ định dạng",
     "detailsTooltip": "Chi tiết ghi chú",
     "savingSemantics": "Đang lưu ghi chú",

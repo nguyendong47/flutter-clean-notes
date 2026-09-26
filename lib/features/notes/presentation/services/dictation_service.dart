@@ -1,15 +1,28 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
+/// Three-way permission request result distinguishing ordinary retriable
+/// denial from permanent denial requiring app settings.
+enum DictationPermissionResult { granted, denied, permanentlyDenied }
+
 /// `permissionDenied` (mic/speech permission not granted — retriable, the
-/// mic control must stay tappable) and `unavailable` (no on-device
+/// mic control must stay tappable), `permissionPermanentlyDenied` (permanently
+/// denied — requires opening system settings), and `unavailable` (no on-device
 /// recognizer for this locale, or the plugin failed to initialize — not
 /// retriable without a locale/OS change, the mic control should disable)
 /// are deliberately separate states; see the spec's error-handling table.
-enum DictationState { idle, listening, permissionDenied, unavailable, error }
+enum DictationState {
+  idle,
+  listening,
+  permissionDenied,
+  permissionPermanentlyDenied,
+  unavailable,
+  error,
+}
 
 /// Abstraction over the on-device speech recognizer (real implementation
 /// wraps the `speech_to_text` plugin). Kept minimal and owned by this file
@@ -37,7 +50,7 @@ abstract interface class SpeechRecognizer {
 /// (microphone, plus speech-recognition on iOS). Real implementation wraps
 /// `permission_handler`.
 abstract interface class PermissionRequester {
-  Future<bool> requestMicrophoneAndSpeech();
+  Future<DictationPermissionResult> requestMicrophoneAndSpeech();
 }
 
 class DictationService {
@@ -59,6 +72,7 @@ class DictationService {
   DictationState get currentState => _state;
   bool _initialized = false;
   bool _disposed = false;
+  bool _starting = false;
 
   Stream<DictationState> get stateStream {
     if (_disposed) {
@@ -80,11 +94,20 @@ class DictationService {
   }
 
   Future<void> start({required String localeId}) async {
-    if (_state == DictationState.listening) return;
+    if (_state == DictationState.listening || _starting) return;
+    _starting = true;
 
     try {
-      final granted = await _permissions.requestMicrophoneAndSpeech();
-      if (!granted) {
+      final permissionResult = await _permissions.requestMicrophoneAndSpeech();
+      if (_disposed) {
+        unawaited(_recognizer.cancel());
+        return;
+      }
+      if (permissionResult == DictationPermissionResult.permanentlyDenied) {
+        _setState(DictationState.permissionPermanentlyDenied);
+        return;
+      }
+      if (permissionResult == DictationPermissionResult.denied) {
         // Distinct from `unavailable`: a denial is retriable (the user can
         // grant it next time, or from Settings), so the mic button must
         // stay tappable — see this file's `DictationState` doc comment.
@@ -97,6 +120,10 @@ class DictationService {
           onStatus: _handleStatus,
           onError: _handleError,
         );
+        if (_disposed) {
+          unawaited(_recognizer.cancel());
+          return;
+        }
         if (!ready) {
           _setState(DictationState.unavailable);
           return;
@@ -110,13 +137,25 @@ class DictationService {
           if (!_textController.isClosed) _textController.add(text);
         },
       );
+      if (_disposed) {
+        unawaited(_recognizer.cancel());
+        return;
+      }
       _setState(DictationState.listening);
+    } on UnsupportedError catch (_) {
+      // Platform.isIOS throws UnsupportedError on Flutter Web.
+      _setState(DictationState.unavailable);
+    } on MissingPluginException catch (_) {
+      // Missing plugin implementation on macOS/Linux.
+      _setState(DictationState.unavailable);
     } catch (_) {
       // The platform recognizer can throw for reasons that don't map to a
       // clean `onError` callback (e.g. a locale it doesn't support at all).
       // Never let that escape as an uncaught exception into the caller —
       // dictation is additive and must degrade to "unavailable" instead.
       _setState(DictationState.error);
+    } finally {
+      _starting = false;
     }
   }
 
@@ -132,7 +171,12 @@ class DictationService {
   }
 
   void _handleError(String message) {
-    _setState(DictationState.error);
+    if (message == 'error_language_not_supported' ||
+        message == 'error_language_unavailable') {
+      _setState(DictationState.unavailable);
+    } else {
+      _setState(DictationState.error);
+    }
   }
 
   Future<void> stop() async {
@@ -143,9 +187,7 @@ class DictationService {
 
   void dispose() {
     _disposed = true;
-    if (_recognizer.isListening) {
-      unawaited(_recognizer.cancel());
-    }
+    unawaited(_recognizer.cancel());
     _stateController.close();
     _textController.close();
   }
@@ -177,17 +219,23 @@ class _GuardedStream<T> extends Stream<T> {
 }
 
 class PlatformSpeechRecognizer implements SpeechRecognizer {
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  PlatformSpeechRecognizer([stt.SpeechToText? speech])
+    : _speech = speech ?? stt.SpeechToText();
+
+  final stt.SpeechToText _speech;
 
   @override
   Future<bool> initialize({
     required void Function(String status) onStatus,
     required void Function(String message) onError,
-  }) {
-    return _speech.initialize(
+  }) async {
+    final result = await _speech.initialize(
       onStatus: onStatus,
       onError: (error) => onError(error.errorMsg),
     );
+    _speech.statusListener = onStatus;
+    _speech.errorListener = (error) => onError(error.errorMsg);
+    return result;
   }
 
   @override
@@ -214,11 +262,19 @@ class PlatformSpeechRecognizer implements SpeechRecognizer {
 
 class PlatformPermissionRequester implements PermissionRequester {
   @override
-  Future<bool> requestMicrophoneAndSpeech() async {
+  Future<DictationPermissionResult> requestMicrophoneAndSpeech() async {
     final micStatus = await Permission.microphone.request();
-    if (!micStatus.isGranted) return false;
-    if (!Platform.isIOS) return true;
+    if (micStatus.isPermanentlyDenied) {
+      return DictationPermissionResult.permanentlyDenied;
+    }
+    if (!micStatus.isGranted) return DictationPermissionResult.denied;
+    if (!Platform.isIOS) return DictationPermissionResult.granted;
     final speechStatus = await Permission.speech.request();
-    return speechStatus.isGranted;
+    if (speechStatus.isPermanentlyDenied) {
+      return DictationPermissionResult.permanentlyDenied;
+    }
+    return speechStatus.isGranted
+        ? DictationPermissionResult.granted
+        : DictationPermissionResult.denied;
   }
 }

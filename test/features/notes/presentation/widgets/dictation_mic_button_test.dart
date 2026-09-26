@@ -64,6 +64,76 @@ void main() {
     expect(controller.text, 'Hello world');
   });
 
+  testWidgets(
+    'realistic cumulative transcript sequence replaces span without duplication',
+    (tester) async {
+      final controller = TextEditingController();
+      final recognizer = await _pump(tester, controller);
+
+      await tester.tap(find.byIcon(Icons.mic_none_rounded));
+      await tester.pump();
+
+      recognizer.emitResult('hello');
+      await tester.pump();
+      recognizer.emitResult('hello world');
+      await tester.pump();
+      recognizer.emitResult('hello world, how are you', isFinal: true);
+      await tester.pump();
+
+      expect(controller.text, 'hello world, how are you');
+    },
+  );
+
+  testWidgets(
+    'moving cursor between partial results anchors new span at new cursor position',
+    (tester) async {
+      final controller = TextEditingController();
+      final recognizer = await _pump(tester, controller);
+
+      await tester.tap(find.byIcon(Icons.mic_none_rounded));
+      await tester.pump();
+
+      recognizer.emitResult('hello');
+      await tester.pump();
+      expect(controller.text, 'hello');
+
+      // User moves cursor to the start before next partial result
+      controller.selection = const TextSelection.collapsed(offset: 0);
+
+      recognizer.emitResult('world');
+      await tester.pump();
+
+      expect(controller.text, 'worldhello');
+    },
+  );
+
+  testWidgets(
+    'new listening session starts a fresh span rather than reusing stale span',
+    (tester) async {
+      final controller = TextEditingController();
+      final recognizer = await _pump(tester, controller);
+
+      // Session 1:
+      await tester.tap(find.byIcon(Icons.mic_none_rounded));
+      await tester.pump();
+      recognizer.emitResult('first session');
+      await tester.pump();
+      expect(controller.text, 'first session');
+
+      // Stop session 1:
+      await tester.tap(find.byIcon(Icons.mic_rounded));
+      await tester.pump();
+
+      // Session 2:
+      await tester.tap(find.byIcon(Icons.mic_none_rounded));
+      await tester.pump();
+      recognizer.emitResult('second session');
+      await tester.pump();
+
+      expect(controller.text, 'first sessionsecond session');
+    },
+  );
+
   testWidgets('tapping again while listening stops', (tester) async {
     final controller = TextEditingController();
     final recognizer = await _pump(tester, controller);
@@ -164,4 +234,92 @@ void main() {
 
     expect(find.byType(SnackBar), findsOneWidget);
   });
+
+  testWidgets(
+    'tapping mic twice in a row when permission denied shows a snackbar on each tap',
+    (tester) async {
+      final controller = TextEditingController();
+      final container = ProviderContainer(
+        overrides: [
+          dictationServiceProvider.overrideWith(
+            (ref) => DictationService(
+              recognizer: FakeSpeechRecognizer(),
+              permissions: FakePermissionRequester(
+                result: DictationPermissionResult.denied,
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.listen(dictationServiceProvider, (_, _) {});
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(body: DictationMicButton(controller: controller)),
+          ),
+        ),
+      );
+
+      // First tap
+      await tester.tap(find.byIcon(Icons.mic_none_rounded));
+      await tester.pump();
+      expect(find.byType(SnackBar), findsOneWidget);
+
+      // Clear the current snackbar
+      ScaffoldMessenger.of(
+        tester.element(find.byType(DictationMicButton)),
+      ).hideCurrentSnackBar();
+      await tester.pumpAndSettle();
+      expect(find.byType(SnackBar), findsNothing);
+
+      // Second tap with permission still denied
+      await tester.tap(find.byIcon(Icons.mic_none_rounded));
+      await tester.pump();
+      expect(
+        find.byType(SnackBar),
+        findsOneWidget,
+        reason:
+            'repeat tap must show feedback instead of silently doing nothing',
+      );
+    },
+  );
+
+  testWidgets(
+    'permission permanently denied shows a snackbar with an open settings action',
+    (tester) async {
+      final controller = TextEditingController();
+      final container = ProviderContainer(
+        overrides: [
+          dictationServiceProvider.overrideWith(
+            (ref) => DictationService(
+              recognizer: FakeSpeechRecognizer(),
+              permissions: FakePermissionRequester(
+                result: DictationPermissionResult.permanentlyDenied,
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.listen(dictationServiceProvider, (_, _) {});
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(body: DictationMicButton(controller: controller)),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.mic_none_rounded));
+      await tester.pump();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.byType(SnackBarAction), findsOneWidget);
+    },
+  );
 }

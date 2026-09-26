@@ -1,14 +1,28 @@
 import 'package:flutter_clean_notes/features/notes/presentation/services/dictation_service.dart';
 
 class FakePermissionRequester implements PermissionRequester {
-  FakePermissionRequester({this.granted = true});
+  FakePermissionRequester({
+    bool granted = true,
+    DictationPermissionResult? result,
+  }) : result =
+           result ??
+           (granted
+               ? DictationPermissionResult.granted
+               : DictationPermissionResult.denied);
 
-  bool granted;
+  DictationPermissionResult result;
   int requestCalls = 0;
 
+  bool get granted => result == DictationPermissionResult.granted;
+  set granted(bool value) {
+    result = value
+        ? DictationPermissionResult.granted
+        : DictationPermissionResult.denied;
+  }
+
   @override
-  Future<bool> requestMicrophoneAndSpeech() async {
+  Future<DictationPermissionResult> requestMicrophoneAndSpeech() async {
     requestCalls += 1;
-    return granted;
+    return result;
   }
 }

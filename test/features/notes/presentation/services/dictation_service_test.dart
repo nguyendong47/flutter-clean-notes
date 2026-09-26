@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_clean_notes/features/notes/presentation/services/dictation_service.dart';
@@ -50,6 +53,18 @@ void main() {
 
       expect(recognizer.listenCalls, 0);
       expect(service.currentState, DictationState.permissionDenied);
+    },
+  );
+
+  test(
+    'permission permanentlyDenied moves to permissionPermanentlyDenied',
+    () async {
+      permissions.result = DictationPermissionResult.permanentlyDenied;
+
+      await service.start(localeId: 'en_US');
+
+      expect(recognizer.listenCalls, 0);
+      expect(service.currentState, DictationState.permissionPermanentlyDenied);
     },
   );
 
@@ -156,6 +171,18 @@ void main() {
   );
 
   test(
+    'recognizer error with error_language_not_supported or error_language_unavailable moves to unavailable',
+    () async {
+      await service.start(localeId: 'en_US');
+
+      recognizer.simulateError('error_language_not_supported');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(service.currentState, DictationState.unavailable);
+    },
+  );
+
+  test(
     'recognizer.listen() throwing is caught and surfaces as error, not an uncaught exception',
     () async {
       recognizer.initializeResult = true;
@@ -171,6 +198,122 @@ void main() {
       expect(throwingService.currentState, DictationState.error);
     },
   );
+
+  test(
+    'second service sharing underlying recognizer reclaims status listeners after first init',
+    () async {
+      final sharedSpeech = FakeSpeechToText();
+      final service1 = DictationService(
+        recognizer: PlatformSpeechRecognizer(sharedSpeech),
+        permissions: permissions,
+      );
+      await service1.start(localeId: 'en_US');
+      expect(sharedSpeech.initializeCallCount, 1);
+      service1.dispose();
+
+      final service2 = DictationService(
+        recognizer: PlatformSpeechRecognizer(sharedSpeech),
+        permissions: permissions,
+      );
+      await service2.start(localeId: 'en_US');
+      expect(sharedSpeech.initializeCallCount, 2);
+      expect(service2.currentState, DictationState.listening);
+
+      // Simulate OS ending session on the shared speech engine
+      sharedSpeech.simulateOsEndedSession();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(service2.currentState, DictationState.idle);
+    },
+  );
+
+  test(
+    'rapid concurrent start() calls run only one sequence and allow future start()',
+    () async {
+      final future1 = service.start(localeId: 'en_US');
+      final future2 = service.start(localeId: 'en_US');
+
+      await Future.wait([future1, future2]);
+
+      expect(permissions.requestCalls, 1);
+      expect(recognizer.listenCalls, 1);
+      expect(service.currentState, DictationState.listening);
+
+      await service.stop();
+      expect(service.currentState, DictationState.idle);
+
+      await service.start(localeId: 'en_US');
+      expect(permissions.requestCalls, 2);
+      expect(recognizer.listenCalls, 2);
+      expect(service.currentState, DictationState.listening);
+    },
+  );
+
+  test(
+    'disposing service while start() is awaiting listen cancels recognizer and prevents listening state',
+    () async {
+      final controllableRecognizer = _ControllableListenRecognizer();
+      final inFlightService = DictationService(
+        recognizer: controllableRecognizer,
+        permissions: permissions,
+      );
+
+      final startFuture = inFlightService.start(localeId: 'en_US');
+
+      inFlightService.dispose();
+      expect(controllableRecognizer.cancelCalls, greaterThanOrEqualTo(1));
+
+      controllableRecognizer.listenCompleter.complete();
+      await startFuture;
+
+      expect(inFlightService.currentState, isNot(DictationState.listening));
+      expect(controllableRecognizer.cancelCalls, greaterThanOrEqualTo(1));
+    },
+  );
+
+  test(
+    'start() catching UnsupportedError maps to unavailable rather than generic error',
+    () async {
+      final unsupportedService = DictationService(
+        recognizer: _UnsupportedErrorRecognizer(),
+        permissions: permissions,
+      );
+      addTearDown(unsupportedService.dispose);
+
+      await unsupportedService.start(localeId: 'en_US');
+
+      expect(unsupportedService.currentState, DictationState.unavailable);
+    },
+  );
+
+  test(
+    'start() catching MissingPluginException maps to unavailable rather than generic error',
+    () async {
+      final missingPluginService = DictationService(
+        recognizer: recognizer,
+        permissions: _MissingPluginPermissionRequester(),
+      );
+      addTearDown(missingPluginService.dispose);
+
+      await missingPluginService.start(localeId: 'en_US');
+
+      expect(missingPluginService.currentState, DictationState.unavailable);
+    },
+  );
+}
+
+class _ControllableListenRecognizer extends FakeSpeechRecognizer {
+  final listenCompleter = Completer<void>();
+
+  @override
+  Future<void> listen({
+    required void Function(String text, bool isFinal) onResult,
+    required String localeId,
+  }) async {
+    listenCalls += 1;
+    await listenCompleter.future;
+    await super.listen(onResult: onResult, localeId: localeId);
+  }
 }
 
 class _ThrowingListenRecognizer implements SpeechRecognizer {
@@ -196,4 +339,21 @@ class _ThrowingListenRecognizer implements SpeechRecognizer {
 
   @override
   bool get isListening => false;
+}
+
+class _UnsupportedErrorRecognizer extends FakeSpeechRecognizer {
+  @override
+  Future<bool> initialize({
+    required void Function(String status) onStatus,
+    required void Function(String message) onError,
+  }) async {
+    throw UnsupportedError('Platform._operatingSystem not supported on web');
+  }
+}
+
+class _MissingPluginPermissionRequester implements PermissionRequester {
+  @override
+  Future<DictationPermissionResult> requestMicrophoneAndSpeech() async {
+    throw MissingPluginException();
+  }
 }
