@@ -57,6 +57,8 @@ dependencies:
   home_widget: ^0.9.4
   speech_to_text: ^7.5.0
   permission_handler: ^13.0.2
+  record: ^7.1.1
+  just_audio: ^0.10.6
 
 dev_dependencies:
   crypto: ^3.0.7
